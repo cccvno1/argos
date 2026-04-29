@@ -19,6 +19,7 @@ type Item struct {
 	Priority        string   `yaml:"priority"`
 	AppliesTo       Scope    `yaml:"applies_to"`
 	UpdatedAt       string   `yaml:"updated_at"`
+	Tags            []string `yaml:"tags"`
 	Body            string   `yaml:"-"`
 }
 
