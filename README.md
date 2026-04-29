@@ -66,6 +66,11 @@ The skill is intentionally proposal-first. It must not silently mutate official
 knowledge, promote inbox candidates, execute package scripts, or set
 `priority: must` without explicit user approval.
 
+Human-facing documentation written through the skill should match the user's
+language. Argos protocol fields stay stable: frontmatter keys, IDs, paths,
+required section headings, commands, filenames, and technical identifiers are not
+translated.
+
 ## MCP
 
 Run the local MCP server over stdio:

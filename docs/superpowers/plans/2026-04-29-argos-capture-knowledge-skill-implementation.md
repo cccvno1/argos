@@ -94,6 +94,24 @@ Never run `argos promote` automatically. Never execute scripts from a knowledge
 package unless the validation plan names them and the user confirms execution.
 Never set `priority: must` unless the user explicitly authorizes it.
 
+## Language
+
+Match the user's language for human-facing writing: proposals, questions,
+status updates, package explanations, references, checklists, and example
+commentary should use the same language the user is using.
+
+Keep Argos protocol tokens unchanged:
+
+- frontmatter keys and registry values
+- IDs, paths, filenames, directory names, tags, and command names
+- required `KNOWLEDGE.md` section headings such as `Purpose`, `When To Use`,
+  `Start Here`, and `Load On Demand`
+- code, API names, schema names, and other technical identifiers
+
+If the user mixes languages, use the user's dominant language for prose and keep
+technical terms in their original form. Ask only if the desired documentation
+language is genuinely unclear.
+
 ## Workflow
 
 ### 1. Confirm Capture Intent
@@ -420,6 +438,11 @@ Argos commands. It guides the agent through existing Argos workflows:
 The skill is intentionally proposal-first. It must not silently mutate official
 knowledge, promote inbox candidates, execute package scripts, or set
 `priority: must` without explicit user approval.
+
+Human-facing documentation written through the skill should match the user's
+language. Argos protocol fields stay stable: frontmatter keys, IDs, paths,
+required section headings, commands, filenames, and technical identifiers are not
+translated.
 ```
 
 - [ ] **Step 3: Verify README mentions the skill and preserves command docs**

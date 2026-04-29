@@ -72,6 +72,24 @@ Argos CLI: validates and moves knowledge safely
 User: owns the final choices
 ```
 
+## Language And Internationalization
+
+The skill should match the user's language for human-facing writing. Proposals,
+questions, status updates, package explanations, references, checklists, and
+example commentary should use the same language the user is using.
+
+Argos protocol tokens remain stable and are not translated:
+
+- frontmatter keys and registry values
+- IDs, paths, filenames, directory names, tags, and command names
+- required `KNOWLEDGE.md` section headings such as `Purpose`, `When To Use`,
+  `Start Here`, and `Load On Demand`
+- code, API names, schema names, and technical identifiers
+
+If a user mixes languages, the agent should use the user's dominant language for
+prose and keep technical terms in their original form. The agent should ask only
+when the desired documentation language is genuinely unclear.
+
 ## Trigger Model
 
 The skill should trigger when the user explicitly wants durable knowledge
