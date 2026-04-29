@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
+	"argos/internal/index"
 	"argos/internal/knowledge"
 	"argos/internal/registry"
 	"argos/internal/workspace"
@@ -60,7 +62,25 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) int {
 
 		fmt.Fprintf(stdout, "validated %d knowledge item(s)\n", len(items))
 		return 0
-	case "new", "index", "install-adapters", "mcp":
+	case "index":
+		root, err := os.Getwd()
+		if err != nil {
+			fmt.Fprintf(stderr, "get current directory: %v\n", err)
+			return 1
+		}
+		items, err := knowledge.LoadItems(root)
+		if err != nil {
+			fmt.Fprintf(stderr, "load knowledge items: %v\n", err)
+			return 1
+		}
+		if err := index.Rebuild(filepath.Join(root, "argos", "index.db"), items); err != nil {
+			fmt.Fprintf(stderr, "rebuild index: %v\n", err)
+			return 1
+		}
+
+		fmt.Fprintf(stdout, "indexed %d knowledge item(s)\n", len(items))
+		return 0
+	case "new", "install-adapters", "mcp":
 		fmt.Fprintf(stderr, "command %q is not implemented yet\n", args[0])
 		return 1
 	default:
