@@ -90,12 +90,6 @@ Create `go.mod`:
 module argos
 
 go 1.23
-
-require (
-	github.com/bmatcuk/doublestar/v4 v4.8.1
-	gopkg.in/yaml.v3 v3.0.1
-	modernc.org/sqlite v1.34.5
-)
 ```
 
 Create `cmd/argos/main.go`:
@@ -381,6 +375,8 @@ git commit -m "feat: initialize argos workspace"
 ```
 
 ## Task 3: Knowledge Parsing And Validation
+
+Note: `gopkg.in/yaml.v3` is introduced in this task when it is first imported; run `go mod tidy` after adding the parser code.
 
 **Files:**
 - Create: `internal/knowledge/item.go`
@@ -881,6 +877,8 @@ git commit -m "feat: validate knowledge workspace"
 
 ## Task 5: SQLite Index Rebuild
 
+Note: `modernc.org/sqlite` is introduced in this task when it is first imported; run `go mod tidy` after adding the index code.
+
 **Files:**
 - Create: `internal/index/store.go`
 - Modify: `internal/cli/cli.go`
@@ -1310,6 +1308,8 @@ git commit -m "feat: generate ai adapter files"
 ```
 
 ## Task 7: Progressive Query Service
+
+Note: `github.com/bmatcuk/doublestar/v4` is introduced in this task when it is first imported; run `go mod tidy` after adding the query code.
 
 **Files:**
 - Create: `internal/query/query.go`
