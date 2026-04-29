@@ -45,6 +45,27 @@ argos index
 `argos validate` checks official knowledge. `argos validate --inbox` checks inbox
 candidates. `argos validate --path <path>` checks one item or package.
 
+## Agent Skills
+
+Argos includes an installable `capture-knowledge` skill source at
+`skills/capture-knowledge/`.
+
+Use this skill when a user asks an agent to remember, preserve, document, or
+turn reusable project knowledge into Argos knowledge. The skill does not add new
+Argos commands. It guides the agent through existing Argos workflows:
+
+- check existing `knowledge/items/`, `knowledge/packages/`, and
+  `knowledge/.inbox/` content
+- propose the knowledge shape before writing files
+- ask whether overlap means create new, update existing, or stop
+- ask for an inbox candidate or PR-style delivery path
+- write package files only after approval
+- run `argos validate --path TARGET_PATH`
+
+The skill is intentionally proposal-first. It must not silently mutate official
+knowledge, promote inbox candidates, execute package scripts, or set
+`priority: must` without explicit user approval.
+
 ## MCP
 
 Run the local MCP server over stdio:
