@@ -62,6 +62,9 @@ func ValidateItem(item Item, reg registry.Registry) []error {
 	if strings.TrimSpace(item.Body) == "" {
 		addErr("empty body")
 	}
+	if item.Type == "package" {
+		errs = append(errs, validatePackageItem(item)...)
+	}
 
 	return errs
 }

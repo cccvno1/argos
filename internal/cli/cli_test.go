@@ -79,6 +79,83 @@ Use short-lived access tokens.
 	}
 }
 
+func TestRunValidatePathValidatesSingleInboxPackage(t *testing.T) {
+	root := t.TempDir()
+	writeCLIRegistry(t, root)
+	writeCLIFile(t, root, "knowledge/.inbox/packages/backend/redis/best-practices/KNOWLEDGE.md", validCLIPackage("package:backend.redis.best-practices.v1"))
+	chdir(t, root)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{"validate", "--path", "knowledge/.inbox/packages/backend/redis/best-practices"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stderr=%q", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "validated 1 knowledge item(s)") {
+		t.Fatalf("unexpected stdout: %q", stdout.String())
+	}
+	if stderr.String() != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+}
+
+func TestRunValidateInboxValidatesInboxOnly(t *testing.T) {
+	root := t.TempDir()
+	writeCLIRegistry(t, root)
+	writeCLIFile(t, root, "knowledge/.inbox/packages/backend/redis/best-practices/KNOWLEDGE.md", validCLIPackage("package:backend.redis.best-practices.v1"))
+	writeCLIFile(t, root, "knowledge/packages/backend/broken/KNOWLEDGE.md", `---
+id: package:backend.broken.v1
+title: Broken
+type: package
+status: active
+priority: should
+updated_at: 2026-04-29
+---
+broken
+`)
+	chdir(t, root)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{"validate", "--inbox"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stderr=%q", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "validated 1 knowledge item(s)") {
+		t.Fatalf("unexpected stdout: %q", stdout.String())
+	}
+}
+
+func TestRunValidateDefaultIgnoresInboxCandidates(t *testing.T) {
+	root := t.TempDir()
+	writeCLIRegistry(t, root)
+	writeCLIFile(t, root, "knowledge/items/backend/auth.md", validCLIKnowledgeItem("rule:backend.auth.v1", "rule"))
+	writeCLIFile(t, root, "knowledge/.inbox/packages/backend/broken/KNOWLEDGE.md", `---
+id: package:backend.broken.v1
+title: Broken
+type: package
+status: draft
+priority: should
+updated_at: 2026-04-29
+---
+broken
+`)
+	chdir(t, root)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{"validate"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stderr=%q", code, stderr.String())
+	}
+	if strings.TrimSpace(stdout.String()) != "validated 1 knowledge item(s)" {
+		t.Fatalf("unexpected stdout: %q", stdout.String())
+	}
+}
+
 func TestRunIndexRebuildsKnowledgeIndex(t *testing.T) {
 	root := t.TempDir()
 	writeCLIFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend]
@@ -137,6 +214,37 @@ Use short-lived access tokens.
 	}
 	if got.Title != "JWT refresh token handling convention" {
 		t.Fatalf("unexpected title: %s", got.Title)
+	}
+}
+
+func TestRunIndexIncludesOfficialPackages(t *testing.T) {
+	root := t.TempDir()
+	writeCLIRegistry(t, root)
+	writeCLIFile(t, root, "knowledge/packages/backend/redis/best-practices/KNOWLEDGE.md", validCLIPackage("package:backend.redis.best-practices.v1"))
+	chdir(t, root)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{"index"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stderr=%q", code, stderr.String())
+	}
+
+	store, err := index.Open(filepath.Join(root, "argos", "index.db"))
+	if err != nil {
+		t.Fatalf("Open returned error: %v", err)
+	}
+	defer store.Close()
+
+	item, err := store.GetItem("package:backend.redis.best-practices.v1")
+	if err != nil {
+		t.Fatalf("expected indexed package: %v", err)
+	}
+	if item.Type != "package" {
+		t.Fatalf("expected package type, got %q", item.Type)
+	}
+	if !strings.Contains(item.Body, "## Load On Demand") {
+		t.Fatalf("expected package body, got %q", item.Body)
 	}
 }
 
@@ -250,6 +358,85 @@ business_domains: [account]
 	path := filepath.Join(root, "argos", "generated", "mall-api", "AGENTS.md")
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("expected generated AGENTS.md at %s: %v", path, err)
+	}
+}
+
+func TestRunPromoteMovesInboxPackageToOfficialPackages(t *testing.T) {
+	root := t.TempDir()
+	writeCLIRegistry(t, root)
+	writeCLIFile(t, root, "knowledge/.inbox/packages/backend/redis/best-practices/KNOWLEDGE.md", validCLIPackage("package:backend.redis.best-practices.v1"))
+	chdir(t, root)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{"promote", "--path", "knowledge/.inbox/packages/backend/redis/best-practices"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stderr=%q", code, stderr.String())
+	}
+	if _, err := os.Stat(filepath.Join(root, "knowledge/packages/backend/redis/best-practices/KNOWLEDGE.md")); err != nil {
+		t.Fatalf("expected promoted package: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "knowledge/.inbox/packages/backend/redis/best-practices")); !os.IsNotExist(err) {
+		t.Fatalf("expected inbox package removed, stat err=%v", err)
+	}
+	if !strings.Contains(stdout.String(), "promoted knowledge/packages/backend/redis/best-practices") {
+		t.Fatalf("unexpected stdout: %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "run argos index") {
+		t.Fatalf("expected index recommendation, got %q", stdout.String())
+	}
+}
+
+func TestRunPromoteRefusesOverwrite(t *testing.T) {
+	root := t.TempDir()
+	writeCLIRegistry(t, root)
+	writeCLIFile(t, root, "knowledge/.inbox/packages/backend/redis/best-practices/KNOWLEDGE.md", validCLIPackage("package:backend.redis.best-practices.v1"))
+	writeCLIFile(t, root, "knowledge/packages/backend/redis/best-practices/KNOWLEDGE.md", validCLIPackage("package:backend.redis.existing.v1"))
+	chdir(t, root)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{"promote", "--path", "knowledge/.inbox/packages/backend/redis/best-practices"}, &stdout, &stderr)
+
+	if code != 1 {
+		t.Fatalf("expected exit code 1, got %d", code)
+	}
+	if stdout.String() != "" {
+		t.Fatalf("expected empty stdout, got %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "target already exists") {
+		t.Fatalf("expected overwrite error, got %q", stderr.String())
+	}
+}
+
+func TestRunPromoteRejectsInvalidCandidate(t *testing.T) {
+	root := t.TempDir()
+	writeCLIRegistry(t, root)
+	writeCLIFile(t, root, "knowledge/.inbox/packages/backend/redis/broken/KNOWLEDGE.md", `---
+id: package:backend.redis.broken.v1
+title: Broken
+type: package
+status: draft
+priority: should
+updated_at: 2026-04-29
+---
+broken
+`)
+	chdir(t, root)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{"promote", "--path", "knowledge/.inbox/packages/backend/redis/broken"}, &stdout, &stderr)
+
+	if code != 1 {
+		t.Fatalf("expected exit code 1, got %d", code)
+	}
+	if _, err := os.Stat(filepath.Join(root, "knowledge/.inbox/packages/backend/redis/broken/KNOWLEDGE.md")); err != nil {
+		t.Fatalf("expected invalid candidate to remain in inbox: %v", err)
+	}
+	if !strings.Contains(stderr.String(), "validation failed") {
+		t.Fatalf("expected validation error, got %q", stderr.String())
 	}
 }
 
@@ -464,6 +651,62 @@ func writeCLIFile(t *testing.T, root, rel, body string) {
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatalf("write %s: %v", path, err)
 	}
+}
+
+func writeCLIRegistry(t *testing.T, root string) {
+	t.Helper()
+	writeCLIFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend, database]
+business_domains: [account]
+`)
+	writeCLIFile(t, root, "knowledge/projects.yaml", "projects: []\n")
+	writeCLIFile(t, root, "knowledge/types.yaml", "types: [rule, package]\n")
+}
+
+func validCLIPackage(id string) string {
+	return `---
+id: ` + id + `
+title: Redis Best Practices
+type: package
+tech_domains: [backend]
+business_domains: []
+projects: []
+status: draft
+priority: should
+tags: [redis]
+updated_at: 2026-04-29
+---
+## Purpose
+
+Document Redis usage.
+
+## When To Use
+
+Use when Redis is involved.
+
+## Start Here
+
+Read the short rules first.
+
+## Load On Demand
+
+- references/key-design.md when designing keys.
+`
+}
+
+func validCLIKnowledgeItem(id string, itemType string) string {
+	return `---
+id: ` + id + `
+title: Auth rule
+type: ` + itemType + `
+tech_domains: [backend]
+business_domains: [account]
+projects: []
+status: active
+priority: must
+updated_at: 2026-04-29
+---
+Use explicit auth middleware.
+`
 }
 
 func chdir(t *testing.T, dir string) {

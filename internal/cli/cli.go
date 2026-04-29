@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"argos/internal/adapters"
 	"argos/internal/index"
@@ -41,12 +42,23 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		fmt.Fprintln(stdout, "initialized Argos workspace")
 		return 0
 	case "validate":
+		flags := flag.NewFlagSet("validate", flag.ContinueOnError)
+		flags.SetOutput(stderr)
+		includeInbox := flags.Bool("inbox", false, "validate inbox candidates")
+		path := flags.String("path", "", "validate a single item or package path")
+		if err := flags.Parse(args[1:]); err != nil {
+			return 2
+		}
+		if *includeInbox && strings.TrimSpace(*path) != "" {
+			fmt.Fprintln(stderr, "validate: --inbox and --path cannot be used together")
+			return 2
+		}
 		root, err := os.Getwd()
 		if err != nil {
 			fmt.Fprintf(stderr, "get current directory: %v\n", err)
 			return 1
 		}
-		items, err := loadAndValidateKnowledge(root, stderr)
+		items, err := loadAndValidateKnowledge(root, stderr, validationScope{Inbox: *includeInbox, Path: *path})
 		if err != nil {
 			return 1
 		}
@@ -59,7 +71,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			fmt.Fprintf(stderr, "get current directory: %v\n", err)
 			return 1
 		}
-		items, err := loadAndValidateKnowledge(root, stderr)
+		items, err := loadAndValidateKnowledge(root, stderr, validationScope{})
 		if err != nil {
 			return 1
 		}
@@ -124,6 +136,30 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			return 1
 		}
 		return 0
+	case "promote":
+		flags := flag.NewFlagSet("promote", flag.ContinueOnError)
+		flags.SetOutput(stderr)
+		path := flags.String("path", "", "candidate item or package path")
+		if err := flags.Parse(args[1:]); err != nil {
+			return 2
+		}
+		if strings.TrimSpace(*path) == "" {
+			fmt.Fprintln(stderr, "promote: --path is required")
+			return 2
+		}
+		root, err := os.Getwd()
+		if err != nil {
+			fmt.Fprintf(stderr, "get current directory: %v\n", err)
+			return 1
+		}
+		target, err := promoteCandidate(root, *path, stderr)
+		if err != nil {
+			fmt.Fprintf(stderr, "promote: %v\n", err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "promoted %s\n", target)
+		fmt.Fprintln(stdout, "run argos index to refresh query results")
+		return 0
 	case "new":
 		fmt.Fprintf(stderr, "command %q is not implemented yet\n", args[0])
 		return 1
@@ -154,13 +190,27 @@ func openMCPServer(root string) (*mcp.Server, func(), bool) {
 	}, true
 }
 
-func loadAndValidateKnowledge(root string, stderr io.Writer) ([]knowledge.Item, error) {
+type validationScope struct {
+	Inbox bool
+	Path  string
+}
+
+func loadAndValidateKnowledge(root string, stderr io.Writer, scope validationScope) ([]knowledge.Item, error) {
 	reg, err := registry.Load(root)
 	if err != nil {
 		fmt.Fprintf(stderr, "load registry: %v\n", err)
 		return nil, err
 	}
-	items, err := knowledge.LoadItems(root)
+
+	var items []knowledge.Item
+	switch {
+	case strings.TrimSpace(scope.Path) != "":
+		items, err = knowledge.LoadPath(root, scope.Path)
+	case scope.Inbox:
+		items, err = knowledge.LoadInbox(root)
+	default:
+		items, err = knowledge.LoadOfficial(root)
+	}
 	if err != nil {
 		fmt.Fprintf(stderr, "load knowledge items: %v\n", err)
 		return nil, err
@@ -178,6 +228,56 @@ func loadAndValidateKnowledge(root string, stderr io.Writer) ([]knowledge.Item, 
 	return items, nil
 }
 
+func promoteCandidate(root string, relPath string, stderr io.Writer) (string, error) {
+	clean := filepath.Clean(relPath)
+	if filepath.IsAbs(relPath) || clean == "." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) || clean == ".." {
+		return "", fmt.Errorf("%s: candidate path must be relative and inside workspace", relPath)
+	}
+	target, err := promotionTarget(clean)
+	if err != nil {
+		return "", err
+	}
+	if _, err := loadAndValidateKnowledge(root, stderr, validationScope{Path: clean}); err != nil {
+		return "", err
+	}
+	targetAbs := filepath.Join(root, target)
+	if _, err := os.Stat(targetAbs); err == nil {
+		return "", fmt.Errorf("target already exists: %s", target)
+	} else if err != nil && !os.IsNotExist(err) {
+		return "", fmt.Errorf("stat target %s: %w", target, err)
+	}
+	if err := os.MkdirAll(filepath.Dir(targetAbs), 0o755); err != nil {
+		return "", fmt.Errorf("create target parent: %w", err)
+	}
+	if err := os.Rename(filepath.Join(root, clean), targetAbs); err != nil {
+		return "", fmt.Errorf("move candidate: %w", err)
+	}
+	if _, err := loadAndValidateKnowledge(root, stderr, validationScope{}); err != nil {
+		return "", fmt.Errorf("official validation failed after promotion: %w", err)
+	}
+	return target, nil
+}
+
+func promotionTarget(clean string) (string, error) {
+	slash := filepath.ToSlash(clean)
+	for _, mapping := range []struct {
+		inbox    string
+		official string
+	}{
+		{"knowledge/.inbox/packages/", "knowledge/packages/"},
+		{"knowledge/.inbox/items/", "knowledge/items/"},
+	} {
+		if strings.HasPrefix(slash, mapping.inbox) {
+			rest := strings.TrimPrefix(slash, mapping.inbox)
+			if rest == "" || strings.Contains(rest, "../") {
+				return "", fmt.Errorf("%s: invalid inbox candidate path", clean)
+			}
+			return filepath.FromSlash(mapping.official + rest), nil
+		}
+	}
+	return "", fmt.Errorf("%s: candidate must be under knowledge/.inbox/items or knowledge/.inbox/packages", clean)
+}
+
 func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: argos <command> [options]")
 	fmt.Fprintln(w, "")
@@ -189,4 +289,5 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  install-adapters")
 	fmt.Fprintln(w, "  context")
 	fmt.Fprintln(w, "  mcp")
+	fmt.Fprintln(w, "  promote")
 }

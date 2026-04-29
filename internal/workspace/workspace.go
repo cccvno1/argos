@@ -71,4 +71,5 @@ const defaultTypesYAML = `types:
   - decision
   - lesson
   - reference
+  - package
 `

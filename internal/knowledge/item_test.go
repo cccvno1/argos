@@ -54,6 +54,34 @@ func TestParseItemAcceptsCRLFFrontmatterDelimiters(t *testing.T) {
 	}
 }
 
+func TestParseItemReadsPackageTags(t *testing.T) {
+	input := []byte(`---
+id: package:backend.redis.best-practices.v1
+title: Redis Best Practices
+type: package
+tech_domains: [backend, database]
+business_domains: []
+projects: []
+status: draft
+priority: should
+tags: [redis, cache]
+updated_at: 2026-04-29
+---
+# Redis Best Practices
+`)
+
+	item, err := ParseItem("knowledge/packages/backend/redis/best-practices/KNOWLEDGE.md", input)
+	if err != nil {
+		t.Fatalf("ParseItem returned error: %v", err)
+	}
+	if item.Type != "package" {
+		t.Fatalf("expected package type, got %q", item.Type)
+	}
+	if strings.Join(item.Tags, ",") != "redis,cache" {
+		t.Fatalf("unexpected tags: %#v", item.Tags)
+	}
+}
+
 func TestParseItemRejectsMissingClosingDelimiter(t *testing.T) {
 	_, err := ParseItem("knowledge/items/backend/auth.md", []byte("---\nid: backend.auth.jwt-refresh-token.v1\n\n# Body\n"))
 	if err == nil {
