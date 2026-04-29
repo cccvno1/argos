@@ -106,3 +106,57 @@ func TestStandardsIncludesDraftRulesAndExcludesDeprecatedRules(t *testing.T) {
 		t.Fatalf("expected draft rule, got %q", result.Items[0].ID)
 	}
 }
+
+func TestStandardsRanksResultsByPriorityBeforeApplyingLimit(t *testing.T) {
+	root := t.TempDir()
+	dbPath := filepath.Join(root, "argos/index.db")
+	err := index.Rebuild(dbPath, []knowledge.Item{
+		ruleWithPriority("rule:priority.may.v1", "may"),
+		ruleWithPriority("rule:priority.must.v1", "must"),
+		ruleWithPriority("rule:priority.should.v1", "should"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := index.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	service := New(store)
+	result, err := service.Standards(StandardsRequest{
+		Project: "mall-api",
+		Limit:   2,
+	})
+	if err != nil {
+		t.Fatalf("Standards returned error: %v", err)
+	}
+	if len(result.Items) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(result.Items))
+	}
+
+	got := []string{result.Items[0].ID, result.Items[1].ID}
+	want := []string{"rule:priority.must.v1", "rule:priority.should.v1"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("expected items %v, got %v", want, got)
+		}
+	}
+}
+
+func ruleWithPriority(id string, priority string) knowledge.Item {
+	return knowledge.Item{
+		Path:            "knowledge/items/backend/priority.md",
+		ID:              id,
+		Title:           priority + " priority rule",
+		Type:            "rule",
+		TechDomains:     []string{"backend"},
+		BusinessDomains: []string{"account"},
+		Projects:        []string{"mall-api"},
+		Status:          "active",
+		Priority:        priority,
+		UpdatedAt:       "2026-04-29",
+		Body:            "Priority guidance applies.",
+	}
+}

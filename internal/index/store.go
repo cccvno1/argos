@@ -234,7 +234,12 @@ func (s *Store) ListItems() ([]knowledge.Item, error) {
 SELECT id, path, title, type, tech_domains, business_domains, projects,
 	status, priority, scope, updated_at, summary, body
 FROM knowledge_items
-ORDER BY priority, id`)
+ORDER BY CASE priority
+	WHEN 'must' THEN 0
+	WHEN 'should' THEN 1
+	WHEN 'may' THEN 2
+	ELSE 3
+END, id`)
 	if err != nil {
 		return nil, fmt.Errorf("list knowledge items: %w", err)
 	}
