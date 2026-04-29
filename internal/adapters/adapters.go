@@ -10,26 +10,56 @@ import (
 )
 
 func Install(root string, projects []registry.Project) error {
+	baseDir := filepath.Join(root, "argos", "generated")
 	for _, project := range projects {
-		dir := filepath.Join(root, "argos", "generated", project.ID)
+		dir, err := projectDir(baseDir, project.ID)
+		if err != nil {
+			return err
+		}
 		cursorRulesDir := filepath.Join(dir, "cursor-rules")
 		if err := os.MkdirAll(cursorRulesDir, 0o755); err != nil {
 			return fmt.Errorf("create adapter directory for %s: %w", project.ID, err)
 		}
 
-		files := map[string]string{
-			filepath.Join(dir, "AGENTS.md"):            RenderAGENTS(project),
-			filepath.Join(dir, "CLAUDE.md"):            RenderClaude(project),
-			filepath.Join(dir, "GEMINI.md"):            RenderGemini(project),
-			filepath.Join(cursorRulesDir, "argos.mdc"): RenderCursorRule(project),
+		files := []struct {
+			rel  string
+			body string
+		}{
+			{rel: "AGENTS.md", body: RenderAGENTS(project)},
+			{rel: "CLAUDE.md", body: RenderClaude(project)},
+			{rel: "GEMINI.md", body: RenderGemini(project)},
+			{rel: filepath.Join("cursor-rules", "argos.mdc"), body: RenderCursorRule(project)},
 		}
-		for path, body := range files {
-			if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		for _, file := range files {
+			path := filepath.Join(dir, file.rel)
+			if err := os.WriteFile(path, []byte(file.body), 0o644); err != nil {
 				return fmt.Errorf("write %s: %w", path, err)
 			}
 		}
 	}
 	return nil
+}
+
+func projectDir(baseDir string, projectID string) (string, error) {
+	if projectID == "" {
+		return "", fmt.Errorf("invalid project id: empty")
+	}
+	if filepath.IsAbs(projectID) || projectID == "." || projectID == ".." || filepath.Clean(projectID) != projectID {
+		return "", fmt.Errorf("invalid project id %q", projectID)
+	}
+	if strings.Contains(projectID, "/") || strings.Contains(projectID, `\`) {
+		return "", fmt.Errorf("invalid project id %q", projectID)
+	}
+
+	dir := filepath.Join(baseDir, projectID)
+	rel, err := filepath.Rel(baseDir, dir)
+	if err != nil {
+		return "", fmt.Errorf("verify adapter path for %q: %w", projectID, err)
+	}
+	if rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("invalid project id %q", projectID)
+	}
+	return dir, nil
 }
 
 func RenderAGENTS(project registry.Project) string {
