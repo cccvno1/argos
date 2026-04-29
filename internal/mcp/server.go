@@ -214,10 +214,29 @@ func (s *Server) callTool(data json.RawMessage) (toolCallResult, error) {
 	if params.Name == "" {
 		return textToolError("missing tool name"), nil
 	}
-	if len(bytes.TrimSpace(params.Arguments)) == 0 {
-		params.Arguments = json.RawMessage("{}")
+
+	switch params.Name {
+	case "argos_context":
+		var req query.ContextRequest
+		if err := decodeArgs(params.Arguments, &req); err != nil {
+			return textToolError("invalid arguments for argos_context: " + err.Error()), nil
+		}
+		return textResult(s.service.Context(req))
+	default:
+		return textToolError("unknown tool: " + params.Name), nil
 	}
-	return textToolError("unknown tool: " + params.Name), nil
+}
+
+func decodeArgs(data json.RawMessage, out any) error {
+	if len(bytes.TrimSpace(data)) == 0 {
+		data = json.RawMessage("{}")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(out); err != nil {
+		return err
+	}
+	return nil
 }
 
 func textResult(value any) (toolCallResult, error) {

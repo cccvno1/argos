@@ -94,6 +94,53 @@ func TestToolCallMalformedParamsReturnsToolError(t *testing.T) {
 	}
 }
 
+func TestToolCallArgosContextWorksWithoutIndex(t *testing.T) {
+	var out bytes.Buffer
+	server := NewServer(query.New(nil))
+
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_context","arguments":{"project":"mall-api","phase":"implementation","task":"add refresh token endpoint","files":["internal/auth/session.go"]}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	resp := decodeRPCResponse(t, out.Bytes())
+	result := resultMap(t, resp)
+	if result["isError"] == true {
+		t.Fatalf("expected success result: %#v", result)
+	}
+
+	text := firstContentText(t, result)
+	if !strings.Contains(text, `"project": "mall-api"`) {
+		t.Fatalf("expected project in context response: %s", text)
+	}
+	if !strings.Contains(text, "argos_standards") {
+		t.Fatalf("expected next call in context response: %s", text)
+	}
+}
+
+func TestToolCallArgosContextInvalidArgsReturnsToolError(t *testing.T) {
+	var out bytes.Buffer
+	server := NewServer(query.New(nil))
+
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_context","arguments":{"project":"mall-api","unknown":true}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	resp := decodeRPCResponse(t, out.Bytes())
+	if resp.Error != nil {
+		t.Fatalf("expected tool error result, got rpc error: %#v", resp.Error)
+	}
+	result := resultMap(t, resp)
+	if result["isError"] != true {
+		t.Fatalf("expected isError true, got %#v", result["isError"])
+	}
+	text := firstContentText(t, result)
+	if !strings.Contains(text, "invalid arguments for argos_context") {
+		t.Fatalf("unexpected tool error text: %s", text)
+	}
+}
+
 func TestServerHandlesResourcesTemplatesAndPromptsList(t *testing.T) {
 	var out bytes.Buffer
 	server := NewServer(query.New(nil))
