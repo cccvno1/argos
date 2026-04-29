@@ -220,6 +220,51 @@ func TestContextRecommendsNextCalls(t *testing.T) {
 	}
 }
 
+func TestContextRecommendationsOnlyUseCallableTools(t *testing.T) {
+	service := New(nil)
+	callableTools := map[string]bool{
+		"argos_context":      true,
+		"argos_standards":    true,
+		"get_knowledge_item": true,
+		"cite_knowledge":     true,
+	}
+	unavailableTools := map[string]bool{
+		"argos_requirements": true,
+		"argos_risks":        true,
+		"argos_operations":   true,
+	}
+
+	for _, phase := range []string{
+		"planning",
+		"",
+		"implementation",
+		"review",
+		"debugging",
+		"operations",
+		"deployment",
+	} {
+		t.Run(phase, func(t *testing.T) {
+			result := service.Context(ContextRequest{
+				Project: "mall-api",
+				Phase:   phase,
+				Task:    "add refresh token endpoint",
+			})
+
+			if len(result.RecommendedNextCalls) == 0 {
+				t.Fatal("expected recommended next calls")
+			}
+			for _, call := range result.RecommendedNextCalls {
+				if !callableTools[call.Tool] {
+					t.Fatalf("expected callable recommendation, got %q", call.Tool)
+				}
+				if unavailableTools[call.Tool] {
+					t.Fatalf("did not expect unavailable recommendation %q", call.Tool)
+				}
+			}
+		})
+	}
+}
+
 func TestGetKnowledgeItemReturnsFullBody(t *testing.T) {
 	store := buildQueryTestStore(t)
 	defer store.Close()

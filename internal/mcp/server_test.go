@@ -133,6 +133,31 @@ func TestToolCallMissingNameReturnsInvalidParams(t *testing.T) {
 	assertError(t, decodeRPCResponse(t, out.Bytes()), "1", -32602)
 }
 
+func TestToolCallNonObjectArgumentsReturnInvalidParams(t *testing.T) {
+	server := NewServer(query.New(nil))
+
+	for _, tc := range []struct {
+		name      string
+		arguments string
+	}{
+		{name: "string", arguments: `"not an object"`},
+		{name: "array", arguments: `[]`},
+		{name: "null", arguments: `null`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			line := []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_context","arguments":` + tc.arguments + `}}`)
+
+			err := server.HandleLine(line, &out)
+			if err != nil {
+				t.Fatalf("HandleLine returned error: %v", err)
+			}
+
+			assertError(t, decodeRPCResponse(t, out.Bytes()), "1", -32602)
+		})
+	}
+}
+
 func TestToolCallArgosContextWorksWithoutIndex(t *testing.T) {
 	var out bytes.Buffer
 	server := NewServer(query.New(nil))

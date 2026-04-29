@@ -230,6 +230,9 @@ func (s *Server) callTool(data json.RawMessage) (toolCallResult, *rpcError, erro
 	if params.Name == "" {
 		return toolCallResult{}, invalidParams("missing tool name"), nil
 	}
+	if err := requireObjectArguments(params.Arguments); err != nil {
+		return toolCallResult{}, invalidParams("invalid tools/call params: " + err.Error()), nil
+	}
 
 	switch params.Name {
 	case "argos_context":
@@ -316,6 +319,21 @@ func decodeArgs(data json.RawMessage, out any) error {
 	}
 	if err := decodeStrict(data, out); err != nil {
 		return err
+	}
+	return nil
+}
+
+func requireObjectArguments(data json.RawMessage) error {
+	if len(bytes.TrimSpace(data)) == 0 {
+		return nil
+	}
+
+	var args map[string]json.RawMessage
+	if err := json.Unmarshal(data, &args); err != nil {
+		return fmt.Errorf("arguments must be an object")
+	}
+	if args == nil {
+		return fmt.Errorf("arguments must be an object")
 	}
 	return nil
 }

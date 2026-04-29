@@ -93,38 +93,27 @@ func New(store *index.Store) *Service {
 }
 
 func (s *Service) Context(req ContextRequest) ContextResponse {
-	calls := []RecommendedCall{{
-		Tool:   "argos_requirements",
-		Reason: "workflow start should collect constraints",
-	}}
-
+	reason := "standards are useful before code changes"
 	switch req.Phase {
-	case "implementation", "review":
-		calls = append(calls, RecommendedCall{
-			Tool:   "argos_standards",
-			Reason: "implementation and review require active rules",
-		})
+	case "planning":
+		reason = "planning should start from active project standards"
+	case "implementation":
+		reason = "implementation should follow active coding and architecture standards"
+	case "review":
+		reason = "review should check changes against active standards"
 	case "debugging":
-		calls = append(calls, RecommendedCall{
-			Tool:   "argos_risks",
-			Reason: "debugging should check lessons and incident history",
-		})
+		reason = "debugging should account for active standards before changing behavior"
 	case "operations", "deployment":
-		calls = append(calls, RecommendedCall{
-			Tool:   "argos_operations",
-			Reason: "operations should use runbooks",
-		})
-	default:
-		calls = append(calls, RecommendedCall{
-			Tool:   "argos_standards",
-			Reason: "standards are useful before code changes",
-		})
+		reason = "operational work should respect active project standards"
 	}
 
 	return ContextResponse{
-		Project:              req.Project,
-		Phase:                req.Phase,
-		RecommendedNextCalls: calls,
+		Project: req.Project,
+		Phase:   req.Phase,
+		RecommendedNextCalls: []RecommendedCall{{
+			Tool:   "argos_standards",
+			Reason: reason,
+		}},
 	}
 }
 
