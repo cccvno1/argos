@@ -162,7 +162,7 @@ func (s *Server) HandleLine(line []byte, stdout io.Writer) error {
 		return writeError(stdout, req.ID, -32600, "Invalid Request")
 	}
 
-	result, ok := s.result(req.Method, req.Params)
+	result, rpcErr, ok := s.result(req.Method, req.Params)
 	if !ok {
 		if len(req.ID) == 0 {
 			return nil
@@ -171,6 +171,9 @@ func (s *Server) HandleLine(line []byte, stdout io.Writer) error {
 	}
 	if len(req.ID) == 0 {
 		return nil
+	}
+	if rpcErr != nil {
+		return writeError(stdout, req.ID, rpcErr.Code, rpcErr.Message)
 	}
 
 	resp := response{JSONRPC: "2.0", ID: req.ID, Result: result}
@@ -182,7 +185,7 @@ func (s *Server) HandleLine(line []byte, stdout io.Writer) error {
 	return err
 }
 
-func (s *Server) result(method string, params json.RawMessage) (any, bool) {
+func (s *Server) result(method string, params json.RawMessage) (any, *rpcError, bool) {
 	switch method {
 	case "initialize":
 		return map[string]any{
@@ -196,104 +199,128 @@ func (s *Server) result(method string, params json.RawMessage) (any, bool) {
 				"resources": map[string]any{},
 				"prompts":   map[string]any{},
 			},
-		}, true
+		}, nil, true
 	case "tools/list":
-		return map[string]any{"tools": tools()}, true
+		return map[string]any{"tools": tools()}, nil, true
 	case "tools/call":
-		result, err := s.callTool(params)
-		if err != nil {
-			return textToolError(err.Error()), true
+		result, rpcErr, err := s.callTool(params)
+		if rpcErr != nil {
+			return nil, rpcErr, true
 		}
-		return result, true
+		if err != nil {
+			return textToolError(err.Error()), nil, true
+		}
+		return result, nil, true
 	case "resources/list":
-		return map[string]any{"resources": resources()}, true
+		return map[string]any{"resources": resources()}, nil, true
 	case "resources/templates/list":
-		return map[string]any{"resourceTemplates": resourceTemplates()}, true
+		return map[string]any{"resourceTemplates": resourceTemplates()}, nil, true
 	case "prompts/list":
-		return map[string]any{"prompts": prompts()}, true
+		return map[string]any{"prompts": prompts()}, nil, true
 	default:
-		return nil, false
+		return nil, nil, false
 	}
 }
 
-func (s *Server) callTool(data json.RawMessage) (toolCallResult, error) {
+func (s *Server) callTool(data json.RawMessage) (toolCallResult, *rpcError, error) {
 	var params callToolParams
-	if err := json.Unmarshal(data, &params); err != nil {
-		return textToolError(err.Error()), nil
+	if err := decodeStrict(data, &params); err != nil {
+		return toolCallResult{}, invalidParams("invalid tools/call params: " + err.Error()), nil
 	}
 	if params.Name == "" {
-		return textToolError("missing tool name"), nil
+		return toolCallResult{}, invalidParams("missing tool name"), nil
 	}
 
 	switch params.Name {
 	case "argos_context":
 		var req query.ContextRequest
 		if err := decodeArgs(params.Arguments, &req); err != nil {
-			return textToolError("invalid arguments for argos_context: " + err.Error()), nil
+			return textToolError("invalid arguments for argos_context: " + err.Error()), nil, nil
 		}
 		if err := requireStringFields(map[string]string{
 			"project": req.Project,
 			"phase":   req.Phase,
 			"task":    req.Task,
 		}, "project", "phase", "task"); err != nil {
-			return textToolError("invalid arguments for argos_context: " + err.Error()), nil
+			return textToolError("invalid arguments for argos_context: " + err.Error()), nil, nil
 		}
-		return textResult(s.service.Context(req))
+		result, err := textResult(s.service.Context(req))
+		return result, nil, err
 	case "argos_standards":
 		var req query.StandardsRequest
 		if err := decodeArgs(params.Arguments, &req); err != nil {
-			return textToolError("invalid arguments for argos_standards: " + err.Error()), nil
+			return textToolError("invalid arguments for argos_standards: " + err.Error()), nil, nil
 		}
 		if err := requireStringFields(map[string]string{"project": req.Project}, "project"); err != nil {
-			return textToolError("invalid arguments for argos_standards: " + err.Error()), nil
+			return textToolError("invalid arguments for argos_standards: " + err.Error()), nil, nil
+		}
+		limitProvided, err := hasArgument(params.Arguments, "limit")
+		if err != nil {
+			return textToolError("invalid arguments for argos_standards: " + err.Error()), nil, nil
+		}
+		if limitProvided && (req.Limit < 1 || req.Limit > 5) {
+			return textToolError("invalid arguments for argos_standards: limit must be between 1 and 5"), nil, nil
 		}
 		if s.store == nil {
-			return textToolError("index not available: run argos index first"), nil
+			return textToolError("index not available: run argos index first"), nil, nil
 		}
 		resp, err := s.service.Standards(req)
 		if err != nil {
-			return textToolError("query standards: " + err.Error()), nil
+			return textToolError("query standards: " + err.Error()), nil, nil
 		}
-		return textResult(resp)
+		result, err := textResult(resp)
+		return result, nil, err
 	case "get_knowledge_item":
 		var req struct {
 			ID string `json:"id"`
 		}
 		if err := decodeArgs(params.Arguments, &req); err != nil {
-			return textToolError("invalid arguments for get_knowledge_item: " + err.Error()), nil
+			return textToolError("invalid arguments for get_knowledge_item: " + err.Error()), nil, nil
 		}
 		req.ID = strings.TrimSpace(req.ID)
 		if req.ID == "" {
-			return textToolError("invalid arguments for get_knowledge_item: id is required"), nil
+			return textToolError("invalid arguments for get_knowledge_item: id is required"), nil, nil
 		}
 		if s.store == nil {
-			return textToolError("index not available: run argos index first"), nil
+			return textToolError("index not available: run argos index first"), nil, nil
 		}
 		item, err := s.service.GetKnowledgeItem(req.ID)
 		if err != nil {
-			return textToolError("get knowledge item: " + err.Error()), nil
+			return textToolError("get knowledge item: " + err.Error()), nil, nil
 		}
-		return textResult(item)
+		result, err := textResult(item)
+		return result, nil, err
 	case "cite_knowledge":
 		var req struct {
 			IDs []string `json:"ids"`
 		}
 		if err := decodeArgs(params.Arguments, &req); err != nil {
-			return textToolError("invalid arguments for cite_knowledge: " + err.Error()), nil
+			return textToolError("invalid arguments for cite_knowledge: " + err.Error()), nil, nil
 		}
 		if len(req.IDs) == 0 {
-			return textToolError("invalid arguments for cite_knowledge: ids is required"), nil
+			return textToolError("invalid arguments for cite_knowledge: ids is required"), nil, nil
 		}
 		if s.store == nil {
-			return textToolError("index not available: run argos index first"), nil
+			return textToolError("index not available: run argos index first"), nil, nil
 		}
-		return textResult(s.service.CiteKnowledge(req.IDs))
+		result, err := textResult(s.service.CiteKnowledge(req.IDs))
+		return result, nil, err
 	default:
-		return textToolError("unknown tool: " + params.Name), nil
+		return toolCallResult{}, invalidParams("unknown tool: " + params.Name), nil
 	}
 }
 
 func decodeArgs(data json.RawMessage, out any) error {
+	if len(bytes.TrimSpace(data)) == 0 {
+		data = json.RawMessage("{}")
+	}
+	if err := decodeStrict(data, out); err != nil {
+		return err
+	}
+	return nil
+}
+
+func decodeStrict(data json.RawMessage, out any) error {
 	if len(bytes.TrimSpace(data)) == 0 {
 		data = json.RawMessage("{}")
 	}
@@ -303,6 +330,18 @@ func decodeArgs(data json.RawMessage, out any) error {
 		return err
 	}
 	return nil
+}
+
+func hasArgument(data json.RawMessage, name string) (bool, error) {
+	if len(bytes.TrimSpace(data)) == 0 {
+		return false, nil
+	}
+	var args map[string]json.RawMessage
+	if err := json.Unmarshal(data, &args); err != nil {
+		return false, err
+	}
+	_, ok := args[name]
+	return ok, nil
 }
 
 func requireStringFields(values map[string]string, names ...string) error {
@@ -332,6 +371,10 @@ func textToolError(message string) toolCallResult {
 	}
 }
 
+func invalidParams(message string) *rpcError {
+	return &rpcError{Code: -32602, Message: message}
+}
+
 func tools() []tool {
 	return []tool{
 		{
@@ -345,11 +388,6 @@ func tools() []tool {
 			}, []string{"project", "phase", "task"}),
 		},
 		{
-			Name:        "argos_requirements",
-			Description: "Find relevant requirements for a task. Not implemented in this MVP phase.",
-			InputSchema: objectSchema(map[string]any{}, nil),
-		},
-		{
 			Name:        "argos_standards",
 			Description: "Find active standards for project work.",
 			InputSchema: objectSchema(map[string]any{
@@ -358,16 +396,6 @@ func tools() []tool {
 				"files":     stringArrayProperty("Files relevant to the current task."),
 				"limit":     integerProperty("Maximum number of standards to return.", 1, 5),
 			}, []string{"project"}),
-		},
-		{
-			Name:        "argos_risks",
-			Description: "Find relevant risks, lessons, and incident history. Not implemented in this MVP phase.",
-			InputSchema: objectSchema(map[string]any{}, nil),
-		},
-		{
-			Name:        "argos_operations",
-			Description: "Find operational runbooks and deployment guidance. Not implemented in this MVP phase.",
-			InputSchema: objectSchema(map[string]any{}, nil),
 		},
 		{
 			Name:        "get_knowledge_item",
@@ -388,8 +416,9 @@ func tools() []tool {
 
 func objectSchema(properties map[string]any, required []string) map[string]any {
 	schema := map[string]any{
-		"type":       "object",
-		"properties": properties,
+		"type":                 "object",
+		"properties":           properties,
+		"additionalProperties": false,
 	}
 	if len(required) > 0 {
 		schema["required"] = required

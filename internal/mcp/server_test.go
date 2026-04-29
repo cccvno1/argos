@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -44,13 +45,18 @@ func TestServerHandlesToolsList(t *testing.T) {
 	}
 	decodeResult(t, resp, &result)
 
-	for _, name := range []string{"argos_context", "argos_requirements", "argos_standards", "argos_risks", "argos_operations", "get_knowledge_item", "cite_knowledge"} {
+	for _, name := range []string{"argos_context", "argos_standards", "get_knowledge_item", "cite_knowledge"} {
 		tool := findTool(result.Tools, name)
 		if tool == nil {
 			t.Fatalf("expected %s tool in response: %s", name, out.String())
 		}
 		if tool.InputSchema == nil {
 			t.Fatalf("expected %s tool to include inputSchema: %s", name, out.String())
+		}
+	}
+	for _, name := range []string{"argos_requirements", "argos_risks", "argos_operations"} {
+		if tool := findTool(result.Tools, name); tool != nil {
+			t.Fatalf("did not expect unimplemented %s tool in response: %s", name, out.String())
 		}
 	}
 }
@@ -75,19 +81,23 @@ func TestToolsListIncludesConcreteSchemasForImplementedTools(t *testing.T) {
 
 	assertToolSchemaHasProperties(t, result.Tools, "argos_context", []string{"project", "phase", "task", "files"})
 	assertToolSchemaRequired(t, result.Tools, "argos_context", []string{"project", "phase", "task"})
+	assertToolSchemaDisallowsAdditionalProperties(t, result.Tools, "argos_context")
 
 	assertToolSchemaHasProperties(t, result.Tools, "argos_standards", []string{"project", "task_type", "files", "limit"})
 	assertToolSchemaRequired(t, result.Tools, "argos_standards", []string{"project"})
 	assertToolSchemaPropertyBounds(t, result.Tools, "argos_standards", "limit", 1, 5)
+	assertToolSchemaDisallowsAdditionalProperties(t, result.Tools, "argos_standards")
 
 	assertToolSchemaHasProperties(t, result.Tools, "get_knowledge_item", []string{"id"})
 	assertToolSchemaRequired(t, result.Tools, "get_knowledge_item", []string{"id"})
+	assertToolSchemaDisallowsAdditionalProperties(t, result.Tools, "get_knowledge_item")
 
 	assertToolSchemaHasProperties(t, result.Tools, "cite_knowledge", []string{"ids"})
 	assertToolSchemaRequired(t, result.Tools, "cite_knowledge", []string{"ids"})
+	assertToolSchemaDisallowsAdditionalProperties(t, result.Tools, "cite_knowledge")
 }
 
-func TestToolCallUnknownToolReturnsToolError(t *testing.T) {
+func TestToolCallUnknownToolReturnsInvalidParams(t *testing.T) {
 	var out bytes.Buffer
 	server := NewServer(query.New(nil))
 
@@ -96,21 +106,10 @@ func TestToolCallUnknownToolReturnsToolError(t *testing.T) {
 		t.Fatalf("HandleLine returned error: %v", err)
 	}
 
-	resp := decodeRPCResponse(t, out.Bytes())
-	if resp.Error != nil {
-		t.Fatalf("expected tool error result, got rpc error: %#v", resp.Error)
-	}
-	result := resultMap(t, resp)
-	if result["isError"] != true {
-		t.Fatalf("expected isError true, got %#v", result["isError"])
-	}
-	text := firstContentText(t, result)
-	if !strings.Contains(text, "unknown tool: missing_tool") {
-		t.Fatalf("unexpected tool error text: %s", text)
-	}
+	assertError(t, decodeRPCResponse(t, out.Bytes()), "1", -32602)
 }
 
-func TestToolCallMalformedParamsReturnsToolError(t *testing.T) {
+func TestToolCallMalformedParamsReturnsInvalidParams(t *testing.T) {
 	var out bytes.Buffer
 	server := NewServer(query.New(nil))
 
@@ -119,14 +118,19 @@ func TestToolCallMalformedParamsReturnsToolError(t *testing.T) {
 		t.Fatalf("HandleLine returned error: %v", err)
 	}
 
-	resp := decodeRPCResponse(t, out.Bytes())
-	if resp.Error != nil {
-		t.Fatalf("expected tool error result, got rpc error: %#v", resp.Error)
+	assertError(t, decodeRPCResponse(t, out.Bytes()), "1", -32602)
+}
+
+func TestToolCallMissingNameReturnsInvalidParams(t *testing.T) {
+	var out bytes.Buffer
+	server := NewServer(query.New(nil))
+
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"arguments":{}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
 	}
-	result := resultMap(t, resp)
-	if result["isError"] != true {
-		t.Fatalf("expected isError true, got %#v", result["isError"])
-	}
+
+	assertError(t, decodeRPCResponse(t, out.Bytes()), "1", -32602)
 }
 
 func TestToolCallArgosContextWorksWithoutIndex(t *testing.T) {
@@ -234,6 +238,23 @@ func TestToolCallArgosStandardsMissingRequiredArgsReturnsToolError(t *testing.T)
 	}
 
 	assertToolErrorContains(t, out.Bytes(), "invalid arguments for argos_standards: project is required")
+}
+
+func TestToolCallArgosStandardsExplicitLimitOutOfRangeReturnsToolError(t *testing.T) {
+	store := buildMCPTestStore(t)
+	defer store.Close()
+	server := NewServerWithStore(store)
+
+	for _, limit := range []int{0, 6} {
+		var out bytes.Buffer
+		line := []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_standards","arguments":{"project":"mall-api","limit":` + strconv.Itoa(limit) + `}}}`)
+		err := server.HandleLine(line, &out)
+		if err != nil {
+			t.Fatalf("HandleLine returned error for limit %d: %v", limit, err)
+		}
+
+		assertToolErrorContains(t, out.Bytes(), "invalid arguments for argos_standards: limit must be between 1 and 5")
+	}
 }
 
 func TestToolCallGetKnowledgeItemReturnsFullBody(t *testing.T) {
@@ -789,6 +810,21 @@ func assertToolSchemaPropertyBounds(t *testing.T, tools []struct {
 	}
 	if got := property["maximum"]; got != float64(maximum) {
 		t.Fatalf("expected %s.%s maximum %d, got %#v", toolName, propertyName, maximum, got)
+	}
+}
+
+func assertToolSchemaDisallowsAdditionalProperties(t *testing.T, tools []struct {
+	Name        string         `json:"name"`
+	InputSchema map[string]any `json:"inputSchema"`
+}, toolName string) {
+	t.Helper()
+
+	tool := findTool(tools, toolName)
+	if tool == nil {
+		t.Fatalf("expected %s tool", toolName)
+	}
+	if got := tool.InputSchema["additionalProperties"]; got != false {
+		t.Fatalf("expected %s inputSchema additionalProperties false, got %#v", toolName, got)
 	}
 }
 
