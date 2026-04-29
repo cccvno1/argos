@@ -44,6 +44,21 @@ type tool struct {
 	InputSchema any    `json:"inputSchema"`
 }
 
+type callToolParams struct {
+	Name      string          `json:"name"`
+	Arguments json.RawMessage `json:"arguments"`
+}
+
+type toolCallResult struct {
+	Content []toolContent `json:"content"`
+	IsError bool          `json:"isError"`
+}
+
+type toolContent struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
 type resource struct {
 	URI         string `json:"uri"`
 	Name        string `json:"name"`
@@ -137,7 +152,7 @@ func (s *Server) HandleLine(line []byte, stdout io.Writer) error {
 		return writeError(stdout, req.ID, -32600, "Invalid Request")
 	}
 
-	result, ok := s.result(req.Method)
+	result, ok := s.result(req.Method, req.Params)
 	if !ok {
 		if len(req.ID) == 0 {
 			return nil
@@ -157,7 +172,7 @@ func (s *Server) HandleLine(line []byte, stdout io.Writer) error {
 	return err
 }
 
-func (s *Server) result(method string) (map[string]any, bool) {
+func (s *Server) result(method string, params json.RawMessage) (any, bool) {
 	switch method {
 	case "initialize":
 		return map[string]any{
@@ -174,6 +189,12 @@ func (s *Server) result(method string) (map[string]any, bool) {
 		}, true
 	case "tools/list":
 		return map[string]any{"tools": tools()}, true
+	case "tools/call":
+		result, err := s.callTool(params)
+		if err != nil {
+			return textToolError(err.Error()), true
+		}
+		return result, true
 	case "resources/list":
 		return map[string]any{"resources": resources()}, true
 	case "resources/templates/list":
@@ -182,6 +203,38 @@ func (s *Server) result(method string) (map[string]any, bool) {
 		return map[string]any{"prompts": prompts()}, true
 	default:
 		return nil, false
+	}
+}
+
+func (s *Server) callTool(data json.RawMessage) (toolCallResult, error) {
+	var params callToolParams
+	if err := json.Unmarshal(data, &params); err != nil {
+		return textToolError(err.Error()), nil
+	}
+	if params.Name == "" {
+		return textToolError("missing tool name"), nil
+	}
+	if len(bytes.TrimSpace(params.Arguments)) == 0 {
+		params.Arguments = json.RawMessage("{}")
+	}
+	return textToolError("unknown tool: " + params.Name), nil
+}
+
+func textResult(value any) (toolCallResult, error) {
+	data, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return toolCallResult{}, err
+	}
+	return toolCallResult{
+		Content: []toolContent{{Type: "text", Text: string(data)}},
+		IsError: false,
+	}, nil
+}
+
+func textToolError(message string) toolCallResult {
+	return toolCallResult{
+		Content: []toolContent{{Type: "text", Text: message}},
+		IsError: true,
 	}
 }
 

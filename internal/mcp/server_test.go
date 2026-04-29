@@ -52,6 +52,48 @@ func TestServerHandlesToolsList(t *testing.T) {
 	}
 }
 
+func TestToolCallUnknownToolReturnsToolError(t *testing.T) {
+	var out bytes.Buffer
+	server := NewServer(query.New(nil))
+
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"missing_tool","arguments":{}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	resp := decodeRPCResponse(t, out.Bytes())
+	if resp.Error != nil {
+		t.Fatalf("expected tool error result, got rpc error: %#v", resp.Error)
+	}
+	result := resultMap(t, resp)
+	if result["isError"] != true {
+		t.Fatalf("expected isError true, got %#v", result["isError"])
+	}
+	text := firstContentText(t, result)
+	if !strings.Contains(text, "unknown tool: missing_tool") {
+		t.Fatalf("unexpected tool error text: %s", text)
+	}
+}
+
+func TestToolCallMalformedParamsReturnsToolError(t *testing.T) {
+	var out bytes.Buffer
+	server := NewServer(query.New(nil))
+
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":123,"arguments":{}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	resp := decodeRPCResponse(t, out.Bytes())
+	if resp.Error != nil {
+		t.Fatalf("expected tool error result, got rpc error: %#v", resp.Error)
+	}
+	result := resultMap(t, resp)
+	if result["isError"] != true {
+		t.Fatalf("expected isError true, got %#v", result["isError"])
+	}
+}
+
 func TestServerHandlesResourcesTemplatesAndPromptsList(t *testing.T) {
 	var out bytes.Buffer
 	server := NewServer(query.New(nil))
@@ -294,6 +336,12 @@ func decodeResponse(t *testing.T, body []byte) testResponse {
 	return resp
 }
 
+func decodeRPCResponse(t *testing.T, body []byte) testResponse {
+	t.Helper()
+
+	return decodeResponse(t, body)
+}
+
 func decodeResult(t *testing.T, resp testResponse, target any) {
 	t.Helper()
 
@@ -303,6 +351,32 @@ func decodeResult(t *testing.T, resp testResponse, target any) {
 	if err := json.Unmarshal(resp.Result, target); err != nil {
 		t.Fatalf("decode result: %v; result=%s", err, string(resp.Result))
 	}
+}
+
+func resultMap(t *testing.T, resp testResponse) map[string]any {
+	t.Helper()
+
+	var result map[string]any
+	decodeResult(t, resp, &result)
+	return result
+}
+
+func firstContentText(t *testing.T, result map[string]any) string {
+	t.Helper()
+
+	content, ok := result["content"].([]any)
+	if !ok || len(content) == 0 {
+		t.Fatalf("expected content array, got %#v", result["content"])
+	}
+	first, ok := content[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected first content item to be an object, got %#v", content[0])
+	}
+	text, ok := first["text"].(string)
+	if !ok {
+		t.Fatalf("expected first content text, got %#v", first["text"])
+	}
+	return text
 }
 
 func assertSuccessID(t *testing.T, resp testResponse, id string) {
