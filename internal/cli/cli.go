@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"argos/internal/adapters"
 	"argos/internal/index"
@@ -41,12 +42,23 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		fmt.Fprintln(stdout, "initialized Argos workspace")
 		return 0
 	case "validate":
+		flags := flag.NewFlagSet("validate", flag.ContinueOnError)
+		flags.SetOutput(stderr)
+		includeInbox := flags.Bool("inbox", false, "validate inbox candidates")
+		path := flags.String("path", "", "validate a single item or package path")
+		if err := flags.Parse(args[1:]); err != nil {
+			return 2
+		}
+		if *includeInbox && strings.TrimSpace(*path) != "" {
+			fmt.Fprintln(stderr, "validate: --inbox and --path cannot be used together")
+			return 2
+		}
 		root, err := os.Getwd()
 		if err != nil {
 			fmt.Fprintf(stderr, "get current directory: %v\n", err)
 			return 1
 		}
-		items, err := loadAndValidateKnowledge(root, stderr)
+		items, err := loadAndValidateKnowledge(root, stderr, validationScope{Inbox: *includeInbox, Path: *path})
 		if err != nil {
 			return 1
 		}
@@ -59,7 +71,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			fmt.Fprintf(stderr, "get current directory: %v\n", err)
 			return 1
 		}
-		items, err := loadAndValidateKnowledge(root, stderr)
+		items, err := loadAndValidateKnowledge(root, stderr, validationScope{})
 		if err != nil {
 			return 1
 		}
@@ -154,13 +166,27 @@ func openMCPServer(root string) (*mcp.Server, func(), bool) {
 	}, true
 }
 
-func loadAndValidateKnowledge(root string, stderr io.Writer) ([]knowledge.Item, error) {
+type validationScope struct {
+	Inbox bool
+	Path  string
+}
+
+func loadAndValidateKnowledge(root string, stderr io.Writer, scope validationScope) ([]knowledge.Item, error) {
 	reg, err := registry.Load(root)
 	if err != nil {
 		fmt.Fprintf(stderr, "load registry: %v\n", err)
 		return nil, err
 	}
-	items, err := knowledge.LoadItems(root)
+
+	var items []knowledge.Item
+	switch {
+	case strings.TrimSpace(scope.Path) != "":
+		items, err = knowledge.LoadPath(root, scope.Path)
+	case scope.Inbox:
+		items, err = knowledge.LoadInbox(root)
+	default:
+		items, err = knowledge.LoadOfficial(root)
+	}
 	if err != nil {
 		fmt.Fprintf(stderr, "load knowledge items: %v\n", err)
 		return nil, err
