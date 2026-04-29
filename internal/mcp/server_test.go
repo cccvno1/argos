@@ -55,6 +55,30 @@ func TestServerHandlesToolsList(t *testing.T) {
 	}
 }
 
+func TestToolsListIncludesConcreteSchemasForImplementedTools(t *testing.T) {
+	var out bytes.Buffer
+	server := NewServer(query.New(nil))
+
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	resp := decodeResponse(t, out.Bytes())
+	var result struct {
+		Tools []struct {
+			Name        string         `json:"name"`
+			InputSchema map[string]any `json:"inputSchema"`
+		} `json:"tools"`
+	}
+	decodeResult(t, resp, &result)
+
+	assertToolSchemaHasProperty(t, result.Tools, "argos_context", "project")
+	assertToolSchemaHasProperty(t, result.Tools, "argos_standards", "files")
+	assertToolSchemaHasProperty(t, result.Tools, "get_knowledge_item", "id")
+	assertToolSchemaHasProperty(t, result.Tools, "cite_knowledge", "ids")
+}
+
 func TestToolCallUnknownToolReturnsToolError(t *testing.T) {
 	var out bytes.Buffer
 	server := NewServer(query.New(nil))
@@ -592,6 +616,25 @@ func findTool(tools []struct {
 		}
 	}
 	return nil
+}
+
+func assertToolSchemaHasProperty(t *testing.T, tools []struct {
+	Name        string         `json:"name"`
+	InputSchema map[string]any `json:"inputSchema"`
+}, toolName, propertyName string) {
+	t.Helper()
+
+	tool := findTool(tools, toolName)
+	if tool == nil {
+		t.Fatalf("expected %s tool", toolName)
+	}
+	properties, ok := tool.InputSchema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected %s inputSchema properties object, got %#v", toolName, tool.InputSchema["properties"])
+	}
+	if _, ok := properties[propertyName]; !ok {
+		t.Fatalf("expected %s inputSchema to include property %s, got %#v", toolName, propertyName, properties)
+	}
 }
 
 func containsTemplate(templates []struct {

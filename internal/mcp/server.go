@@ -311,18 +311,87 @@ func textToolError(message string) toolCallResult {
 }
 
 func tools() []tool {
-	inputSchema := map[string]any{
-		"type":       "object",
-		"properties": map[string]any{},
-	}
 	return []tool{
-		{Name: "argos_context", Description: "Get workflow context and recommended next calls.", InputSchema: inputSchema},
-		{Name: "argos_requirements", Description: "Find relevant requirements for a task.", InputSchema: inputSchema},
-		{Name: "argos_standards", Description: "Find active standards for project work.", InputSchema: inputSchema},
-		{Name: "argos_risks", Description: "Find relevant risks, lessons, and incident history.", InputSchema: inputSchema},
-		{Name: "argos_operations", Description: "Find operational runbooks and deployment guidance.", InputSchema: inputSchema},
-		{Name: "get_knowledge_item", Description: "Fetch a knowledge item by id.", InputSchema: inputSchema},
-		{Name: "cite_knowledge", Description: "Create a citation for a knowledge item.", InputSchema: inputSchema},
+		{
+			Name:        "argos_context",
+			Description: "Get workflow context and recommended next calls.",
+			InputSchema: objectSchema(map[string]any{
+				"project": stringProperty("Project identifier."),
+				"phase":   stringProperty("Workflow phase, such as implementation, review, debugging, or deployment."),
+				"task":    stringProperty("Current task description."),
+				"files":   stringArrayProperty("Files relevant to the current task."),
+			}),
+		},
+		{
+			Name:        "argos_requirements",
+			Description: "Find relevant requirements for a task. Not implemented in this MVP phase.",
+			InputSchema: objectSchema(map[string]any{}),
+		},
+		{
+			Name:        "argos_standards",
+			Description: "Find active standards for project work.",
+			InputSchema: objectSchema(map[string]any{
+				"project":   stringProperty("Project identifier."),
+				"task_type": stringProperty("Type of work being performed."),
+				"files":     stringArrayProperty("Files relevant to the current task."),
+				"limit":     integerProperty("Maximum number of standards to return."),
+			}),
+		},
+		{
+			Name:        "argos_risks",
+			Description: "Find relevant risks, lessons, and incident history. Not implemented in this MVP phase.",
+			InputSchema: objectSchema(map[string]any{}),
+		},
+		{
+			Name:        "argos_operations",
+			Description: "Find operational runbooks and deployment guidance. Not implemented in this MVP phase.",
+			InputSchema: objectSchema(map[string]any{}),
+		},
+		{
+			Name:        "get_knowledge_item",
+			Description: "Fetch a knowledge item by id.",
+			InputSchema: objectSchema(map[string]any{
+				"id": stringProperty("Knowledge item id."),
+			}),
+		},
+		{
+			Name:        "cite_knowledge",
+			Description: "Create citations for knowledge items.",
+			InputSchema: objectSchema(map[string]any{
+				"ids": stringArrayProperty("Knowledge item ids to cite."),
+			}),
+		},
+	}
+}
+
+func objectSchema(properties map[string]any) map[string]any {
+	return map[string]any{
+		"type":       "object",
+		"properties": properties,
+	}
+}
+
+func stringProperty(description string) map[string]any {
+	return map[string]any{
+		"type":        "string",
+		"description": description,
+	}
+}
+
+func stringArrayProperty(description string) map[string]any {
+	return map[string]any{
+		"type":        "array",
+		"description": description,
+		"items": map[string]any{
+			"type": "string",
+		},
+	}
+}
+
+func integerProperty(description string) map[string]any {
+	return map[string]any{
+		"type":        "integer",
+		"description": description,
 	}
 }
 
