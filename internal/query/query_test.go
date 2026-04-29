@@ -220,6 +220,82 @@ func TestContextRecommendsNextCalls(t *testing.T) {
 	}
 }
 
+func TestContextRecommendationsOnlyUseCallableTools(t *testing.T) {
+	service := New(nil)
+	callableTools := map[string]bool{
+		"argos_context":      true,
+		"argos_standards":    true,
+		"get_knowledge_item": true,
+		"cite_knowledge":     true,
+	}
+	unavailableTools := map[string]bool{
+		"argos_requirements": true,
+		"argos_risks":        true,
+		"argos_operations":   true,
+	}
+
+	for _, phase := range []string{
+		"planning",
+		"",
+		"implementation",
+		"review",
+		"debugging",
+		"operations",
+		"deployment",
+	} {
+		t.Run(phase, func(t *testing.T) {
+			result := service.Context(ContextRequest{
+				Project: "mall-api",
+				Phase:   phase,
+				Task:    "add refresh token endpoint",
+			})
+
+			if len(result.RecommendedNextCalls) == 0 {
+				t.Fatal("expected recommended next calls")
+			}
+			for _, call := range result.RecommendedNextCalls {
+				if !callableTools[call.Tool] {
+					t.Fatalf("expected callable recommendation, got %q", call.Tool)
+				}
+				if unavailableTools[call.Tool] {
+					t.Fatalf("did not expect unavailable recommendation %q", call.Tool)
+				}
+			}
+		})
+	}
+}
+
+func TestGetKnowledgeItemReturnsFullBody(t *testing.T) {
+	store := buildQueryTestStore(t)
+	defer store.Close()
+	service := New(store)
+
+	item, err := service.GetKnowledgeItem("rule:backend.auth.v1")
+	if err != nil {
+		t.Fatalf("GetKnowledgeItem returned error: %v", err)
+	}
+	if item.Body != "Require explicit auth middleware for account endpoints.\nThis is the full rule body." {
+		t.Fatalf("expected full body, got %q", item.Body)
+	}
+}
+
+func TestCiteKnowledgeReportsMissingIDs(t *testing.T) {
+	store := buildQueryTestStore(t)
+	defer store.Close()
+	service := New(store)
+
+	result := service.CiteKnowledge([]string{"rule:backend.auth.v1", "missing.v1"})
+	if len(result.Citations) != 1 {
+		t.Fatalf("expected 1 citation, got %d", len(result.Citations))
+	}
+	if result.Citations[0].ID != "rule:backend.auth.v1" {
+		t.Fatalf("expected auth rule citation, got %#v", result.Citations[0])
+	}
+	if len(result.Missing) != 1 || result.Missing[0] != "missing.v1" {
+		t.Fatalf("expected missing id, got %#v", result.Missing)
+	}
+}
+
 func ruleWithPriority(id string, priority string) knowledge.Item {
 	return knowledge.Item{
 		Path:            "knowledge/items/backend/priority.md",
@@ -234,4 +310,32 @@ func ruleWithPriority(id string, priority string) knowledge.Item {
 		UpdatedAt:       "2026-04-29",
 		Body:            "Priority guidance applies.",
 	}
+}
+
+func buildQueryTestStore(t *testing.T) *index.Store {
+	t.Helper()
+
+	dbPath := filepath.Join(t.TempDir(), "argos/index.db")
+	err := index.Rebuild(dbPath, []knowledge.Item{{
+		Path:            "knowledge/items/backend/auth.md",
+		ID:              "rule:backend.auth.v1",
+		Title:           "Auth middleware",
+		Type:            "rule",
+		TechDomains:     []string{"backend"},
+		BusinessDomains: []string{"account"},
+		Projects:        []string{"mall-api"},
+		Status:          "active",
+		Priority:        "must",
+		AppliesTo:       knowledge.Scope{Files: []string{"internal/auth/**"}},
+		UpdatedAt:       "2026-04-29",
+		Body:            "Require explicit auth middleware for account endpoints.\nThis is the full rule body.",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := index.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return store
 }

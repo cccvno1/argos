@@ -3,9 +3,13 @@ package mcp
 import (
 	"bytes"
 	"encoding/json"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
+	"argos/internal/index"
+	"argos/internal/knowledge"
 	"argos/internal/query"
 )
 
@@ -41,7 +45,7 @@ func TestServerHandlesToolsList(t *testing.T) {
 	}
 	decodeResult(t, resp, &result)
 
-	for _, name := range []string{"argos_context", "argos_requirements", "argos_standards", "argos_risks", "argos_operations", "get_knowledge_item", "cite_knowledge"} {
+	for _, name := range []string{"argos_context", "argos_standards", "get_knowledge_item", "cite_knowledge"} {
 		tool := findTool(result.Tools, name)
 		if tool == nil {
 			t.Fatalf("expected %s tool in response: %s", name, out.String())
@@ -49,6 +53,353 @@ func TestServerHandlesToolsList(t *testing.T) {
 		if tool.InputSchema == nil {
 			t.Fatalf("expected %s tool to include inputSchema: %s", name, out.String())
 		}
+	}
+	for _, name := range []string{"argos_requirements", "argos_risks", "argos_operations"} {
+		if tool := findTool(result.Tools, name); tool != nil {
+			t.Fatalf("did not expect unimplemented %s tool in response: %s", name, out.String())
+		}
+	}
+}
+
+func TestToolsListIncludesConcreteSchemasForImplementedTools(t *testing.T) {
+	var out bytes.Buffer
+	server := NewServer(query.New(nil))
+
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	resp := decodeResponse(t, out.Bytes())
+	var result struct {
+		Tools []struct {
+			Name        string         `json:"name"`
+			InputSchema map[string]any `json:"inputSchema"`
+		} `json:"tools"`
+	}
+	decodeResult(t, resp, &result)
+
+	assertToolSchemaHasProperties(t, result.Tools, "argos_context", []string{"project", "phase", "task", "files"})
+	assertToolSchemaRequired(t, result.Tools, "argos_context", []string{"project", "phase", "task"})
+	assertToolSchemaDisallowsAdditionalProperties(t, result.Tools, "argos_context")
+
+	assertToolSchemaHasProperties(t, result.Tools, "argos_standards", []string{"project", "task_type", "files", "limit"})
+	assertToolSchemaRequired(t, result.Tools, "argos_standards", []string{"project"})
+	assertToolSchemaPropertyBounds(t, result.Tools, "argos_standards", "limit", 1, 5)
+	assertToolSchemaDisallowsAdditionalProperties(t, result.Tools, "argos_standards")
+
+	assertToolSchemaHasProperties(t, result.Tools, "get_knowledge_item", []string{"id"})
+	assertToolSchemaRequired(t, result.Tools, "get_knowledge_item", []string{"id"})
+	assertToolSchemaDisallowsAdditionalProperties(t, result.Tools, "get_knowledge_item")
+
+	assertToolSchemaHasProperties(t, result.Tools, "cite_knowledge", []string{"ids"})
+	assertToolSchemaRequired(t, result.Tools, "cite_knowledge", []string{"ids"})
+	assertToolSchemaDisallowsAdditionalProperties(t, result.Tools, "cite_knowledge")
+}
+
+func TestToolCallUnknownToolReturnsInvalidParams(t *testing.T) {
+	var out bytes.Buffer
+	server := NewServer(query.New(nil))
+
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"missing_tool","arguments":{}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	assertError(t, decodeRPCResponse(t, out.Bytes()), "1", -32602)
+}
+
+func TestToolCallMalformedParamsReturnsInvalidParams(t *testing.T) {
+	var out bytes.Buffer
+	server := NewServer(query.New(nil))
+
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":123,"arguments":{}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	assertError(t, decodeRPCResponse(t, out.Bytes()), "1", -32602)
+}
+
+func TestToolCallMissingNameReturnsInvalidParams(t *testing.T) {
+	var out bytes.Buffer
+	server := NewServer(query.New(nil))
+
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"arguments":{}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	assertError(t, decodeRPCResponse(t, out.Bytes()), "1", -32602)
+}
+
+func TestToolCallNonObjectArgumentsReturnInvalidParams(t *testing.T) {
+	server := NewServer(query.New(nil))
+
+	for _, tc := range []struct {
+		name      string
+		arguments string
+	}{
+		{name: "string", arguments: `"not an object"`},
+		{name: "array", arguments: `[]`},
+		{name: "null", arguments: `null`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			line := []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_context","arguments":` + tc.arguments + `}}`)
+
+			err := server.HandleLine(line, &out)
+			if err != nil {
+				t.Fatalf("HandleLine returned error: %v", err)
+			}
+
+			assertError(t, decodeRPCResponse(t, out.Bytes()), "1", -32602)
+		})
+	}
+}
+
+func TestToolCallArgosContextWorksWithoutIndex(t *testing.T) {
+	var out bytes.Buffer
+	server := NewServer(query.New(nil))
+
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_context","arguments":{"project":"mall-api","phase":"implementation","task":"add refresh token endpoint","files":["internal/auth/session.go"]}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	resp := decodeRPCResponse(t, out.Bytes())
+	result := resultMap(t, resp)
+	if result["isError"] == true {
+		t.Fatalf("expected success result: %#v", result)
+	}
+
+	text := firstContentText(t, result)
+	if !strings.Contains(text, `"project": "mall-api"`) {
+		t.Fatalf("expected project in context response: %s", text)
+	}
+	if !strings.Contains(text, "argos_standards") {
+		t.Fatalf("expected next call in context response: %s", text)
+	}
+}
+
+func TestToolCallArgosContextInvalidArgsReturnsToolError(t *testing.T) {
+	var out bytes.Buffer
+	server := NewServer(query.New(nil))
+
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_context","arguments":{"project":"mall-api","unknown":true}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	resp := decodeRPCResponse(t, out.Bytes())
+	if resp.Error != nil {
+		t.Fatalf("expected tool error result, got rpc error: %#v", resp.Error)
+	}
+	result := resultMap(t, resp)
+	if result["isError"] != true {
+		t.Fatalf("expected isError true, got %#v", result["isError"])
+	}
+	text := firstContentText(t, result)
+	if !strings.Contains(text, "invalid arguments for argos_context") {
+		t.Fatalf("unexpected tool error text: %s", text)
+	}
+}
+
+func TestToolCallArgosContextMissingRequiredArgsReturnsToolError(t *testing.T) {
+	var out bytes.Buffer
+	server := NewServer(query.New(nil))
+
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_context","arguments":{"project":"mall-api","phase":"implementation"}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	assertToolErrorContains(t, out.Bytes(), "invalid arguments for argos_context: task is required")
+}
+
+func TestToolCallArgosStandardsReturnsRuleSummaries(t *testing.T) {
+	store := buildMCPTestStore(t)
+	defer store.Close()
+	server := NewServerWithStore(store)
+
+	var out bytes.Buffer
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_standards","arguments":{"project":"mall-api","files":["internal/auth/session.go"],"limit":5}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	text := firstContentText(t, resultMap(t, decodeRPCResponse(t, out.Bytes())))
+	if !strings.Contains(text, `"id": "rule:backend.auth.v1"`) {
+		t.Fatalf("expected auth rule summary: %s", text)
+	}
+	if strings.Contains(text, "Require explicit auth middleware for account endpoints.") && strings.Contains(text, "body") {
+		t.Fatalf("standards should not return full body: %s", text)
+	}
+}
+
+func TestToolCallArgosStandardsWithoutIndexReturnsToolError(t *testing.T) {
+	server := NewServer(query.New(nil))
+	var out bytes.Buffer
+
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_standards","arguments":{"project":"mall-api"}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+	result := resultMap(t, decodeRPCResponse(t, out.Bytes()))
+	if result["isError"] != true {
+		t.Fatalf("expected tool error: %#v", result)
+	}
+}
+
+func TestToolCallArgosStandardsMissingRequiredArgsReturnsToolError(t *testing.T) {
+	store := buildMCPTestStore(t)
+	defer store.Close()
+	server := NewServerWithStore(store)
+
+	var out bytes.Buffer
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_standards","arguments":{"files":["internal/auth/session.go"]}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	assertToolErrorContains(t, out.Bytes(), "invalid arguments for argos_standards: project is required")
+}
+
+func TestToolCallArgosStandardsExplicitLimitOutOfRangeReturnsToolError(t *testing.T) {
+	store := buildMCPTestStore(t)
+	defer store.Close()
+	server := NewServerWithStore(store)
+
+	for _, limit := range []int{0, 6} {
+		var out bytes.Buffer
+		line := []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_standards","arguments":{"project":"mall-api","limit":` + strconv.Itoa(limit) + `}}}`)
+		err := server.HandleLine(line, &out)
+		if err != nil {
+			t.Fatalf("HandleLine returned error for limit %d: %v", limit, err)
+		}
+
+		assertToolErrorContains(t, out.Bytes(), "invalid arguments for argos_standards: limit must be between 1 and 5")
+	}
+}
+
+func TestToolCallGetKnowledgeItemReturnsFullBody(t *testing.T) {
+	store := buildMCPTestStore(t)
+	defer store.Close()
+	server := NewServerWithStore(store)
+
+	var out bytes.Buffer
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_knowledge_item","arguments":{"id":"rule:backend.auth.v1"}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	result := resultMap(t, decodeRPCResponse(t, out.Bytes()))
+	if result["isError"] == true {
+		t.Fatalf("expected success result: %#v", result)
+	}
+	text := firstContentText(t, result)
+	if !strings.Contains(text, `"body"`) {
+		t.Fatalf("expected body in item response: %s", text)
+	}
+	if !strings.Contains(text, `Require explicit auth middleware for account endpoints.\nThis is the full rule body.`) {
+		t.Fatalf("expected full rule body: %s", text)
+	}
+}
+
+func TestToolCallGetKnowledgeItemMissingRequiredArgsReturnsToolError(t *testing.T) {
+	store := buildMCPTestStore(t)
+	defer store.Close()
+	server := NewServerWithStore(store)
+
+	var out bytes.Buffer
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_knowledge_item","arguments":{}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	assertToolErrorContains(t, out.Bytes(), "invalid arguments for get_knowledge_item: id is required")
+}
+
+func TestToolCallCiteKnowledgeReturnsCitationsAndMissing(t *testing.T) {
+	store := buildMCPTestStore(t)
+	defer store.Close()
+	server := NewServerWithStore(store)
+
+	var out bytes.Buffer
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"cite_knowledge","arguments":{"ids":["rule:backend.auth.v1","missing.v1"]}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	result := resultMap(t, decodeRPCResponse(t, out.Bytes()))
+	if result["isError"] == true {
+		t.Fatalf("expected success result: %#v", result)
+	}
+	text := firstContentText(t, result)
+	if !strings.Contains(text, `"citations"`) || !strings.Contains(text, `"missing"`) {
+		t.Fatalf("expected citations and missing in response: %s", text)
+	}
+	if !strings.Contains(text, `"id": "rule:backend.auth.v1"`) {
+		t.Fatalf("expected auth rule citation: %s", text)
+	}
+	if !strings.Contains(text, `"missing.v1"`) {
+		t.Fatalf("expected missing id: %s", text)
+	}
+}
+
+func TestToolCallCiteKnowledgeMissingRequiredArgsReturnsToolError(t *testing.T) {
+	store := buildMCPTestStore(t)
+	defer store.Close()
+	server := NewServerWithStore(store)
+
+	var out bytes.Buffer
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"cite_knowledge","arguments":{}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	assertToolErrorContains(t, out.Bytes(), "invalid arguments for cite_knowledge: ids is required")
+}
+
+func TestToolCallCiteKnowledgeEmptyIDsReturnsToolError(t *testing.T) {
+	store := buildMCPTestStore(t)
+	defer store.Close()
+	server := NewServerWithStore(store)
+
+	var out bytes.Buffer
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"cite_knowledge","arguments":{"ids":[]}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	assertToolErrorContains(t, out.Bytes(), "invalid arguments for cite_knowledge: ids is required")
+}
+
+func TestToolCallGetKnowledgeItemWithoutIndexReturnsToolError(t *testing.T) {
+	server := NewServer(query.New(nil))
+	var out bytes.Buffer
+
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_knowledge_item","arguments":{"id":"rule:backend.auth.v1"}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+	result := resultMap(t, decodeRPCResponse(t, out.Bytes()))
+	if result["isError"] != true {
+		t.Fatalf("expected tool error: %#v", result)
+	}
+}
+
+func TestToolCallCiteKnowledgeWithoutIndexReturnsToolError(t *testing.T) {
+	server := NewServer(query.New(nil))
+	var out bytes.Buffer
+
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"cite_knowledge","arguments":{"ids":["rule:backend.auth.v1"]}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+	result := resultMap(t, decodeRPCResponse(t, out.Bytes()))
+	if result["isError"] != true {
+		t.Fatalf("expected tool error: %#v", result)
 	}
 }
 
@@ -294,6 +645,12 @@ func decodeResponse(t *testing.T, body []byte) testResponse {
 	return resp
 }
 
+func decodeRPCResponse(t *testing.T, body []byte) testResponse {
+	t.Helper()
+
+	return decodeResponse(t, body)
+}
+
 func decodeResult(t *testing.T, resp testResponse, target any) {
 	t.Helper()
 
@@ -302,6 +659,49 @@ func decodeResult(t *testing.T, resp testResponse, target any) {
 	}
 	if err := json.Unmarshal(resp.Result, target); err != nil {
 		t.Fatalf("decode result: %v; result=%s", err, string(resp.Result))
+	}
+}
+
+func resultMap(t *testing.T, resp testResponse) map[string]any {
+	t.Helper()
+
+	var result map[string]any
+	decodeResult(t, resp, &result)
+	return result
+}
+
+func firstContentText(t *testing.T, result map[string]any) string {
+	t.Helper()
+
+	content, ok := result["content"].([]any)
+	if !ok || len(content) == 0 {
+		t.Fatalf("expected content array, got %#v", result["content"])
+	}
+	first, ok := content[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected first content item to be an object, got %#v", content[0])
+	}
+	text, ok := first["text"].(string)
+	if !ok {
+		t.Fatalf("expected first content text, got %#v", first["text"])
+	}
+	return text
+}
+
+func assertToolErrorContains(t *testing.T, body []byte, want string) {
+	t.Helper()
+
+	resp := decodeRPCResponse(t, body)
+	if resp.Error != nil {
+		t.Fatalf("expected tool error result, got rpc error: %#v", resp.Error)
+	}
+	result := resultMap(t, resp)
+	if result["isError"] != true {
+		t.Fatalf("expected isError true, got %#v", result["isError"])
+	}
+	text := firstContentText(t, result)
+	if !strings.Contains(text, want) {
+		t.Fatalf("expected tool error text to contain %q, got %q", want, text)
 	}
 }
 
@@ -357,6 +757,102 @@ func findTool(tools []struct {
 	return nil
 }
 
+func assertToolSchemaHasProperty(t *testing.T, tools []struct {
+	Name        string         `json:"name"`
+	InputSchema map[string]any `json:"inputSchema"`
+}, toolName, propertyName string) {
+	t.Helper()
+
+	tool := findTool(tools, toolName)
+	if tool == nil {
+		t.Fatalf("expected %s tool", toolName)
+	}
+	properties, ok := tool.InputSchema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected %s inputSchema properties object, got %#v", toolName, tool.InputSchema["properties"])
+	}
+	if _, ok := properties[propertyName]; !ok {
+		t.Fatalf("expected %s inputSchema to include property %s, got %#v", toolName, propertyName, properties)
+	}
+}
+
+func assertToolSchemaHasProperties(t *testing.T, tools []struct {
+	Name        string         `json:"name"`
+	InputSchema map[string]any `json:"inputSchema"`
+}, toolName string, propertyNames []string) {
+	t.Helper()
+
+	for _, propertyName := range propertyNames {
+		assertToolSchemaHasProperty(t, tools, toolName, propertyName)
+	}
+}
+
+func assertToolSchemaRequired(t *testing.T, tools []struct {
+	Name        string         `json:"name"`
+	InputSchema map[string]any `json:"inputSchema"`
+}, toolName string, required []string) {
+	t.Helper()
+
+	tool := findTool(tools, toolName)
+	if tool == nil {
+		t.Fatalf("expected %s tool", toolName)
+	}
+	values, ok := tool.InputSchema["required"].([]any)
+	if !ok {
+		t.Fatalf("expected %s inputSchema required array, got %#v", toolName, tool.InputSchema["required"])
+	}
+	if len(values) != len(required) {
+		t.Fatalf("expected %s required fields %v, got %#v", toolName, required, values)
+	}
+	for i, want := range required {
+		got, ok := values[i].(string)
+		if !ok || got != want {
+			t.Fatalf("expected %s required fields %v, got %#v", toolName, required, values)
+		}
+	}
+}
+
+func assertToolSchemaPropertyBounds(t *testing.T, tools []struct {
+	Name        string         `json:"name"`
+	InputSchema map[string]any `json:"inputSchema"`
+}, toolName, propertyName string, minimum, maximum int) {
+	t.Helper()
+
+	tool := findTool(tools, toolName)
+	if tool == nil {
+		t.Fatalf("expected %s tool", toolName)
+	}
+	properties, ok := tool.InputSchema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected %s inputSchema properties object, got %#v", toolName, tool.InputSchema["properties"])
+	}
+	property, ok := properties[propertyName].(map[string]any)
+	if !ok {
+		t.Fatalf("expected %s inputSchema property %s object, got %#v", toolName, propertyName, properties[propertyName])
+	}
+	if got := property["minimum"]; got != float64(minimum) {
+		t.Fatalf("expected %s.%s minimum %d, got %#v", toolName, propertyName, minimum, got)
+	}
+	if got := property["maximum"]; got != float64(maximum) {
+		t.Fatalf("expected %s.%s maximum %d, got %#v", toolName, propertyName, maximum, got)
+	}
+}
+
+func assertToolSchemaDisallowsAdditionalProperties(t *testing.T, tools []struct {
+	Name        string         `json:"name"`
+	InputSchema map[string]any `json:"inputSchema"`
+}, toolName string) {
+	t.Helper()
+
+	tool := findTool(tools, toolName)
+	if tool == nil {
+		t.Fatalf("expected %s tool", toolName)
+	}
+	if got := tool.InputSchema["additionalProperties"]; got != false {
+		t.Fatalf("expected %s inputSchema additionalProperties false, got %#v", toolName, got)
+	}
+}
+
 func containsTemplate(templates []struct {
 	URITemplate string `json:"uriTemplate"`
 }, uriTemplate string) bool {
@@ -377,4 +873,32 @@ func containsPrompt(prompts []struct {
 		}
 	}
 	return false
+}
+
+func buildMCPTestStore(t *testing.T) *index.Store {
+	t.Helper()
+
+	dbPath := filepath.Join(t.TempDir(), "argos/index.db")
+	err := index.Rebuild(dbPath, []knowledge.Item{{
+		Path:            "knowledge/items/backend/auth.md",
+		ID:              "rule:backend.auth.v1",
+		Title:           "Auth middleware",
+		Type:            "rule",
+		TechDomains:     []string{"backend"},
+		BusinessDomains: []string{"account"},
+		Projects:        []string{"mall-api"},
+		Status:          "active",
+		Priority:        "must",
+		AppliesTo:       knowledge.Scope{Files: []string{"internal/auth/**"}},
+		UpdatedAt:       "2026-04-29",
+		Body:            "Require explicit auth middleware for account endpoints.\nThis is the full rule body.",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := index.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return store
 }

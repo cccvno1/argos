@@ -31,6 +31,40 @@ func TestRebuildStoresItems(t *testing.T) {
 	}
 }
 
+func TestCheckSchemaAcceptsRebuiltIndex(t *testing.T) {
+	root := t.TempDir()
+	dbPath := filepath.Join(root, "argos/index.db")
+	if err := Rebuild(dbPath, []knowledge.Item{
+		testItem("backend.auth.jwt-refresh-token.v1", "JWT refresh token handling convention"),
+	}); err != nil {
+		t.Fatalf("Rebuild returned error: %v", err)
+	}
+
+	store, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open returned error: %v", err)
+	}
+	defer store.Close()
+
+	if err := store.CheckSchema(); err != nil {
+		t.Fatalf("CheckSchema returned error: %v", err)
+	}
+}
+
+func TestCheckSchemaRejectsDatabaseWithoutKnowledgeItems(t *testing.T) {
+	root := t.TempDir()
+	dbPath := filepath.Join(root, "empty.db")
+	store, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open returned error: %v", err)
+	}
+	defer store.Close()
+
+	if err := store.CheckSchema(); err == nil {
+		t.Fatal("expected CheckSchema to reject missing knowledge_items table")
+	}
+}
+
 func TestFailedRebuildPreservesExistingIndex(t *testing.T) {
 	root := t.TempDir()
 	dbPath := filepath.Join(root, "argos/index.db")
