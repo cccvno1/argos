@@ -64,6 +64,39 @@ func TestFailedRebuildPreservesExistingIndex(t *testing.T) {
 	}
 }
 
+func TestRebuildReplacesExistingIndex(t *testing.T) {
+	root := t.TempDir()
+	dbPath := filepath.Join(root, "argos/index.db")
+
+	if err := Rebuild(dbPath, []knowledge.Item{
+		testItem("backend.auth.jwt-refresh-token.v1", "Original title"),
+	}); err != nil {
+		t.Fatalf("initial Rebuild returned error: %v", err)
+	}
+	if err := Rebuild(dbPath, []knowledge.Item{
+		testItem("backend.cache.redis-convention.v1", "Replacement title"),
+	}); err != nil {
+		t.Fatalf("replacement Rebuild returned error: %v", err)
+	}
+
+	store, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open returned error: %v", err)
+	}
+	defer store.Close()
+
+	got, err := store.GetItem("backend.cache.redis-convention.v1")
+	if err != nil {
+		t.Fatalf("GetItem returned error: %v", err)
+	}
+	if got.Title != "Replacement title" {
+		t.Fatalf("expected replacement title, got %q", got.Title)
+	}
+	if _, err := store.GetItem("backend.auth.jwt-refresh-token.v1"); err == nil {
+		t.Fatal("expected original item to be absent after rebuild")
+	}
+}
+
 func testItem(id string, title string) knowledge.Item {
 	return knowledge.Item{
 		Path:            "knowledge/items/backend/auth.md",

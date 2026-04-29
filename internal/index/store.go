@@ -62,7 +62,7 @@ func Rebuild(dbPath string, items []knowledge.Item) error {
 		os.Remove(tempPath)
 		return fmt.Errorf("close temporary index: %w", err)
 	}
-	if err := os.Rename(tempPath, dbPath); err != nil {
+	if err := replaceIndex(tempPath, dbPath); err != nil {
 		os.Remove(tempPath)
 		return fmt.Errorf("replace index: %w", err)
 	}
@@ -154,6 +154,33 @@ INSERT INTO knowledge_items (
 func cleanupTemp(store *Store, tempPath string) {
 	store.Close()
 	os.Remove(tempPath)
+}
+
+func replaceIndex(tempPath string, dbPath string) error {
+	if err := os.Rename(tempPath, dbPath); err == nil {
+		return nil
+	} else if _, statErr := os.Stat(dbPath); statErr != nil {
+		return err
+	}
+
+	backupPath := dbPath + ".bak"
+	if err := os.Remove(backupPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove stale backup index: %w", err)
+	}
+	if err := os.Rename(dbPath, backupPath); err != nil {
+		return fmt.Errorf("backup existing index: %w", err)
+	}
+	if err := os.Rename(tempPath, dbPath); err != nil {
+		restoreErr := os.Rename(backupPath, dbPath)
+		if restoreErr != nil {
+			return fmt.Errorf("install rebuilt index: %w; restore existing index: %v", err, restoreErr)
+		}
+		return fmt.Errorf("install rebuilt index: %w", err)
+	}
+	if err := os.Remove(backupPath); err != nil {
+		return fmt.Errorf("remove backup index: %w", err)
+	}
+	return nil
 }
 
 func (s *Store) GetItem(id string) (knowledge.Item, error) {
