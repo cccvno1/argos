@@ -229,6 +229,64 @@ WHERE id = ?`, id).Scan(
 	return item, nil
 }
 
+func (s *Store) ListItems() ([]knowledge.Item, error) {
+	rows, err := s.db.Query(`
+SELECT id, path, title, type, tech_domains, business_domains, projects,
+	status, priority, scope, updated_at, summary, body
+FROM knowledge_items
+ORDER BY priority, id`)
+	if err != nil {
+		return nil, fmt.Errorf("list knowledge items: %w", err)
+	}
+	defer rows.Close()
+
+	var items []knowledge.Item
+	for rows.Next() {
+		var item knowledge.Item
+		var techDomains string
+		var businessDomains string
+		var projects string
+		var scope string
+		var unusedSummary string
+
+		if err := rows.Scan(
+			&item.ID,
+			&item.Path,
+			&item.Title,
+			&item.Type,
+			&techDomains,
+			&businessDomains,
+			&projects,
+			&item.Status,
+			&item.Priority,
+			&scope,
+			&item.UpdatedAt,
+			&unusedSummary,
+			&item.Body,
+		); err != nil {
+			return nil, fmt.Errorf("scan knowledge item: %w", err)
+		}
+		if err := unmarshalJSON(techDomains, &item.TechDomains); err != nil {
+			return nil, fmt.Errorf("%s: deserialize tech domains: %w", item.ID, err)
+		}
+		if err := unmarshalJSON(businessDomains, &item.BusinessDomains); err != nil {
+			return nil, fmt.Errorf("%s: deserialize business domains: %w", item.ID, err)
+		}
+		if err := unmarshalJSON(projects, &item.Projects); err != nil {
+			return nil, fmt.Errorf("%s: deserialize projects: %w", item.ID, err)
+		}
+		if err := unmarshalJSON(scope, &item.AppliesTo); err != nil {
+			return nil, fmt.Errorf("%s: deserialize scope: %w", item.ID, err)
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list knowledge items: %w", err)
+	}
+
+	return items, nil
+}
+
 func marshalJSON(value any) (string, error) {
 	data, err := json.Marshal(value)
 	if err != nil {
