@@ -11,6 +11,7 @@ import (
 	"argos/internal/adapters"
 	"argos/internal/index"
 	"argos/internal/knowledge"
+	"argos/internal/mcp"
 	"argos/internal/query"
 	"argos/internal/registry"
 	"argos/internal/workspace"
@@ -125,7 +126,14 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) int {
 		}
 		fmt.Fprintln(stdout, string(body))
 		return 0
-	case "new", "mcp":
+	case "mcp":
+		server := mcp.NewServer(query.New(nil))
+		if err := server.Serve(os.Stdin, stdout); err != nil {
+			fmt.Fprintf(stderr, "serve mcp: %v\n", err)
+			return 1
+		}
+		return 0
+	case "new":
 		fmt.Fprintf(stderr, "command %q is not implemented yet\n", args[0])
 		return 1
 	default:
