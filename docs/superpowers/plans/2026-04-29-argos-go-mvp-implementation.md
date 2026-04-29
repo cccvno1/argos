@@ -162,7 +162,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add go.mod go.sum cmd/argos/main.go internal/cli/cli.go internal/cli/cli_test.go
+git add go.mod cmd/argos/main.go internal/cli/cli.go internal/cli/cli_test.go
 git commit -m "feat: scaffold go cli"
 ```
 
