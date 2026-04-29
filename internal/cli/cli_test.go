@@ -138,6 +138,40 @@ Use short-lived access tokens.
 	}
 }
 
+func TestRunInstallAdaptersGeneratesProjectFiles(t *testing.T) {
+	root := t.TempDir()
+	writeCLIFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend]
+business_domains: [account]
+`)
+	writeCLIFile(t, root, "knowledge/projects.yaml", `projects:
+  - id: mall-api
+    name: Mall API
+    path: services/mall-api
+    tech_domains: [backend]
+    business_domains: [account]
+`)
+	writeCLIFile(t, root, "knowledge/types.yaml", "types: [rule]\n")
+	chdir(t, root)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{"install-adapters"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr: %q", code, stderr.String())
+	}
+	if strings.TrimSpace(stdout.String()) != "installed adapters for 1 project(s)" {
+		t.Fatalf("unexpected stdout: %q", stdout.String())
+	}
+	if stderr.String() != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+	path := filepath.Join(root, "argos", "generated", "mall-api", "AGENTS.md")
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("expected generated AGENTS.md at %s: %v", path, err)
+	}
+}
+
 func TestRunValidatePrintsValidationErrors(t *testing.T) {
 	root := t.TempDir()
 	writeCLIFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend]

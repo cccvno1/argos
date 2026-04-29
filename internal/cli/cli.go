@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"argos/internal/adapters"
 	"argos/internal/index"
 	"argos/internal/knowledge"
 	"argos/internal/registry"
@@ -80,7 +81,25 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) int {
 
 		fmt.Fprintf(stdout, "indexed %d knowledge item(s)\n", len(items))
 		return 0
-	case "new", "install-adapters", "mcp":
+	case "install-adapters":
+		root, err := os.Getwd()
+		if err != nil {
+			fmt.Fprintf(stderr, "get current directory: %v\n", err)
+			return 1
+		}
+		reg, err := registry.Load(root)
+		if err != nil {
+			fmt.Fprintf(stderr, "load registry: %v\n", err)
+			return 1
+		}
+		if err := adapters.Install(root, reg.Projects); err != nil {
+			fmt.Fprintf(stderr, "install adapters: %v\n", err)
+			return 1
+		}
+
+		fmt.Fprintf(stdout, "installed adapters for %d project(s)\n", len(reg.Projects))
+		return 0
+	case "new", "mcp":
 		fmt.Fprintf(stderr, "command %q is not implemented yet\n", args[0])
 		return 1
 	default:
