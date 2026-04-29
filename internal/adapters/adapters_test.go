@@ -23,10 +23,21 @@ func TestRenderAGENTSIncludesProgressiveProtocol(t *testing.T) {
 		"project: mall-api",
 		"argos_context",
 		"argos_standards",
+		"get_knowledge_item",
+		"cite_knowledge",
 		"Cite knowledge IDs",
 	} {
 		if !strings.Contains(body, expected) {
 			t.Fatalf("expected %q in AGENTS.md:\n%s", expected, body)
+		}
+	}
+	for _, unexpected := range []string{
+		"argos_requirements",
+		"argos_risks",
+		"argos_operations",
+	} {
+		if strings.Contains(body, unexpected) {
+			t.Fatalf("did not expect %q in AGENTS.md:\n%s", unexpected, body)
 		}
 	}
 }

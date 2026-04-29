@@ -96,10 +96,9 @@ business_domains: %s
 ## Argos Protocol
 
 1. Call argos_context to route the current request to relevant knowledge IDs.
-2. Call argos_requirements to load requirement knowledge when implementation or behavior changes are requested.
-3. Call argos_standards to load coding, architecture, and delivery standards before making changes.
-4. Call argos_risks to check project-specific risks before finalizing work.
-5. Call argos_operations to load operational runbooks when deployment, incidents, or maintenance are in scope.
+2. Call argos_standards to load active coding, architecture, and delivery standards before making changes.
+3. Call get_knowledge_item only when argos_context or argos_standards routes you to a specific knowledge ID that needs full content.
+4. Call cite_knowledge before final responses to cite the knowledge IDs you used.
 
 Load full knowledge items only when routed to a specific ID.
 Cite knowledge IDs used in final responses.
