@@ -1,0 +1,380 @@
+package mcp
+
+import (
+	"bytes"
+	"encoding/json"
+	"strings"
+	"testing"
+
+	"argos/internal/query"
+)
+
+type testResponse struct {
+	JSONRPC string          `json:"jsonrpc"`
+	ID      json.RawMessage `json:"id"`
+	Result  json.RawMessage `json:"result"`
+	Error   *testError      `json:"error"`
+}
+
+type testError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
+
+func TestServerHandlesToolsList(t *testing.T) {
+	var out bytes.Buffer
+	server := NewServer(query.New(nil))
+
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	resp := decodeResponse(t, out.Bytes())
+	assertSuccessID(t, resp, "1")
+
+	var result struct {
+		Tools []struct {
+			Name        string         `json:"name"`
+			InputSchema map[string]any `json:"inputSchema"`
+		} `json:"tools"`
+	}
+	decodeResult(t, resp, &result)
+
+	for _, name := range []string{"argos_context", "argos_requirements", "argos_standards", "argos_risks", "argos_operations", "get_knowledge_item", "cite_knowledge"} {
+		tool := findTool(result.Tools, name)
+		if tool == nil {
+			t.Fatalf("expected %s tool in response: %s", name, out.String())
+		}
+		if tool.InputSchema == nil {
+			t.Fatalf("expected %s tool to include inputSchema: %s", name, out.String())
+		}
+	}
+}
+
+func TestServerHandlesResourcesTemplatesAndPromptsList(t *testing.T) {
+	var out bytes.Buffer
+	server := NewServer(query.New(nil))
+
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":2,"method":"resources/templates/list","params":{}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine resources/templates/list returned error: %v", err)
+	}
+
+	resp := decodeResponse(t, out.Bytes())
+	assertSuccessID(t, resp, "2")
+
+	var templatesResult struct {
+		ResourceTemplates []struct {
+			URITemplate string `json:"uriTemplate"`
+		} `json:"resourceTemplates"`
+	}
+	decodeResult(t, resp, &templatesResult)
+	for _, uriTemplate := range []string{
+		"argos://project/{project}/brief",
+		"argos://project/{project}/rules",
+		"argos://domain/{domain}/map",
+		"argos://knowledge/{id}",
+	} {
+		if !containsTemplate(templatesResult.ResourceTemplates, uriTemplate) {
+			t.Fatalf("expected resource template %s in response: %s", uriTemplate, out.String())
+		}
+	}
+
+	out.Reset()
+	err = server.HandleLine([]byte(`{"jsonrpc":"2.0","id":3,"method":"resources/list","params":{}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine resources/list returned error: %v", err)
+	}
+	resp = decodeResponse(t, out.Bytes())
+	assertSuccessID(t, resp, "3")
+	var resourcesResult struct {
+		Resources []struct{} `json:"resources"`
+	}
+	decodeResult(t, resp, &resourcesResult)
+	if resourcesResult.Resources == nil {
+		t.Fatalf("expected resources/list to include resources array: %s", out.String())
+	}
+
+	out.Reset()
+	err = server.HandleLine([]byte(`{"jsonrpc":"2.0","id":4,"method":"prompts/list","params":{}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine prompts/list returned error: %v", err)
+	}
+	resp = decodeResponse(t, out.Bytes())
+	assertSuccessID(t, resp, "4")
+	var promptsResult struct {
+		Prompts []struct {
+			Name string `json:"name"`
+		} `json:"prompts"`
+	}
+	decodeResult(t, resp, &promptsResult)
+	for _, name := range []string{"prepare_feature_work", "debug_with_lessons", "review_with_standards", "prepare_deployment"} {
+		if !containsPrompt(promptsResult.Prompts, name) {
+			t.Fatalf("expected prompt %s in response: %s", name, out.String())
+		}
+	}
+}
+
+func TestServerDoesNotRespondToNotifications(t *testing.T) {
+	var out bytes.Buffer
+	server := NewServer(query.New(nil))
+
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("expected notification to be silent, got %q", out.String())
+	}
+}
+
+func TestServerInitializeThenNotificationThenLists(t *testing.T) {
+	var out bytes.Buffer
+	server := NewServer(query.New(nil))
+	input := strings.NewReader(
+		`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}` + "\n" +
+			`{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}` + "\n" +
+			`{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}` + "\n" +
+			`{"jsonrpc":"2.0","id":3,"method":"resources/templates/list","params":{}}` + "\n" +
+			`{"jsonrpc":"2.0","id":4,"method":"prompts/list","params":{}}` + "\n")
+
+	err := server.Serve(input, &out)
+	if err != nil {
+		t.Fatalf("Serve returned error: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	if len(lines) != 4 {
+		t.Fatalf("expected four responses, got %d: %q", len(lines), out.String())
+	}
+
+	initResp := decodeResponse(t, []byte(lines[0]))
+	assertSuccessID(t, initResp, "1")
+	var initResult struct {
+		ProtocolVersion string `json:"protocolVersion"`
+		ServerInfo      struct {
+			Name    string `json:"name"`
+			Version string `json:"version"`
+		} `json:"serverInfo"`
+		Capabilities struct {
+			Tools     map[string]any `json:"tools"`
+			Resources map[string]any `json:"resources"`
+			Prompts   map[string]any `json:"prompts"`
+		} `json:"capabilities"`
+	}
+	decodeResult(t, initResp, &initResult)
+	if initResult.ProtocolVersion != "2025-03-26" {
+		t.Fatalf("unexpected protocolVersion: %q", initResult.ProtocolVersion)
+	}
+	if initResult.ServerInfo.Name != "argos" || initResult.ServerInfo.Version != "0.1.0" {
+		t.Fatalf("unexpected serverInfo: %+v", initResult.ServerInfo)
+	}
+	if initResult.Capabilities.Tools == nil || initResult.Capabilities.Resources == nil || initResult.Capabilities.Prompts == nil {
+		t.Fatalf("expected tools, resources, and prompts capabilities: %+v", initResult.Capabilities)
+	}
+
+	assertSuccessID(t, decodeResponse(t, []byte(lines[1])), "2")
+	assertSuccessID(t, decodeResponse(t, []byte(lines[2])), "3")
+	assertSuccessID(t, decodeResponse(t, []byte(lines[3])), "4")
+}
+
+func TestServerWritesJSONRPCErrorForParseError(t *testing.T) {
+	var out bytes.Buffer
+	server := NewServer(query.New(nil))
+
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	resp := decodeResponse(t, out.Bytes())
+	assertError(t, resp, "null", -32700)
+}
+
+func TestServerWritesJSONRPCErrorForInvalidRequest(t *testing.T) {
+	var out bytes.Buffer
+	server := NewServer(query.New(nil))
+
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":5}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	resp := decodeResponse(t, out.Bytes())
+	assertError(t, resp, "5", -32600)
+}
+
+func TestServerWritesJSONRPCErrorForUnknownMethod(t *testing.T) {
+	var out bytes.Buffer
+	server := NewServer(query.New(nil))
+
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":6,"method":"unknown/method"}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	resp := decodeResponse(t, out.Bytes())
+	assertError(t, resp, "6", -32601)
+}
+
+func TestServerContinuesAfterClientRequestError(t *testing.T) {
+	var out bytes.Buffer
+	server := NewServer(query.New(nil))
+	input := strings.NewReader(`{"jsonrpc":"2.0","id":7,"method":"unknown/method"}` + "\n" +
+		`{"jsonrpc":"2.0","id":8,"method":"tools/list","params":{}}` + "\n")
+
+	err := server.Serve(input, &out)
+	if err != nil {
+		t.Fatalf("Serve returned error: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected two responses, got %d: %q", len(lines), out.String())
+	}
+	assertError(t, decodeResponse(t, []byte(lines[0])), "7", -32601)
+	assertSuccessID(t, decodeResponse(t, []byte(lines[1])), "8")
+}
+
+func TestServerHandlesOversizedValidFrame(t *testing.T) {
+	var out bytes.Buffer
+	server := NewServer(query.New(nil))
+	longTask := strings.Repeat("x", 70*1024)
+	line := `{"jsonrpc":"2.0","id":9,"method":"tools/list","params":{"task":"` + longTask + `"}}` + "\n"
+
+	err := server.Serve(strings.NewReader(line), &out)
+	if err != nil {
+		t.Fatalf("Serve returned error for oversized valid frame: %v", err)
+	}
+
+	resp := decodeResponse(t, out.Bytes())
+	assertSuccessID(t, resp, "9")
+}
+
+func TestServerReportsFrameTooLargeThenContinues(t *testing.T) {
+	var out bytes.Buffer
+	server := NewServer(query.New(nil))
+	input := strings.NewReader(strings.Repeat("x", maxFrameSize+1) + "\n" +
+		`{"jsonrpc":"2.0","id":10,"method":"tools/list","params":{}}` + "\n")
+
+	err := server.Serve(input, &out)
+	if err != nil {
+		t.Fatalf("Serve returned error: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected frame error and next response, got %d: %q", len(lines), out.String())
+	}
+	assertError(t, decodeResponse(t, []byte(lines[0])), "null", -32600)
+	assertSuccessID(t, decodeResponse(t, []byte(lines[1])), "10")
+}
+
+func TestServerReportsFrameTooLargeAtEOF(t *testing.T) {
+	var out bytes.Buffer
+	server := NewServer(query.New(nil))
+
+	err := server.Serve(strings.NewReader(strings.Repeat("x", maxFrameSize+1)), &out)
+	if err != nil {
+		t.Fatalf("Serve returned error: %v", err)
+	}
+
+	resp := decodeResponse(t, out.Bytes())
+	assertError(t, resp, "null", -32600)
+}
+
+func decodeResponse(t *testing.T, body []byte) testResponse {
+	t.Helper()
+
+	var resp testResponse
+	if err := json.Unmarshal(bytes.TrimSpace(body), &resp); err != nil {
+		t.Fatalf("decode JSON-RPC response: %v; body=%q", err, string(body))
+	}
+	return resp
+}
+
+func decodeResult(t *testing.T, resp testResponse, target any) {
+	t.Helper()
+
+	if len(resp.Result) == 0 {
+		t.Fatalf("expected result, got response: %+v", resp)
+	}
+	if err := json.Unmarshal(resp.Result, target); err != nil {
+		t.Fatalf("decode result: %v; result=%s", err, string(resp.Result))
+	}
+}
+
+func assertSuccessID(t *testing.T, resp testResponse, id string) {
+	t.Helper()
+
+	if resp.JSONRPC != "2.0" {
+		t.Fatalf("unexpected jsonrpc version: %q", resp.JSONRPC)
+	}
+	if string(resp.ID) != id {
+		t.Fatalf("expected id %s, got %s", id, string(resp.ID))
+	}
+	if resp.Error != nil {
+		t.Fatalf("expected success response, got error: %+v", resp.Error)
+	}
+	if len(resp.Result) == 0 {
+		t.Fatalf("expected result in response: %+v", resp)
+	}
+}
+
+func assertError(t *testing.T, resp testResponse, id string, code int) {
+	t.Helper()
+
+	if resp.JSONRPC != "2.0" {
+		t.Fatalf("unexpected jsonrpc version: %q", resp.JSONRPC)
+	}
+	if string(resp.ID) != id {
+		t.Fatalf("expected id %s, got %s", id, string(resp.ID))
+	}
+	if resp.Error == nil {
+		t.Fatalf("expected error response, got result: %s", string(resp.Result))
+	}
+	if resp.Error.Code != code {
+		t.Fatalf("expected error code %d, got %+v", code, resp.Error)
+	}
+	if len(resp.Result) != 0 {
+		t.Fatalf("expected no result in error response, got %s", string(resp.Result))
+	}
+}
+
+func findTool(tools []struct {
+	Name        string         `json:"name"`
+	InputSchema map[string]any `json:"inputSchema"`
+}, name string) *struct {
+	Name        string         `json:"name"`
+	InputSchema map[string]any `json:"inputSchema"`
+} {
+	for i := range tools {
+		if tools[i].Name == name {
+			return &tools[i]
+		}
+	}
+	return nil
+}
+
+func containsTemplate(templates []struct {
+	URITemplate string `json:"uriTemplate"`
+}, uriTemplate string) bool {
+	for _, template := range templates {
+		if template.URITemplate == uriTemplate {
+			return true
+		}
+	}
+	return false
+}
+
+func containsPrompt(prompts []struct {
+	Name string `json:"name"`
+}, name string) bool {
+	for _, prompt := range prompts {
+		if prompt.Name == name {
+			return true
+		}
+	}
+	return false
+}
