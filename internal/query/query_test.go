@@ -203,6 +203,23 @@ func TestStandardsPrefersFileScopedMatchBeforeApplyingLimit(t *testing.T) {
 	}
 }
 
+func TestContextRecommendsNextCalls(t *testing.T) {
+	service := New(nil)
+	result := service.Context(ContextRequest{
+		Project: "mall-api",
+		Phase:   "planning",
+		Task:    "add refresh token endpoint",
+		Files:   []string{"internal/auth/session.go"},
+	})
+
+	if result.Project != "mall-api" {
+		t.Fatalf("unexpected project: %s", result.Project)
+	}
+	if len(result.RecommendedNextCalls) == 0 {
+		t.Fatal("expected recommended next calls")
+	}
+}
+
 func ruleWithPriority(id string, priority string) knowledge.Item {
 	return knowledge.Item{
 		Path:            "knowledge/items/backend/priority.md",

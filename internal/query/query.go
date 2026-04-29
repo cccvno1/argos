@@ -22,6 +22,19 @@ type StandardsRequest struct {
 	Limit    int      `json:"limit"`
 }
 
+type ContextRequest struct {
+	Project string   `json:"project"`
+	Phase   string   `json:"phase"`
+	Task    string   `json:"task"`
+	Files   []string `json:"files"`
+}
+
+type ContextResponse struct {
+	Project              string            `json:"project"`
+	Phase                string            `json:"phase"`
+	RecommendedNextCalls []RecommendedCall `json:"recommended_next_calls"`
+}
+
 type Response struct {
 	Items                []ResultItem      `json:"items"`
 	Conflicts            []ResultItem      `json:"conflicts"`
@@ -55,6 +68,42 @@ type candidate struct {
 
 func New(store *index.Store) *Service {
 	return &Service{store: store}
+}
+
+func (s *Service) Context(req ContextRequest) ContextResponse {
+	calls := []RecommendedCall{{
+		Tool:   "argos_requirements",
+		Reason: "workflow start should collect constraints",
+	}}
+
+	switch req.Phase {
+	case "implementation", "review":
+		calls = append(calls, RecommendedCall{
+			Tool:   "argos_standards",
+			Reason: "implementation and review require active rules",
+		})
+	case "debugging":
+		calls = append(calls, RecommendedCall{
+			Tool:   "argos_risks",
+			Reason: "debugging should check lessons and incident history",
+		})
+	case "operations", "deployment":
+		calls = append(calls, RecommendedCall{
+			Tool:   "argos_operations",
+			Reason: "operations should use runbooks",
+		})
+	default:
+		calls = append(calls, RecommendedCall{
+			Tool:   "argos_standards",
+			Reason: "standards are useful before code changes",
+		})
+	}
+
+	return ContextResponse{
+		Project:              req.Project,
+		Phase:                req.Phase,
+		RecommendedNextCalls: calls,
+	}
 }
 
 func (s *Service) Standards(req StandardsRequest) (Response, error) {

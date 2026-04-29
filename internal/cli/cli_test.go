@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -169,6 +170,36 @@ business_domains: [account]
 	path := filepath.Join(root, "argos", "generated", "mall-api", "AGENTS.md")
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("expected generated AGENTS.md at %s: %v", path, err)
+	}
+}
+
+func TestRunContextPrintsWorkflowContractJSON(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{"context", "--project", "mall-api"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr: %q", code, stderr.String())
+	}
+	if stderr.String() != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+
+	var result struct {
+		Project              string `json:"project"`
+		RecommendedNextCalls []struct {
+			Tool   string `json:"tool"`
+			Reason string `json:"reason"`
+		} `json:"recommended_next_calls"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("expected JSON output, got error %v and output %q", err, stdout.String())
+	}
+	if result.Project != "mall-api" {
+		t.Fatalf("unexpected project: %s", result.Project)
+	}
+	if len(result.RecommendedNextCalls) == 0 {
+		t.Fatal("expected recommended next calls")
 	}
 }
 

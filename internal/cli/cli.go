@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -9,6 +11,7 @@ import (
 	"argos/internal/adapters"
 	"argos/internal/index"
 	"argos/internal/knowledge"
+	"argos/internal/query"
 	"argos/internal/registry"
 	"argos/internal/workspace"
 )
@@ -99,6 +102,28 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) int {
 
 		fmt.Fprintf(stdout, "installed adapters for %d project(s)\n", len(reg.Projects))
 		return 0
+	case "context":
+		flags := flag.NewFlagSet("context", flag.ContinueOnError)
+		flags.SetOutput(stderr)
+		project := flags.String("project", "", "project id")
+		phase := flags.String("phase", "planning", "workflow phase")
+		task := flags.String("task", "", "task description")
+		if err := flags.Parse(args[1:]); err != nil {
+			return 2
+		}
+
+		result := query.New(nil).Context(query.ContextRequest{
+			Project: *project,
+			Phase:   *phase,
+			Task:    *task,
+		})
+		body, err := json.MarshalIndent(result, "", "  ")
+		if err != nil {
+			fmt.Fprintf(stderr, "marshal context response: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, string(body))
+		return 0
 	case "new", "mcp":
 		fmt.Fprintf(stderr, "command %q is not implemented yet\n", args[0])
 		return 1
@@ -118,5 +143,6 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  validate")
 	fmt.Fprintln(w, "  index")
 	fmt.Fprintln(w, "  install-adapters")
+	fmt.Fprintln(w, "  context")
 	fmt.Fprintln(w, "  mcp")
 }
