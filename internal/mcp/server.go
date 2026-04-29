@@ -231,14 +231,24 @@ func (s *Server) callTool(data json.RawMessage) (toolCallResult, error) {
 		if err := decodeArgs(params.Arguments, &req); err != nil {
 			return textToolError("invalid arguments for argos_context: " + err.Error()), nil
 		}
+		if err := requireStringFields(map[string]string{
+			"project": req.Project,
+			"phase":   req.Phase,
+			"task":    req.Task,
+		}, "project", "phase", "task"); err != nil {
+			return textToolError("invalid arguments for argos_context: " + err.Error()), nil
+		}
 		return textResult(s.service.Context(req))
 	case "argos_standards":
-		if s.store == nil {
-			return textToolError("index not available: run argos index first"), nil
-		}
 		var req query.StandardsRequest
 		if err := decodeArgs(params.Arguments, &req); err != nil {
 			return textToolError("invalid arguments for argos_standards: " + err.Error()), nil
+		}
+		if err := requireStringFields(map[string]string{"project": req.Project}, "project"); err != nil {
+			return textToolError("invalid arguments for argos_standards: " + err.Error()), nil
+		}
+		if s.store == nil {
+			return textToolError("index not available: run argos index first"), nil
 		}
 		resp, err := s.service.Standards(req)
 		if err != nil {
@@ -246,9 +256,6 @@ func (s *Server) callTool(data json.RawMessage) (toolCallResult, error) {
 		}
 		return textResult(resp)
 	case "get_knowledge_item":
-		if s.store == nil {
-			return textToolError("index not available: run argos index first"), nil
-		}
 		var req struct {
 			ID string `json:"id"`
 		}
@@ -259,20 +266,26 @@ func (s *Server) callTool(data json.RawMessage) (toolCallResult, error) {
 		if req.ID == "" {
 			return textToolError("invalid arguments for get_knowledge_item: id is required"), nil
 		}
+		if s.store == nil {
+			return textToolError("index not available: run argos index first"), nil
+		}
 		item, err := s.service.GetKnowledgeItem(req.ID)
 		if err != nil {
 			return textToolError("get knowledge item: " + err.Error()), nil
 		}
 		return textResult(item)
 	case "cite_knowledge":
-		if s.store == nil {
-			return textToolError("index not available: run argos index first"), nil
-		}
 		var req struct {
 			IDs []string `json:"ids"`
 		}
 		if err := decodeArgs(params.Arguments, &req); err != nil {
 			return textToolError("invalid arguments for cite_knowledge: " + err.Error()), nil
+		}
+		if len(req.IDs) == 0 {
+			return textToolError("invalid arguments for cite_knowledge: ids is required"), nil
+		}
+		if s.store == nil {
+			return textToolError("index not available: run argos index first"), nil
 		}
 		return textResult(s.service.CiteKnowledge(req.IDs))
 	default:
@@ -288,6 +301,15 @@ func decodeArgs(data json.RawMessage, out any) error {
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(out); err != nil {
 		return err
+	}
+	return nil
+}
+
+func requireStringFields(values map[string]string, names ...string) error {
+	for _, name := range names {
+		if strings.TrimSpace(values[name]) == "" {
+			return fmt.Errorf("%s is required", name)
+		}
 	}
 	return nil
 }
@@ -334,7 +356,7 @@ func tools() []tool {
 				"project":   stringProperty("Project identifier."),
 				"task_type": stringProperty("Type of work being performed."),
 				"files":     stringArrayProperty("Files relevant to the current task."),
-				"limit":     integerProperty("Maximum number of standards to return."),
+				"limit":     integerProperty("Maximum number of standards to return.", 1, 5),
 			}, []string{"project"}),
 		},
 		{
@@ -392,10 +414,12 @@ func stringArrayProperty(description string) map[string]any {
 	}
 }
 
-func integerProperty(description string) map[string]any {
+func integerProperty(description string, minimum, maximum int) map[string]any {
 	return map[string]any{
 		"type":        "integer",
 		"description": description,
+		"minimum":     minimum,
+		"maximum":     maximum,
 	}
 }
 

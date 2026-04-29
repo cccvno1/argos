@@ -78,6 +78,7 @@ func TestToolsListIncludesConcreteSchemasForImplementedTools(t *testing.T) {
 
 	assertToolSchemaHasProperties(t, result.Tools, "argos_standards", []string{"project", "task_type", "files", "limit"})
 	assertToolSchemaRequired(t, result.Tools, "argos_standards", []string{"project"})
+	assertToolSchemaPropertyBounds(t, result.Tools, "argos_standards", "limit", 1, 5)
 
 	assertToolSchemaHasProperties(t, result.Tools, "get_knowledge_item", []string{"id"})
 	assertToolSchemaRequired(t, result.Tools, "get_knowledge_item", []string{"id"})
@@ -175,6 +176,18 @@ func TestToolCallArgosContextInvalidArgsReturnsToolError(t *testing.T) {
 	}
 }
 
+func TestToolCallArgosContextMissingRequiredArgsReturnsToolError(t *testing.T) {
+	var out bytes.Buffer
+	server := NewServer(query.New(nil))
+
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_context","arguments":{"project":"mall-api","phase":"implementation"}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	assertToolErrorContains(t, out.Bytes(), "invalid arguments for argos_context: task is required")
+}
+
 func TestToolCallArgosStandardsReturnsRuleSummaries(t *testing.T) {
 	store := buildMCPTestStore(t)
 	defer store.Close()
@@ -209,6 +222,20 @@ func TestToolCallArgosStandardsWithoutIndexReturnsToolError(t *testing.T) {
 	}
 }
 
+func TestToolCallArgosStandardsMissingRequiredArgsReturnsToolError(t *testing.T) {
+	store := buildMCPTestStore(t)
+	defer store.Close()
+	server := NewServerWithStore(store)
+
+	var out bytes.Buffer
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_standards","arguments":{"files":["internal/auth/session.go"]}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	assertToolErrorContains(t, out.Bytes(), "invalid arguments for argos_standards: project is required")
+}
+
 func TestToolCallGetKnowledgeItemReturnsFullBody(t *testing.T) {
 	store := buildMCPTestStore(t)
 	defer store.Close()
@@ -231,6 +258,20 @@ func TestToolCallGetKnowledgeItemReturnsFullBody(t *testing.T) {
 	if !strings.Contains(text, `Require explicit auth middleware for account endpoints.\nThis is the full rule body.`) {
 		t.Fatalf("expected full rule body: %s", text)
 	}
+}
+
+func TestToolCallGetKnowledgeItemMissingRequiredArgsReturnsToolError(t *testing.T) {
+	store := buildMCPTestStore(t)
+	defer store.Close()
+	server := NewServerWithStore(store)
+
+	var out bytes.Buffer
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_knowledge_item","arguments":{}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	assertToolErrorContains(t, out.Bytes(), "invalid arguments for get_knowledge_item: id is required")
 }
 
 func TestToolCallCiteKnowledgeReturnsCitationsAndMissing(t *testing.T) {
@@ -258,6 +299,34 @@ func TestToolCallCiteKnowledgeReturnsCitationsAndMissing(t *testing.T) {
 	if !strings.Contains(text, `"missing.v1"`) {
 		t.Fatalf("expected missing id: %s", text)
 	}
+}
+
+func TestToolCallCiteKnowledgeMissingRequiredArgsReturnsToolError(t *testing.T) {
+	store := buildMCPTestStore(t)
+	defer store.Close()
+	server := NewServerWithStore(store)
+
+	var out bytes.Buffer
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"cite_knowledge","arguments":{}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	assertToolErrorContains(t, out.Bytes(), "invalid arguments for cite_knowledge: ids is required")
+}
+
+func TestToolCallCiteKnowledgeEmptyIDsReturnsToolError(t *testing.T) {
+	store := buildMCPTestStore(t)
+	defer store.Close()
+	server := NewServerWithStore(store)
+
+	var out bytes.Buffer
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"cite_knowledge","arguments":{"ids":[]}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	assertToolErrorContains(t, out.Bytes(), "invalid arguments for cite_knowledge: ids is required")
 }
 
 func TestToolCallGetKnowledgeItemWithoutIndexReturnsToolError(t *testing.T) {
@@ -573,6 +642,23 @@ func firstContentText(t *testing.T, result map[string]any) string {
 	return text
 }
 
+func assertToolErrorContains(t *testing.T, body []byte, want string) {
+	t.Helper()
+
+	resp := decodeRPCResponse(t, body)
+	if resp.Error != nil {
+		t.Fatalf("expected tool error result, got rpc error: %#v", resp.Error)
+	}
+	result := resultMap(t, resp)
+	if result["isError"] != true {
+		t.Fatalf("expected isError true, got %#v", result["isError"])
+	}
+	text := firstContentText(t, result)
+	if !strings.Contains(text, want) {
+		t.Fatalf("expected tool error text to contain %q, got %q", want, text)
+	}
+}
+
 func assertSuccessID(t *testing.T, resp testResponse, id string) {
 	t.Helper()
 
@@ -677,6 +763,32 @@ func assertToolSchemaRequired(t *testing.T, tools []struct {
 		if !ok || got != want {
 			t.Fatalf("expected %s required fields %v, got %#v", toolName, required, values)
 		}
+	}
+}
+
+func assertToolSchemaPropertyBounds(t *testing.T, tools []struct {
+	Name        string         `json:"name"`
+	InputSchema map[string]any `json:"inputSchema"`
+}, toolName, propertyName string, minimum, maximum int) {
+	t.Helper()
+
+	tool := findTool(tools, toolName)
+	if tool == nil {
+		t.Fatalf("expected %s tool", toolName)
+	}
+	properties, ok := tool.InputSchema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected %s inputSchema properties object, got %#v", toolName, tool.InputSchema["properties"])
+	}
+	property, ok := properties[propertyName].(map[string]any)
+	if !ok {
+		t.Fatalf("expected %s inputSchema property %s object, got %#v", toolName, propertyName, properties[propertyName])
+	}
+	if got := property["minimum"]; got != float64(minimum) {
+		t.Fatalf("expected %s.%s minimum %d, got %#v", toolName, propertyName, minimum, got)
+	}
+	if got := property["maximum"]; got != float64(maximum) {
+		t.Fatalf("expected %s.%s maximum %d, got %#v", toolName, propertyName, maximum, got)
 	}
 }
 
