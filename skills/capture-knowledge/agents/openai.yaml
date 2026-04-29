@@ -1,0 +1,4 @@
+interface:
+  display_name: "Capture Knowledge"
+  short_description: "Capture reusable Argos knowledge"
+  default_prompt: "Use $capture-knowledge to propose and capture this reusable knowledge for Argos."
