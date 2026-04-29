@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 
+	"argos/internal/index"
 	"argos/internal/query"
 )
 
@@ -17,6 +18,7 @@ var errFrameTooLarge = errors.New("mcp frame too large")
 
 type Server struct {
 	service *query.Service
+	store   *index.Store
 }
 
 type request struct {
@@ -78,6 +80,13 @@ type prompt struct {
 
 func NewServer(service *query.Service) *Server {
 	return &Server{service: service}
+}
+
+func NewServerWithStore(store *index.Store) *Server {
+	return &Server{
+		service: query.New(store),
+		store:   store,
+	}
 }
 
 func (s *Server) Serve(stdin io.Reader, stdout io.Writer) error {

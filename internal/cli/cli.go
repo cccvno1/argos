@@ -18,6 +18,10 @@ import (
 )
 
 func Run(args []string, stdout io.Writer, stderr io.Writer) int {
+	return run(args, os.Stdin, stdout, stderr)
+}
+
+func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
 	if len(args) == 0 {
 		printUsage(stderr)
 		return 2
@@ -108,8 +112,14 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) int {
 		fmt.Fprintln(stdout, string(body))
 		return 0
 	case "mcp":
-		server := mcp.NewServer(query.New(nil))
-		if err := server.Serve(os.Stdin, stdout); err != nil {
+		root, err := os.Getwd()
+		if err != nil {
+			fmt.Fprintf(stderr, "get current directory: %v\n", err)
+			return 1
+		}
+		server, closeServer := openMCPServer(root)
+		defer closeServer()
+		if err := server.Serve(stdin, stdout); err != nil {
 			fmt.Fprintf(stderr, "serve mcp: %v\n", err)
 			return 1
 		}
@@ -121,6 +131,16 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "unknown command: %s\n", args[0])
 		printUsage(stderr)
 		return 2
+	}
+}
+
+func openMCPServer(root string) (*mcp.Server, func()) {
+	store, err := index.Open(filepath.Join(root, "argos", "index.db"))
+	if err != nil {
+		return mcp.NewServer(query.New(nil)), func() {}
+	}
+	return mcp.NewServerWithStore(store), func() {
+		_ = store.Close()
 	}
 }
 
