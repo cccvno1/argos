@@ -178,6 +178,85 @@ func TestToolCallArgosStandardsWithoutIndexReturnsToolError(t *testing.T) {
 	}
 }
 
+func TestToolCallGetKnowledgeItemReturnsFullBody(t *testing.T) {
+	store := buildMCPTestStore(t)
+	defer store.Close()
+	server := NewServerWithStore(store)
+
+	var out bytes.Buffer
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_knowledge_item","arguments":{"id":"rule:backend.auth.v1"}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	result := resultMap(t, decodeRPCResponse(t, out.Bytes()))
+	if result["isError"] == true {
+		t.Fatalf("expected success result: %#v", result)
+	}
+	text := firstContentText(t, result)
+	if !strings.Contains(text, `"body"`) {
+		t.Fatalf("expected body in item response: %s", text)
+	}
+	if !strings.Contains(text, `Require explicit auth middleware for account endpoints.\nThis is the full rule body.`) {
+		t.Fatalf("expected full rule body: %s", text)
+	}
+}
+
+func TestToolCallCiteKnowledgeReturnsCitationsAndMissing(t *testing.T) {
+	store := buildMCPTestStore(t)
+	defer store.Close()
+	server := NewServerWithStore(store)
+
+	var out bytes.Buffer
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"cite_knowledge","arguments":{"ids":["rule:backend.auth.v1","missing.v1"]}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	result := resultMap(t, decodeRPCResponse(t, out.Bytes()))
+	if result["isError"] == true {
+		t.Fatalf("expected success result: %#v", result)
+	}
+	text := firstContentText(t, result)
+	if !strings.Contains(text, `"citations"`) || !strings.Contains(text, `"missing"`) {
+		t.Fatalf("expected citations and missing in response: %s", text)
+	}
+	if !strings.Contains(text, `"id": "rule:backend.auth.v1"`) {
+		t.Fatalf("expected auth rule citation: %s", text)
+	}
+	if !strings.Contains(text, `"missing.v1"`) {
+		t.Fatalf("expected missing id: %s", text)
+	}
+}
+
+func TestToolCallGetKnowledgeItemWithoutIndexReturnsToolError(t *testing.T) {
+	server := NewServer(query.New(nil))
+	var out bytes.Buffer
+
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_knowledge_item","arguments":{"id":"rule:backend.auth.v1"}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+	result := resultMap(t, decodeRPCResponse(t, out.Bytes()))
+	if result["isError"] != true {
+		t.Fatalf("expected tool error: %#v", result)
+	}
+}
+
+func TestToolCallCiteKnowledgeWithoutIndexReturnsToolError(t *testing.T) {
+	server := NewServer(query.New(nil))
+	var out bytes.Buffer
+
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"cite_knowledge","arguments":{"ids":["rule:backend.auth.v1"]}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+	result := resultMap(t, decodeRPCResponse(t, out.Bytes()))
+	if result["isError"] != true {
+		t.Fatalf("expected tool error: %#v", result)
+	}
+}
+
 func TestServerHandlesResourcesTemplatesAndPromptsList(t *testing.T) {
 	var out bytes.Buffer
 	server := NewServer(query.New(nil))
@@ -553,7 +632,7 @@ func buildMCPTestStore(t *testing.T) *index.Store {
 		Priority:        "must",
 		AppliesTo:       knowledge.Scope{Files: []string{"internal/auth/**"}},
 		UpdatedAt:       "2026-04-29",
-		Body:            "Require explicit auth middleware for account endpoints.",
+		Body:            "Require explicit auth middleware for account endpoints.\nThis is the full rule body.",
 	}})
 	if err != nil {
 		t.Fatal(err)

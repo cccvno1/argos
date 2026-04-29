@@ -51,6 +51,28 @@ type ResultItem struct {
 	WhyMatched string `json:"why_matched"`
 }
 
+type KnowledgeItemResult struct {
+	ID       string `json:"id"`
+	Title    string `json:"title"`
+	Type     string `json:"type"`
+	Status   string `json:"status"`
+	Priority string `json:"priority"`
+	Path     string `json:"path"`
+	Body     string `json:"body"`
+}
+
+type CitationResult struct {
+	Citations []Citation `json:"citations"`
+	Missing   []string   `json:"missing"`
+}
+
+type Citation struct {
+	ID     string `json:"id"`
+	Title  string `json:"title"`
+	Path   string `json:"path"`
+	Status string `json:"status"`
+}
+
 type RecommendedCall struct {
 	Tool   string `json:"tool"`
 	Reason string `json:"reason"`
@@ -163,6 +185,44 @@ func (s *Service) Standards(req StandardsRequest) (Response, error) {
 	}
 
 	return response, nil
+}
+
+func (s *Service) GetKnowledgeItem(id string) (KnowledgeItemResult, error) {
+	item, err := s.store.GetItem(id)
+	if err != nil {
+		return KnowledgeItemResult{}, err
+	}
+	return knowledgeItemResult(item), nil
+}
+
+func (s *Service) CiteKnowledge(ids []string) CitationResult {
+	var result CitationResult
+	for _, id := range ids {
+		item, err := s.store.GetItem(id)
+		if err != nil {
+			result.Missing = append(result.Missing, id)
+			continue
+		}
+		result.Citations = append(result.Citations, Citation{
+			ID:     item.ID,
+			Title:  item.Title,
+			Path:   item.Path,
+			Status: item.Status,
+		})
+	}
+	return result
+}
+
+func knowledgeItemResult(item knowledge.Item) KnowledgeItemResult {
+	return KnowledgeItemResult{
+		ID:       item.ID,
+		Title:    item.Title,
+		Type:     item.Type,
+		Status:   item.Status,
+		Priority: item.Priority,
+		Path:     item.Path,
+		Body:     item.Body,
+	}
 }
 
 func matchReason(item knowledge.Item, req StandardsRequest) (match, bool, error) {

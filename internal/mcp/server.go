@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 
 	"argos/internal/index"
 	"argos/internal/query"
@@ -244,6 +245,36 @@ func (s *Server) callTool(data json.RawMessage) (toolCallResult, error) {
 			return textToolError("query standards: " + err.Error()), nil
 		}
 		return textResult(resp)
+	case "get_knowledge_item":
+		if s.store == nil {
+			return textToolError("index not available: run argos index first"), nil
+		}
+		var req struct {
+			ID string `json:"id"`
+		}
+		if err := decodeArgs(params.Arguments, &req); err != nil {
+			return textToolError("invalid arguments for get_knowledge_item: " + err.Error()), nil
+		}
+		req.ID = strings.TrimSpace(req.ID)
+		if req.ID == "" {
+			return textToolError("invalid arguments for get_knowledge_item: id is required"), nil
+		}
+		item, err := s.service.GetKnowledgeItem(req.ID)
+		if err != nil {
+			return textToolError("get knowledge item: " + err.Error()), nil
+		}
+		return textResult(item)
+	case "cite_knowledge":
+		if s.store == nil {
+			return textToolError("index not available: run argos index first"), nil
+		}
+		var req struct {
+			IDs []string `json:"ids"`
+		}
+		if err := decodeArgs(params.Arguments, &req); err != nil {
+			return textToolError("invalid arguments for cite_knowledge: " + err.Error()), nil
+		}
+		return textResult(s.service.CiteKnowledge(req.IDs))
 	default:
 		return textToolError("unknown tool: " + params.Name), nil
 	}
