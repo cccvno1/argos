@@ -1,6 +1,8 @@
 package workspace
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -24,11 +26,18 @@ func Init(root string) error {
 	}
 	for rel, body := range files {
 		path := filepath.Join(root, rel)
-		if _, err := os.Stat(path); err == nil {
+		info, err := os.Stat(path)
+		if err == nil {
+			if !info.Mode().IsRegular() {
+				return fmt.Errorf("%s exists but is not a regular file", rel)
+			}
 			continue
 		}
+		if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("stat %s: %w", rel, err)
+		}
 		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
-			return err
+			return fmt.Errorf("write %s: %w", rel, err)
 		}
 	}
 
