@@ -32,7 +32,9 @@ func TestInitCreatesWorkspaceFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read types.yaml: %v", err)
 	}
-	if !strings.Contains(string(typesBytes), "rule") || !strings.Contains(string(typesBytes), "runbook") {
+	if !strings.Contains(string(typesBytes), "rule") ||
+		!strings.Contains(string(typesBytes), "runbook") ||
+		!strings.Contains(string(typesBytes), "package") {
 		t.Fatalf("types.yaml missing default types: %s", string(typesBytes))
 	}
 }

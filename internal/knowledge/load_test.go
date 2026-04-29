@@ -69,6 +69,32 @@ func TestLoadPathReadsSinglePackageDirectory(t *testing.T) {
 	}
 }
 
+func TestValidatePackagePathRejectsUnsafePaths(t *testing.T) {
+	for _, path := range []string{
+		"/knowledge/packages/backend/redis",
+		"knowledge/packages/../items/backend",
+		"knowledge/packages/backend/.hidden",
+		"knowledge/packages/backend/Redis",
+		"knowledge/items/backend/auth.md",
+	} {
+		if err := ValidatePackagePath(path); err == nil {
+			t.Fatalf("expected %s to be rejected", path)
+		}
+	}
+}
+
+func TestValidatePackagePathAcceptsFreeMultiLevelPaths(t *testing.T) {
+	for _, path := range []string{
+		"knowledge/packages/backend/redis/best-practices",
+		"knowledge/.inbox/packages/mall-api/api/public-contract",
+		"knowledge/packages/templates/go/service",
+	} {
+		if err := ValidatePackagePath(path); err != nil {
+			t.Fatalf("expected %s to be accepted: %v", path, err)
+		}
+	}
+}
+
 func assertLoadedID(t *testing.T, items []Item, id string) {
 	t.Helper()
 	for _, item := range items {
