@@ -105,6 +105,7 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) int {
 	case "context":
 		flags := flag.NewFlagSet("context", flag.ContinueOnError)
 		flags.SetOutput(stderr)
+		flags.Bool("json", false, "print JSON output")
 		project := flags.String("project", "", "project id")
 		phase := flags.String("phase", "planning", "workflow phase")
 		task := flags.String("task", "", "task description")

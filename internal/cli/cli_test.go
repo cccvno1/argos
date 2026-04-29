@@ -176,7 +176,7 @@ business_domains: [account]
 func TestRunContextPrintsWorkflowContractJSON(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	code := Run([]string{"context", "--project", "mall-api"}, &stdout, &stderr)
+	code := Run([]string{"context", "--json", "--project", "mall-api"}, &stdout, &stderr)
 
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr: %q", code, stderr.String())
