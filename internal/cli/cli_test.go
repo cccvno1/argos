@@ -239,6 +239,42 @@ func TestRunMCPHandlesToolsList(t *testing.T) {
 	}
 }
 
+func TestRunMCPWritesJSONRPCErrorForMalformedInput(t *testing.T) {
+	read, write, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("create stdin pipe: %v", err)
+	}
+	_, err = write.WriteString(`{"jsonrpc":"2.0","id":1,"method":` + "\n")
+	if err != nil {
+		t.Fatalf("write stdin pipe: %v", err)
+	}
+	if err := write.Close(); err != nil {
+		t.Fatalf("close stdin writer: %v", err)
+	}
+	previousStdin := os.Stdin
+	os.Stdin = read
+	t.Cleanup(func() {
+		os.Stdin = previousStdin
+		if err := read.Close(); err != nil {
+			t.Fatalf("close stdin reader: %v", err)
+		}
+	})
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{"mcp"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr: %q", code, stderr.String())
+	}
+	if stderr.String() != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"code":-32700`) {
+		t.Fatalf("expected JSON-RPC parse error response, got %q", stdout.String())
+	}
+}
+
 func TestRunValidatePrintsValidationErrors(t *testing.T) {
 	root := t.TempDir()
 	writeCLIFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend]
