@@ -217,6 +217,37 @@ Use short-lived access tokens.
 	}
 }
 
+func TestRunIndexIncludesOfficialPackages(t *testing.T) {
+	root := t.TempDir()
+	writeCLIRegistry(t, root)
+	writeCLIFile(t, root, "knowledge/packages/backend/redis/best-practices/KNOWLEDGE.md", validCLIPackage("package:backend.redis.best-practices.v1"))
+	chdir(t, root)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{"index"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stderr=%q", code, stderr.String())
+	}
+
+	store, err := index.Open(filepath.Join(root, "argos", "index.db"))
+	if err != nil {
+		t.Fatalf("Open returned error: %v", err)
+	}
+	defer store.Close()
+
+	item, err := store.GetItem("package:backend.redis.best-practices.v1")
+	if err != nil {
+		t.Fatalf("expected indexed package: %v", err)
+	}
+	if item.Type != "package" {
+		t.Fatalf("expected package type, got %q", item.Type)
+	}
+	if !strings.Contains(item.Body, "## Load On Demand") {
+		t.Fatalf("expected package body, got %q", item.Body)
+	}
+}
+
 func TestRunIndexRejectsInvalidKnowledgeWithoutReplacingExistingIndex(t *testing.T) {
 	root := t.TempDir()
 	writeCLIFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend]

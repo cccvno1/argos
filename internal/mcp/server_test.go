@@ -306,6 +306,27 @@ func TestToolCallGetKnowledgeItemReturnsFullBody(t *testing.T) {
 	}
 }
 
+func TestToolCallGetKnowledgeItemReturnsPackageEntrypoint(t *testing.T) {
+	store := buildMCPTestStore(t)
+	defer store.Close()
+	server := NewServerWithStore(store)
+
+	var out bytes.Buffer
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_knowledge_item","arguments":{"id":"package:backend.redis.best-practices.v1"}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	result := resultMap(t, decodeRPCResponse(t, out.Bytes()))
+	if result["isError"] == true {
+		t.Fatalf("expected success result: %#v", result)
+	}
+	text := firstContentText(t, result)
+	if !strings.Contains(text, `"type": "package"`) || !strings.Contains(text, "## Load On Demand") {
+		t.Fatalf("expected package entrypoint body: %s", text)
+	}
+}
+
 func TestToolCallGetKnowledgeItemMissingRequiredArgsReturnsToolError(t *testing.T) {
 	store := buildMCPTestStore(t)
 	defer store.Close()
@@ -879,20 +900,48 @@ func buildMCPTestStore(t *testing.T) *index.Store {
 	t.Helper()
 
 	dbPath := filepath.Join(t.TempDir(), "argos/index.db")
-	err := index.Rebuild(dbPath, []knowledge.Item{{
-		Path:            "knowledge/items/backend/auth.md",
-		ID:              "rule:backend.auth.v1",
-		Title:           "Auth middleware",
-		Type:            "rule",
-		TechDomains:     []string{"backend"},
-		BusinessDomains: []string{"account"},
-		Projects:        []string{"mall-api"},
-		Status:          "active",
-		Priority:        "must",
-		AppliesTo:       knowledge.Scope{Files: []string{"internal/auth/**"}},
-		UpdatedAt:       "2026-04-29",
-		Body:            "Require explicit auth middleware for account endpoints.\nThis is the full rule body.",
-	}})
+	err := index.Rebuild(dbPath, []knowledge.Item{
+		{
+			Path:            "knowledge/items/backend/auth.md",
+			ID:              "rule:backend.auth.v1",
+			Title:           "Auth middleware",
+			Type:            "rule",
+			TechDomains:     []string{"backend"},
+			BusinessDomains: []string{"account"},
+			Projects:        []string{"mall-api"},
+			Status:          "active",
+			Priority:        "must",
+			AppliesTo:       knowledge.Scope{Files: []string{"internal/auth/**"}},
+			UpdatedAt:       "2026-04-29",
+			Body:            "Require explicit auth middleware for account endpoints.\nThis is the full rule body.",
+		},
+		{
+			Path:        "knowledge/packages/backend/redis/best-practices/KNOWLEDGE.md",
+			ID:          "package:backend.redis.best-practices.v1",
+			Title:       "Redis Best Practices",
+			Type:        "package",
+			TechDomains: []string{"backend"},
+			Status:      "active",
+			Priority:    "should",
+			UpdatedAt:   "2026-04-29",
+			Body: `## Purpose
+
+Document Redis usage.
+
+## When To Use
+
+Use when Redis is involved.
+
+## Start Here
+
+Read this first.
+
+## Load On Demand
+
+- references/key-design.md
+`,
+		},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
