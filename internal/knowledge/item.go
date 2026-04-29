@@ -34,7 +34,7 @@ func ParseItem(path string, data []byte) (Item, error) {
 	const opening = "---\n"
 	const closing = "\n---\n"
 
-	text := string(data)
+	text := strings.ReplaceAll(string(data), "\r\n", "\n")
 	if !strings.HasPrefix(text, opening) {
 		return Item{}, fmt.Errorf("%s: missing frontmatter opening delimiter", path)
 	}
@@ -49,7 +49,9 @@ func ParseItem(path string, data []byte) (Item, error) {
 	body := text[frontmatterEnd+len(closing):]
 
 	var item Item
-	if err := yaml.Unmarshal([]byte(frontmatter), &item); err != nil {
+	decoder := yaml.NewDecoder(strings.NewReader(frontmatter))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(&item); err != nil {
 		return Item{}, fmt.Errorf("%s: parse frontmatter: %w", path, err)
 	}
 	item.Path = path
