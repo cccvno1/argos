@@ -62,7 +62,7 @@ func (s *Service) Standards(req StandardsRequest) (Response, error) {
 		if len(response.Items) >= limit {
 			break
 		}
-		if item.Type != "rule" || item.Status != "active" {
+		if item.Type != "rule" || item.Status == "deprecated" {
 			continue
 		}
 		whyMatched, ok, err := matchReason(item, req)
