@@ -81,6 +81,16 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
+func (s *Store) CheckSchema() error {
+	if err := s.db.Ping(); err != nil {
+		return fmt.Errorf("ping index database: %w", err)
+	}
+	if _, err := s.db.Exec(`SELECT 1 FROM knowledge_items LIMIT 0`); err != nil {
+		return fmt.Errorf("check index schema: %w", err)
+	}
+	return nil
+}
+
 func (s *Store) createSchema(db execer) error {
 	_, err := db.Exec(`
 CREATE TABLE knowledge_items (

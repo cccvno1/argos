@@ -340,6 +340,44 @@ func TestRunMCPStartsWithoutIndexAndDiscoversTools(t *testing.T) {
 	}
 }
 
+func TestOpenMCPServerClassifiesMissingIndexAsUnavailable(t *testing.T) {
+	root := t.TempDir()
+
+	_, closeServer, available := openMCPServer(root)
+	defer closeServer()
+
+	if available {
+		t.Fatal("expected missing index to be unavailable")
+	}
+}
+
+func TestRunMCPWithInvalidIndexFallsBackAndDiscoversTools(t *testing.T) {
+	root := t.TempDir()
+	writeCLIFile(t, root, "argos/index.db", "not a sqlite database")
+	chdir(t, root)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	input := strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}` + "\n")
+
+	code := runWithIO([]string{"mcp"}, input, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d stderr=%s", code, stderr.String())
+	}
+	if stderr.String() != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "argos_context") {
+		t.Fatalf("expected tools discovery, got %s", stdout.String())
+	}
+
+	_, closeServer, available := openMCPServer(root)
+	defer closeServer()
+	if available {
+		t.Fatal("expected invalid index to be unavailable")
+	}
+}
+
 func TestRunMCPWritesJSONRPCErrorForMalformedInput(t *testing.T) {
 	read, write, err := os.Pipe()
 	if err != nil {

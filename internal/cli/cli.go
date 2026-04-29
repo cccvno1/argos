@@ -117,7 +117,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			fmt.Fprintf(stderr, "get current directory: %v\n", err)
 			return 1
 		}
-		server, closeServer := openMCPServer(root)
+		server, closeServer, _ := openMCPServer(root)
 		defer closeServer()
 		if err := server.Serve(stdin, stdout); err != nil {
 			fmt.Fprintf(stderr, "serve mcp: %v\n", err)
@@ -134,14 +134,24 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	}
 }
 
-func openMCPServer(root string) (*mcp.Server, func()) {
-	store, err := index.Open(filepath.Join(root, "argos", "index.db"))
+func openMCPServer(root string) (*mcp.Server, func(), bool) {
+	dbPath := filepath.Join(root, "argos", "index.db")
+	info, err := os.Stat(dbPath)
+	if err != nil || !info.Mode().IsRegular() {
+		return mcp.NewServer(query.New(nil)), func() {}, false
+	}
+
+	store, err := index.Open(dbPath)
 	if err != nil {
-		return mcp.NewServer(query.New(nil)), func() {}
+		return mcp.NewServer(query.New(nil)), func() {}, false
+	}
+	if err := store.CheckSchema(); err != nil {
+		_ = store.Close()
+		return mcp.NewServer(query.New(nil)), func() {}, false
 	}
 	return mcp.NewServerWithStore(store), func() {
 		_ = store.Close()
-	}
+	}, true
 }
 
 func loadAndValidateKnowledge(root string, stderr io.Writer) ([]knowledge.Item, error) {
