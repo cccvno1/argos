@@ -9,19 +9,7 @@ import (
 
 func TestRebuildStoresItems(t *testing.T) {
 	root := t.TempDir()
-	items := []knowledge.Item{{
-		Path:            "knowledge/items/backend/auth.md",
-		ID:              "backend.auth.jwt-refresh-token.v1",
-		Title:           "JWT refresh token handling convention",
-		Type:            "rule",
-		TechDomains:     []string{"backend", "security"},
-		BusinessDomains: []string{"account"},
-		Projects:        []string{"mall-api"},
-		Status:          "active",
-		Priority:        "must",
-		UpdatedAt:       "2026-04-29",
-		Body:            "Use short-lived access tokens.",
-	}}
+	items := []knowledge.Item{testItem("backend.auth.jwt-refresh-token.v1", "JWT refresh token handling convention")}
 
 	dbPath := filepath.Join(root, "argos/index.db")
 	if err := Rebuild(dbPath, items); err != nil {
@@ -40,5 +28,54 @@ func TestRebuildStoresItems(t *testing.T) {
 	}
 	if got.Title != "JWT refresh token handling convention" {
 		t.Fatalf("unexpected title: %s", got.Title)
+	}
+}
+
+func TestFailedRebuildPreservesExistingIndex(t *testing.T) {
+	root := t.TempDir()
+	dbPath := filepath.Join(root, "argos/index.db")
+
+	if err := Rebuild(dbPath, []knowledge.Item{
+		testItem("backend.auth.jwt-refresh-token.v1", "Original title"),
+	}); err != nil {
+		t.Fatalf("initial Rebuild returned error: %v", err)
+	}
+
+	err := Rebuild(dbPath, []knowledge.Item{
+		testItem("backend.auth.jwt-refresh-token.v1", "Replacement title"),
+		testItem("backend.auth.jwt-refresh-token.v1", "Duplicate title"),
+	})
+	if err == nil {
+		t.Fatal("expected duplicate ID rebuild to fail")
+	}
+
+	store, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open returned error: %v", err)
+	}
+	defer store.Close()
+
+	got, err := store.GetItem("backend.auth.jwt-refresh-token.v1")
+	if err != nil {
+		t.Fatalf("GetItem returned error: %v", err)
+	}
+	if got.Title != "Original title" {
+		t.Fatalf("expected preserved original title, got %q", got.Title)
+	}
+}
+
+func testItem(id string, title string) knowledge.Item {
+	return knowledge.Item{
+		Path:            "knowledge/items/backend/auth.md",
+		ID:              id,
+		Title:           title,
+		Type:            "rule",
+		TechDomains:     []string{"backend", "security"},
+		BusinessDomains: []string{"account"},
+		Projects:        []string{"mall-api"},
+		Status:          "active",
+		Priority:        "must",
+		UpdatedAt:       "2026-04-29",
+		Body:            "Use short-lived access tokens.",
 	}
 }

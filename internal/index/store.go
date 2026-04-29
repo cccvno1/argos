@@ -17,27 +17,54 @@ type Store struct {
 	db *sql.DB
 }
 
+type execer interface {
+	Exec(query string, args ...any) (sql.Result, error)
+}
+
 func Rebuild(dbPath string, items []knowledge.Item) error {
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
 		return fmt.Errorf("create index directory: %w", err)
 	}
-	if err := os.Remove(dbPath); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("remove existing index: %w", err)
+
+	tempPath := dbPath + ".tmp"
+	if err := os.Remove(tempPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove stale temporary index: %w", err)
 	}
 
-	store, err := Open(dbPath)
+	store, err := Open(tempPath)
 	if err != nil {
 		return err
 	}
-	defer store.Close()
 
-	if err := store.createSchema(); err != nil {
+	tx, err := store.db.Begin()
+	if err != nil {
+		cleanupTemp(store, tempPath)
+		return fmt.Errorf("begin index rebuild transaction: %w", err)
+	}
+
+	if err := store.createSchema(tx); err != nil {
+		tx.Rollback()
+		cleanupTemp(store, tempPath)
 		return err
 	}
 	for _, item := range items {
-		if err := store.InsertItem(item); err != nil {
+		if err := store.insertItem(tx, item); err != nil {
+			tx.Rollback()
+			cleanupTemp(store, tempPath)
 			return err
 		}
+	}
+	if err := tx.Commit(); err != nil {
+		cleanupTemp(store, tempPath)
+		return fmt.Errorf("commit index rebuild transaction: %w", err)
+	}
+	if err := store.Close(); err != nil {
+		os.Remove(tempPath)
+		return fmt.Errorf("close temporary index: %w", err)
+	}
+	if err := os.Rename(tempPath, dbPath); err != nil {
+		os.Remove(tempPath)
+		return fmt.Errorf("replace index: %w", err)
 	}
 	return nil
 }
@@ -54,8 +81,8 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
-func (s *Store) createSchema() error {
-	_, err := s.db.Exec(`
+func (s *Store) createSchema(db execer) error {
+	_, err := db.Exec(`
 CREATE TABLE knowledge_items (
 	id TEXT PRIMARY KEY,
 	path TEXT NOT NULL,
@@ -78,6 +105,10 @@ CREATE TABLE knowledge_items (
 }
 
 func (s *Store) InsertItem(item knowledge.Item) error {
+	return s.insertItem(s.db, item)
+}
+
+func (s *Store) insertItem(db execer, item knowledge.Item) error {
 	techDomains, err := marshalJSON(item.TechDomains)
 	if err != nil {
 		return fmt.Errorf("%s: serialize tech domains: %w", item.ID, err)
@@ -95,7 +126,7 @@ func (s *Store) InsertItem(item knowledge.Item) error {
 		return fmt.Errorf("%s: serialize scope: %w", item.ID, err)
 	}
 
-	_, err = s.db.Exec(`
+	_, err = db.Exec(`
 INSERT INTO knowledge_items (
 	id, path, title, type, tech_domains, business_domains, projects,
 	status, priority, scope, updated_at, summary, body
@@ -118,6 +149,11 @@ INSERT INTO knowledge_items (
 		return fmt.Errorf("%s: insert knowledge item: %w", item.ID, err)
 	}
 	return nil
+}
+
+func cleanupTemp(store *Store, tempPath string) {
+	store.Close()
+	os.Remove(tempPath)
 }
 
 func (s *Store) GetItem(id string) (knowledge.Item, error) {
