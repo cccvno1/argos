@@ -129,6 +129,56 @@ func TestServerDoesNotRespondToNotifications(t *testing.T) {
 	}
 }
 
+func TestServerInitializeThenNotificationThenLists(t *testing.T) {
+	var out bytes.Buffer
+	server := NewServer(query.New(nil))
+	input := strings.NewReader(
+		`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}` + "\n" +
+			`{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}` + "\n" +
+			`{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}` + "\n" +
+			`{"jsonrpc":"2.0","id":3,"method":"resources/templates/list","params":{}}` + "\n" +
+			`{"jsonrpc":"2.0","id":4,"method":"prompts/list","params":{}}` + "\n")
+
+	err := server.Serve(input, &out)
+	if err != nil {
+		t.Fatalf("Serve returned error: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	if len(lines) != 4 {
+		t.Fatalf("expected four responses, got %d: %q", len(lines), out.String())
+	}
+
+	initResp := decodeResponse(t, []byte(lines[0]))
+	assertSuccessID(t, initResp, "1")
+	var initResult struct {
+		ProtocolVersion string `json:"protocolVersion"`
+		ServerInfo      struct {
+			Name    string `json:"name"`
+			Version string `json:"version"`
+		} `json:"serverInfo"`
+		Capabilities struct {
+			Tools     map[string]any `json:"tools"`
+			Resources map[string]any `json:"resources"`
+			Prompts   map[string]any `json:"prompts"`
+		} `json:"capabilities"`
+	}
+	decodeResult(t, initResp, &initResult)
+	if initResult.ProtocolVersion != "2025-03-26" {
+		t.Fatalf("unexpected protocolVersion: %q", initResult.ProtocolVersion)
+	}
+	if initResult.ServerInfo.Name != "argos" || initResult.ServerInfo.Version != "0.1.0" {
+		t.Fatalf("unexpected serverInfo: %+v", initResult.ServerInfo)
+	}
+	if initResult.Capabilities.Tools == nil || initResult.Capabilities.Resources == nil || initResult.Capabilities.Prompts == nil {
+		t.Fatalf("expected tools, resources, and prompts capabilities: %+v", initResult.Capabilities)
+	}
+
+	assertSuccessID(t, decodeResponse(t, []byte(lines[1])), "2")
+	assertSuccessID(t, decodeResponse(t, []byte(lines[2])), "3")
+	assertSuccessID(t, decodeResponse(t, []byte(lines[3])), "4")
+}
+
 func TestServerWritesJSONRPCErrorForParseError(t *testing.T) {
 	var out bytes.Buffer
 	server := NewServer(query.New(nil))
@@ -200,6 +250,38 @@ func TestServerHandlesOversizedValidFrame(t *testing.T) {
 
 	resp := decodeResponse(t, out.Bytes())
 	assertSuccessID(t, resp, "9")
+}
+
+func TestServerReportsFrameTooLargeThenContinues(t *testing.T) {
+	var out bytes.Buffer
+	server := NewServer(query.New(nil))
+	input := strings.NewReader(strings.Repeat("x", maxFrameSize+1) + "\n" +
+		`{"jsonrpc":"2.0","id":10,"method":"tools/list","params":{}}` + "\n")
+
+	err := server.Serve(input, &out)
+	if err != nil {
+		t.Fatalf("Serve returned error: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected frame error and next response, got %d: %q", len(lines), out.String())
+	}
+	assertError(t, decodeResponse(t, []byte(lines[0])), "null", -32600)
+	assertSuccessID(t, decodeResponse(t, []byte(lines[1])), "10")
+}
+
+func TestServerReportsFrameTooLargeAtEOF(t *testing.T) {
+	var out bytes.Buffer
+	server := NewServer(query.New(nil))
+
+	err := server.Serve(strings.NewReader(strings.Repeat("x", maxFrameSize+1)), &out)
+	if err != nil {
+		t.Fatalf("Serve returned error: %v", err)
+	}
+
+	resp := decodeResponse(t, out.Bytes())
+	assertError(t, resp, "null", -32600)
 }
 
 func decodeResponse(t *testing.T, body []byte) testResponse {

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 
@@ -11,6 +12,8 @@ import (
 )
 
 const maxFrameSize = 1024 * 1024
+
+var errFrameTooLarge = errors.New("mcp frame too large")
 
 type Server struct {
 	service *query.Service
@@ -65,13 +68,15 @@ func NewServer(service *query.Service) *Server {
 func (s *Server) Serve(stdin io.Reader, stdout io.Writer) error {
 	reader := bufio.NewReader(stdin)
 	for {
-		line, err := reader.ReadBytes('\n')
+		line, err := readLineBounded(reader, maxFrameSize)
+		if errors.Is(err, errFrameTooLarge) {
+			if writeErr := writeError(stdout, nil, -32600, "Invalid Request"); writeErr != nil {
+				return writeErr
+			}
+			continue
+		}
 		if len(line) > 0 {
-			if len(line) > maxFrameSize {
-				if writeErr := writeError(stdout, nil, -32600, "Invalid Request"); writeErr != nil {
-					return writeErr
-				}
-			} else if err := s.HandleLine(line, stdout); err != nil {
+			if err := s.HandleLine(line, stdout); err != nil {
 				return err
 			}
 		}
@@ -81,6 +86,40 @@ func (s *Server) Serve(stdin io.Reader, stdout io.Writer) error {
 		if err != nil {
 			return err
 		}
+	}
+}
+
+func readLineBounded(reader *bufio.Reader, maxSize int) ([]byte, error) {
+	var buf bytes.Buffer
+
+	for {
+		fragment, isPrefix, err := reader.ReadLine()
+		if len(fragment) > 0 {
+			if buf.Len()+len(fragment) > maxSize {
+				discardLineRemainder(reader, isPrefix)
+				return nil, errFrameTooLarge
+			}
+			buf.Write(fragment)
+		}
+		if err != nil {
+			if err == io.EOF && buf.Len() > 0 {
+				return buf.Bytes(), nil
+			}
+			return nil, err
+		}
+		if !isPrefix {
+			return buf.Bytes(), nil
+		}
+	}
+}
+
+func discardLineRemainder(reader *bufio.Reader, hasMore bool) {
+	for hasMore {
+		_, isPrefix, err := reader.ReadLine()
+		if err != nil {
+			return
+		}
+		hasMore = isPrefix
 	}
 }
 
@@ -120,6 +159,19 @@ func (s *Server) HandleLine(line []byte, stdout io.Writer) error {
 
 func (s *Server) result(method string) (map[string]any, bool) {
 	switch method {
+	case "initialize":
+		return map[string]any{
+			"protocolVersion": "2025-03-26",
+			"serverInfo": map[string]any{
+				"name":    "argos",
+				"version": "0.1.0",
+			},
+			"capabilities": map[string]any{
+				"tools":     map[string]any{},
+				"resources": map[string]any{},
+				"prompts":   map[string]any{},
+			},
+		}, true
 	case "tools/list":
 		return map[string]any{"tools": tools()}, true
 	case "resources/list":

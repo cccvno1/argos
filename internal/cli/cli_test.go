@@ -139,6 +139,85 @@ Use short-lived access tokens.
 	}
 }
 
+func TestRunIndexRejectsInvalidKnowledgeWithoutReplacingExistingIndex(t *testing.T) {
+	root := t.TempDir()
+	writeCLIFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend]
+business_domains: [account]
+`)
+	writeCLIFile(t, root, "knowledge/projects.yaml", `projects:
+  - id: mall-api
+    name: Mall API
+    path: services/mall-api
+    tech_domains: [backend]
+    business_domains: [account]
+`)
+	writeCLIFile(t, root, "knowledge/types.yaml", "types: [rule]\n")
+	writeCLIFile(t, root, "knowledge/items/backend/auth.md", `---
+id: backend.auth.jwt-refresh-token.v1
+title: JWT refresh token handling convention
+type: rule
+tech_domains: [backend]
+business_domains: [account]
+projects: [mall-api]
+status: active
+priority: must
+updated_at: 2026-04-29
+---
+Use short-lived access tokens.
+`)
+	chdir(t, root)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{"index"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected initial index exit code 0, got %d; stderr: %q", code, stderr.String())
+	}
+
+	writeCLIFile(t, root, "knowledge/items/backend/auth.md", `---
+id: backend.auth.jwt-refresh-token.v1
+title: Invalid replacement
+type: guide
+tech_domains: [backend]
+business_domains: [account]
+projects: [mall-api]
+status: active
+priority: must
+updated_at: 2026-04-29
+---
+This item should not be indexed.
+`)
+	stdout.Reset()
+	stderr.Reset()
+
+	code = Run([]string{"index"}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("expected invalid index exit code 1, got %d", code)
+	}
+	if stdout.String() != "" {
+		t.Fatalf("expected empty stdout, got %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "knowledge/items/backend/auth.md: unknown type: guide") {
+		t.Fatalf("expected validation error in stderr, got %q", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "validation failed with 1 error(s)") {
+		t.Fatalf("expected validation summary in stderr, got %q", stderr.String())
+	}
+
+	store, err := index.Open(filepath.Join(root, "argos", "index.db"))
+	if err != nil {
+		t.Fatalf("Open returned error: %v", err)
+	}
+	defer store.Close()
+	got, err := store.GetItem("backend.auth.jwt-refresh-token.v1")
+	if err != nil {
+		t.Fatalf("GetItem returned error: %v", err)
+	}
+	if got.Title != "JWT refresh token handling convention" {
+		t.Fatalf("expected existing index to remain unchanged, got title %q", got.Title)
+	}
+}
+
 func TestRunInstallAdaptersGeneratesProjectFiles(t *testing.T) {
 	root := t.TempDir()
 	writeCLIFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend]

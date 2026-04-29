@@ -66,6 +66,27 @@ func ValidateItem(item Item, reg registry.Registry) []error {
 	return errs
 }
 
+func ValidateItems(items []Item, reg registry.Registry) []error {
+	var errs []error
+
+	seen := make(map[string]string, len(items))
+	for _, item := range items {
+		errs = append(errs, ValidateItem(item, reg)...)
+
+		id := strings.TrimSpace(item.ID)
+		if id == "" {
+			continue
+		}
+		if firstPath, ok := seen[id]; ok {
+			errs = append(errs, fmt.Errorf("duplicate id %s: %s and %s", id, firstPath, item.Path))
+			continue
+		}
+		seen[id] = item.Path
+	}
+
+	return errs
+}
+
 func contains(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {

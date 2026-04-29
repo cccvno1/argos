@@ -42,26 +42,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "get current directory: %v\n", err)
 			return 1
 		}
-		reg, err := registry.Load(root)
+		items, err := loadAndValidateKnowledge(root, stderr)
 		if err != nil {
-			fmt.Fprintf(stderr, "load registry: %v\n", err)
-			return 1
-		}
-		items, err := knowledge.LoadItems(root)
-		if err != nil {
-			fmt.Fprintf(stderr, "load knowledge items: %v\n", err)
-			return 1
-		}
-
-		errorCount := 0
-		for _, item := range items {
-			for _, err := range knowledge.ValidateItem(item, reg) {
-				fmt.Fprintln(stderr, err)
-				errorCount++
-			}
-		}
-		if errorCount > 0 {
-			fmt.Fprintf(stderr, "validation failed with %d error(s)\n", errorCount)
 			return 1
 		}
 
@@ -73,9 +55,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "get current directory: %v\n", err)
 			return 1
 		}
-		items, err := knowledge.LoadItems(root)
+		items, err := loadAndValidateKnowledge(root, stderr)
 		if err != nil {
-			fmt.Fprintf(stderr, "load knowledge items: %v\n", err)
 			return 1
 		}
 		if err := index.Rebuild(filepath.Join(root, "argos", "index.db"), items); err != nil {
@@ -141,6 +122,30 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) int {
 		printUsage(stderr)
 		return 2
 	}
+}
+
+func loadAndValidateKnowledge(root string, stderr io.Writer) ([]knowledge.Item, error) {
+	reg, err := registry.Load(root)
+	if err != nil {
+		fmt.Fprintf(stderr, "load registry: %v\n", err)
+		return nil, err
+	}
+	items, err := knowledge.LoadItems(root)
+	if err != nil {
+		fmt.Fprintf(stderr, "load knowledge items: %v\n", err)
+		return nil, err
+	}
+
+	errs := knowledge.ValidateItems(items, reg)
+	for _, err := range errs {
+		fmt.Fprintln(stderr, err)
+	}
+	if len(errs) > 0 {
+		err := fmt.Errorf("validation failed with %d error(s)", len(errs))
+		fmt.Fprintln(stderr, err)
+		return nil, err
+	}
+	return items, nil
 }
 
 func printUsage(w io.Writer) {
