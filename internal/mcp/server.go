@@ -320,12 +320,12 @@ func tools() []tool {
 				"phase":   stringProperty("Workflow phase, such as implementation, review, debugging, or deployment."),
 				"task":    stringProperty("Current task description."),
 				"files":   stringArrayProperty("Files relevant to the current task."),
-			}),
+			}, []string{"project", "phase", "task"}),
 		},
 		{
 			Name:        "argos_requirements",
 			Description: "Find relevant requirements for a task. Not implemented in this MVP phase.",
-			InputSchema: objectSchema(map[string]any{}),
+			InputSchema: objectSchema(map[string]any{}, nil),
 		},
 		{
 			Name:        "argos_standards",
@@ -335,40 +335,44 @@ func tools() []tool {
 				"task_type": stringProperty("Type of work being performed."),
 				"files":     stringArrayProperty("Files relevant to the current task."),
 				"limit":     integerProperty("Maximum number of standards to return."),
-			}),
+			}, []string{"project"}),
 		},
 		{
 			Name:        "argos_risks",
 			Description: "Find relevant risks, lessons, and incident history. Not implemented in this MVP phase.",
-			InputSchema: objectSchema(map[string]any{}),
+			InputSchema: objectSchema(map[string]any{}, nil),
 		},
 		{
 			Name:        "argos_operations",
 			Description: "Find operational runbooks and deployment guidance. Not implemented in this MVP phase.",
-			InputSchema: objectSchema(map[string]any{}),
+			InputSchema: objectSchema(map[string]any{}, nil),
 		},
 		{
 			Name:        "get_knowledge_item",
 			Description: "Fetch a knowledge item by id.",
 			InputSchema: objectSchema(map[string]any{
 				"id": stringProperty("Knowledge item id."),
-			}),
+			}, []string{"id"}),
 		},
 		{
 			Name:        "cite_knowledge",
 			Description: "Create citations for knowledge items.",
 			InputSchema: objectSchema(map[string]any{
 				"ids": stringArrayProperty("Knowledge item ids to cite."),
-			}),
+			}, []string{"ids"}),
 		},
 	}
 }
 
-func objectSchema(properties map[string]any) map[string]any {
-	return map[string]any{
+func objectSchema(properties map[string]any, required []string) map[string]any {
+	schema := map[string]any{
 		"type":       "object",
 		"properties": properties,
 	}
+	if len(required) > 0 {
+		schema["required"] = required
+	}
+	return schema
 }
 
 func stringProperty(description string) map[string]any {

@@ -73,10 +73,17 @@ func TestToolsListIncludesConcreteSchemasForImplementedTools(t *testing.T) {
 	}
 	decodeResult(t, resp, &result)
 
-	assertToolSchemaHasProperty(t, result.Tools, "argos_context", "project")
-	assertToolSchemaHasProperty(t, result.Tools, "argos_standards", "files")
-	assertToolSchemaHasProperty(t, result.Tools, "get_knowledge_item", "id")
-	assertToolSchemaHasProperty(t, result.Tools, "cite_knowledge", "ids")
+	assertToolSchemaHasProperties(t, result.Tools, "argos_context", []string{"project", "phase", "task", "files"})
+	assertToolSchemaRequired(t, result.Tools, "argos_context", []string{"project", "phase", "task"})
+
+	assertToolSchemaHasProperties(t, result.Tools, "argos_standards", []string{"project", "task_type", "files", "limit"})
+	assertToolSchemaRequired(t, result.Tools, "argos_standards", []string{"project"})
+
+	assertToolSchemaHasProperties(t, result.Tools, "get_knowledge_item", []string{"id"})
+	assertToolSchemaRequired(t, result.Tools, "get_knowledge_item", []string{"id"})
+
+	assertToolSchemaHasProperties(t, result.Tools, "cite_knowledge", []string{"ids"})
+	assertToolSchemaRequired(t, result.Tools, "cite_knowledge", []string{"ids"})
 }
 
 func TestToolCallUnknownToolReturnsToolError(t *testing.T) {
@@ -634,6 +641,42 @@ func assertToolSchemaHasProperty(t *testing.T, tools []struct {
 	}
 	if _, ok := properties[propertyName]; !ok {
 		t.Fatalf("expected %s inputSchema to include property %s, got %#v", toolName, propertyName, properties)
+	}
+}
+
+func assertToolSchemaHasProperties(t *testing.T, tools []struct {
+	Name        string         `json:"name"`
+	InputSchema map[string]any `json:"inputSchema"`
+}, toolName string, propertyNames []string) {
+	t.Helper()
+
+	for _, propertyName := range propertyNames {
+		assertToolSchemaHasProperty(t, tools, toolName, propertyName)
+	}
+}
+
+func assertToolSchemaRequired(t *testing.T, tools []struct {
+	Name        string         `json:"name"`
+	InputSchema map[string]any `json:"inputSchema"`
+}, toolName string, required []string) {
+	t.Helper()
+
+	tool := findTool(tools, toolName)
+	if tool == nil {
+		t.Fatalf("expected %s tool", toolName)
+	}
+	values, ok := tool.InputSchema["required"].([]any)
+	if !ok {
+		t.Fatalf("expected %s inputSchema required array, got %#v", toolName, tool.InputSchema["required"])
+	}
+	if len(values) != len(required) {
+		t.Fatalf("expected %s required fields %v, got %#v", toolName, required, values)
+	}
+	for i, want := range required {
+		got, ok := values[i].(string)
+		if !ok || got != want {
+			t.Fatalf("expected %s required fields %v, got %#v", toolName, required, values)
+		}
 	}
 }
 
