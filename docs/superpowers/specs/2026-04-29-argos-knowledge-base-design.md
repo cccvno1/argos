@@ -27,6 +27,23 @@ The core product must work without any one skill system. Skills or workflow inte
 - Workflow-level contracts let higher-level agent processes use Argos without understanding its internal schema.
 - AI-generated or imported knowledge must enter an inbox and be reviewed before becoming official knowledge.
 
+## Technology Direction
+
+The primary implementation stack is Go.
+
+The MVP should use Go for the CLI, validation, indexing, adapter generation, and MCP server. This keeps distribution simple for local-first use: a single binary can initialize a knowledge repository, rebuild the local index, generate static AI adapter files, and run the MCP server.
+
+Recommended Go-oriented choices:
+
+- CLI: standard `flag` package for the first version, or a small command router in `cmd/argos`.
+- YAML/frontmatter: `gopkg.in/yaml.v3`.
+- Markdown parsing: `github.com/yuin/goldmark` if structured Markdown parsing is needed; simple body storage can start without full AST parsing.
+- Glob matching: `github.com/bmatcuk/doublestar/v4` for `**` file scopes.
+- SQLite: `modernc.org/sqlite` to avoid CGO by default.
+- MCP: a Go MCP SDK if mature enough at implementation time; otherwise a minimal stdio JSON-RPC server behind a small internal interface.
+
+The first version should avoid a web UI and avoid requiring external services.
+
 ## Knowledge Model
 
 The smallest unit is a knowledge item. Each item is a Markdown file with YAML frontmatter.
