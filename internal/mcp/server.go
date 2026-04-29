@@ -231,6 +231,19 @@ func (s *Server) callTool(data json.RawMessage) (toolCallResult, error) {
 			return textToolError("invalid arguments for argos_context: " + err.Error()), nil
 		}
 		return textResult(s.service.Context(req))
+	case "argos_standards":
+		if s.store == nil {
+			return textToolError("index not available: run argos index first"), nil
+		}
+		var req query.StandardsRequest
+		if err := decodeArgs(params.Arguments, &req); err != nil {
+			return textToolError("invalid arguments for argos_standards: " + err.Error()), nil
+		}
+		resp, err := s.service.Standards(req)
+		if err != nil {
+			return textToolError("query standards: " + err.Error()), nil
+		}
+		return textResult(resp)
 	default:
 		return textToolError("unknown tool: " + params.Name), nil
 	}

@@ -3,9 +3,12 @@ package mcp
 import (
 	"bytes"
 	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"argos/internal/index"
+	"argos/internal/knowledge"
 	"argos/internal/query"
 )
 
@@ -138,6 +141,40 @@ func TestToolCallArgosContextInvalidArgsReturnsToolError(t *testing.T) {
 	text := firstContentText(t, result)
 	if !strings.Contains(text, "invalid arguments for argos_context") {
 		t.Fatalf("unexpected tool error text: %s", text)
+	}
+}
+
+func TestToolCallArgosStandardsReturnsRuleSummaries(t *testing.T) {
+	store := buildMCPTestStore(t)
+	defer store.Close()
+	server := NewServerWithStore(store)
+
+	var out bytes.Buffer
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_standards","arguments":{"project":"mall-api","files":["internal/auth/session.go"],"limit":5}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	text := firstContentText(t, resultMap(t, decodeRPCResponse(t, out.Bytes())))
+	if !strings.Contains(text, `"id": "rule:backend.auth.v1"`) {
+		t.Fatalf("expected auth rule summary: %s", text)
+	}
+	if strings.Contains(text, "Require explicit auth middleware for account endpoints.") && strings.Contains(text, "body") {
+		t.Fatalf("standards should not return full body: %s", text)
+	}
+}
+
+func TestToolCallArgosStandardsWithoutIndexReturnsToolError(t *testing.T) {
+	server := NewServer(query.New(nil))
+	var out bytes.Buffer
+
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_standards","arguments":{"project":"mall-api"}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+	result := resultMap(t, decodeRPCResponse(t, out.Bytes()))
+	if result["isError"] != true {
+		t.Fatalf("expected tool error: %#v", result)
 	}
 }
 
@@ -498,4 +535,32 @@ func containsPrompt(prompts []struct {
 		}
 	}
 	return false
+}
+
+func buildMCPTestStore(t *testing.T) *index.Store {
+	t.Helper()
+
+	dbPath := filepath.Join(t.TempDir(), "argos/index.db")
+	err := index.Rebuild(dbPath, []knowledge.Item{{
+		Path:            "knowledge/items/backend/auth.md",
+		ID:              "rule:backend.auth.v1",
+		Title:           "Auth middleware",
+		Type:            "rule",
+		TechDomains:     []string{"backend"},
+		BusinessDomains: []string{"account"},
+		Projects:        []string{"mall-api"},
+		Status:          "active",
+		Priority:        "must",
+		AppliesTo:       knowledge.Scope{Files: []string{"internal/auth/**"}},
+		UpdatedAt:       "2026-04-29",
+		Body:            "Require explicit auth middleware for account endpoints.",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := index.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return store
 }
