@@ -2,6 +2,8 @@ package cli
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -28,4 +30,116 @@ func TestRunRejectsUnknownCommand(t *testing.T) {
 	if !strings.Contains(out.String(), "unknown command: unknown") {
 		t.Fatalf("expected unknown command error, got %q", out.String())
 	}
+}
+
+func TestRunValidateReportsValidKnowledgeItems(t *testing.T) {
+	root := t.TempDir()
+	writeCLIFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend]
+business_domains: [account]
+`)
+	writeCLIFile(t, root, "knowledge/projects.yaml", `projects:
+  - id: mall-api
+    name: Mall API
+    path: services/mall-api
+    tech_domains: [backend]
+    business_domains: [account]
+`)
+	writeCLIFile(t, root, "knowledge/types.yaml", "types: [rule]\n")
+	writeCLIFile(t, root, "knowledge/items/backend/auth.md", `---
+id: backend.auth.jwt-refresh-token.v1
+title: JWT refresh token handling convention
+type: rule
+tech_domains: [backend]
+business_domains: [account]
+projects: [mall-api]
+status: active
+priority: must
+updated_at: 2026-04-29
+---
+Use short-lived access tokens.
+`)
+	chdir(t, root)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{"validate"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr: %q", code, stderr.String())
+	}
+	if strings.TrimSpace(stdout.String()) != "validated 1 knowledge item(s)" {
+		t.Fatalf("unexpected stdout: %q", stdout.String())
+	}
+	if stderr.String() != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+}
+
+func TestRunValidatePrintsValidationErrors(t *testing.T) {
+	root := t.TempDir()
+	writeCLIFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend]
+business_domains: [account]
+`)
+	writeCLIFile(t, root, "knowledge/projects.yaml", "projects: []\n")
+	writeCLIFile(t, root, "knowledge/types.yaml", "types: [rule]\n")
+	writeCLIFile(t, root, "knowledge/items/backend/auth.md", `---
+id: backend.auth.jwt-refresh-token.v1
+title: JWT refresh token handling convention
+type: guide
+tech_domains: [backend]
+business_domains: [account]
+projects: []
+status: active
+priority: must
+updated_at: 2026-04-29
+---
+Use short-lived access tokens.
+`)
+	chdir(t, root)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{"validate"}, &stdout, &stderr)
+
+	if code != 1 {
+		t.Fatalf("expected exit code 1, got %d", code)
+	}
+	if stdout.String() != "" {
+		t.Fatalf("expected empty stdout, got %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "knowledge/items/backend/auth.md: unknown type: guide") {
+		t.Fatalf("expected validation error in stderr, got %q", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "validation failed with 1 error(s)") {
+		t.Fatalf("expected validation summary in stderr, got %q", stderr.String())
+	}
+}
+
+func writeCLIFile(t *testing.T, root, rel, body string) {
+	t.Helper()
+
+	path := filepath.Join(root, rel)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", filepath.Dir(path), err)
+	}
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
+func chdir(t *testing.T, dir string) {
+	t.Helper()
+
+	previous, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get working directory: %v", err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("change working directory to %s: %v", dir, err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(previous); err != nil {
+			t.Fatalf("restore working directory to %s: %v", previous, err)
+		}
+	})
 }

@@ -5,6 +5,8 @@ import (
 	"io"
 	"os"
 
+	"argos/internal/knowledge"
+	"argos/internal/registry"
 	"argos/internal/workspace"
 )
 
@@ -27,7 +29,38 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) int {
 		}
 		fmt.Fprintln(stdout, "initialized Argos workspace")
 		return 0
-	case "new", "validate", "index", "install-adapters", "mcp":
+	case "validate":
+		root, err := os.Getwd()
+		if err != nil {
+			fmt.Fprintf(stderr, "get current directory: %v\n", err)
+			return 1
+		}
+		reg, err := registry.Load(root)
+		if err != nil {
+			fmt.Fprintf(stderr, "load registry: %v\n", err)
+			return 1
+		}
+		items, err := knowledge.LoadItems(root)
+		if err != nil {
+			fmt.Fprintf(stderr, "load knowledge items: %v\n", err)
+			return 1
+		}
+
+		errorCount := 0
+		for _, item := range items {
+			for _, err := range knowledge.ValidateItem(item, reg) {
+				fmt.Fprintln(stderr, err)
+				errorCount++
+			}
+		}
+		if errorCount > 0 {
+			fmt.Fprintf(stderr, "validation failed with %d error(s)\n", errorCount)
+			return 1
+		}
+
+		fmt.Fprintf(stdout, "validated %d knowledge item(s)\n", len(items))
+		return 0
+	case "new", "index", "install-adapters", "mcp":
 		fmt.Fprintf(stderr, "command %q is not implemented yet\n", args[0])
 		return 1
 	default:
