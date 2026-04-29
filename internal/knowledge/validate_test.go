@@ -32,7 +32,37 @@ func TestValidateItemRejectsUnknownDomain(t *testing.T) {
 	if len(errs) == 0 {
 		t.Fatal("expected validation error")
 	}
-	if !strings.Contains(errs[0].Error(), "unknown tech domain: unknown") {
+	if !strings.Contains(errs[0].Error(), "knowledge/items/x.md: unknown tech domain: unknown") {
+		t.Fatalf("unexpected error: %v", errs[0])
+	}
+}
+
+func TestValidateItemRejectsWhitespaceRequiredField(t *testing.T) {
+	item := Item{
+		Path:            "knowledge/items/x.md",
+		ID:              "   ",
+		Title:           "JWT refresh token handling convention",
+		Type:            "rule",
+		TechDomains:     []string{"backend"},
+		BusinessDomains: []string{"account"},
+		Projects:        []string{"mall-api"},
+		Status:          "active",
+		Priority:        "must",
+		UpdatedAt:       "2026-04-29",
+		Body:            "Use short-lived access tokens.",
+	}
+	reg := registry.Registry{
+		TechDomains:     []string{"backend"},
+		BusinessDomains: []string{"account"},
+		Projects:        []registry.Project{{ID: "mall-api"}},
+		Types:           []string{"rule"},
+	}
+
+	errs := ValidateItem(item, reg)
+	if len(errs) == 0 {
+		t.Fatal("expected validation error")
+	}
+	if errs[0].Error() != "knowledge/items/x.md: missing id" {
 		t.Fatalf("unexpected error: %v", errs[0])
 	}
 }
