@@ -145,6 +145,64 @@ func TestStandardsRanksResultsByPriorityBeforeApplyingLimit(t *testing.T) {
 	}
 }
 
+func TestStandardsPrefersFileScopedMatchBeforeApplyingLimit(t *testing.T) {
+	root := t.TempDir()
+	dbPath := filepath.Join(root, "argos/index.db")
+	err := index.Rebuild(dbPath, []knowledge.Item{
+		{
+			Path:            "knowledge/items/backend/generic.md",
+			ID:              "rule:priority.generic.v1",
+			Title:           "Generic must rule",
+			Type:            "rule",
+			TechDomains:     []string{"backend"},
+			BusinessDomains: []string{"account"},
+			Projects:        []string{"mall-api"},
+			Status:          "active",
+			Priority:        "must",
+			UpdatedAt:       "2026-04-29",
+			Body:            "Generic guidance applies.",
+		},
+		{
+			Path:            "knowledge/items/backend/specific.md",
+			ID:              "rule:priority.specific.v1",
+			Title:           "Specific must rule",
+			Type:            "rule",
+			TechDomains:     []string{"backend"},
+			BusinessDomains: []string{"account"},
+			Projects:        []string{"mall-api"},
+			Status:          "active",
+			Priority:        "must",
+			AppliesTo:       knowledge.Scope{Files: []string{"internal/auth/**"}},
+			UpdatedAt:       "2026-04-29",
+			Body:            "File-specific guidance applies.",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := index.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	service := New(store)
+	result, err := service.Standards(StandardsRequest{
+		Project: "mall-api",
+		Files:   []string{"internal/auth/session.go"},
+		Limit:   1,
+	})
+	if err != nil {
+		t.Fatalf("Standards returned error: %v", err)
+	}
+	if len(result.Items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(result.Items))
+	}
+	if result.Items[0].ID != "rule:priority.specific.v1" {
+		t.Fatalf("expected file-scoped rule, got %q", result.Items[0].ID)
+	}
+}
+
 func ruleWithPriority(id string, priority string) knowledge.Item {
 	return knowledge.Item{
 		Path:            "knowledge/items/backend/priority.md",

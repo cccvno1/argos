@@ -2,6 +2,7 @@ package query
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
@@ -42,6 +43,16 @@ type RecommendedCall struct {
 	Reason string `json:"reason"`
 }
 
+type match struct {
+	whyMatched string
+	fileScoped bool
+}
+
+type candidate struct {
+	item  knowledge.Item
+	match match
+}
+
 func New(store *index.Store) *Service {
 	return &Service{store: store}
 }
@@ -57,21 +68,40 @@ func (s *Service) Standards(req StandardsRequest) (Response, error) {
 		limit = 5
 	}
 
-	var response Response
+	var candidates []candidate
 	for _, item := range items {
-		if len(response.Items) >= limit {
-			break
-		}
 		if item.Type != "rule" || item.Status == "deprecated" {
 			continue
 		}
-		whyMatched, ok, err := matchReason(item, req)
+		match, ok, err := matchReason(item, req)
 		if err != nil {
 			return Response{}, err
 		}
 		if !ok {
 			continue
 		}
+		candidates = append(candidates, candidate{item: item, match: match})
+	}
+
+	sort.Slice(candidates, func(i, j int) bool {
+		left := candidates[i]
+		right := candidates[j]
+
+		if priorityRank(left.item.Priority) != priorityRank(right.item.Priority) {
+			return priorityRank(left.item.Priority) < priorityRank(right.item.Priority)
+		}
+		if left.match.fileScoped != right.match.fileScoped {
+			return left.match.fileScoped
+		}
+		return left.item.ID < right.item.ID
+	})
+
+	var response Response
+	for _, candidate := range candidates {
+		if len(response.Items) >= limit {
+			break
+		}
+		item := candidate.item
 		response.Items = append(response.Items, ResultItem{
 			ID:         item.ID,
 			Type:       item.Type,
@@ -79,35 +109,51 @@ func (s *Service) Standards(req StandardsRequest) (Response, error) {
 			Summary:    firstSentence(item.Body),
 			Priority:   item.Priority,
 			Status:     item.Status,
-			WhyMatched: whyMatched,
+			WhyMatched: candidate.match.whyMatched,
 		})
 	}
 
 	return response, nil
 }
 
-func matchReason(item knowledge.Item, req StandardsRequest) (string, bool, error) {
+func matchReason(item knowledge.Item, req StandardsRequest) (match, bool, error) {
 	if !contains(item.Projects, req.Project) {
-		return "", false, nil
+		return match{}, false, nil
 	}
 
 	if len(item.AppliesTo.Files) == 0 {
-		return fmt.Sprintf("project %s matched", req.Project), true, nil
+		return match{whyMatched: fmt.Sprintf("project %s matched", req.Project)}, true, nil
 	}
 
 	for _, file := range req.Files {
 		for _, pattern := range item.AppliesTo.Files {
 			matched, err := doublestar.PathMatch(pattern, file)
 			if err != nil {
-				return "", false, fmt.Errorf("%s: match file scope %q: %w", item.ID, pattern, err)
+				return match{}, false, fmt.Errorf("%s: match file scope %q: %w", item.ID, pattern, err)
 			}
 			if matched {
-				return fmt.Sprintf("project %s and file %s matched %s", req.Project, file, pattern), true, nil
+				return match{
+					whyMatched: fmt.Sprintf("project %s and file %s matched %s", req.Project, file, pattern),
+					fileScoped: true,
+				}, true, nil
 			}
 		}
 	}
 
-	return "", false, nil
+	return match{}, false, nil
+}
+
+func priorityRank(priority string) int {
+	switch priority {
+	case "must":
+		return 0
+	case "should":
+		return 1
+	case "may":
+		return 2
+	default:
+		return 3
+	}
 }
 
 func firstSentence(body string) string {
