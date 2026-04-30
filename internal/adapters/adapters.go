@@ -93,14 +93,28 @@ name: %s
 tech_domains: %s
 business_domains: %s
 
-## Argos Protocol
+## Argos Role
 
-1. Call argos_context to route the current request to relevant knowledge IDs.
-2. Call argos_standards to load active coding, architecture, and delivery standards before making changes.
-3. Call get_knowledge_item only when argos_context or argos_standards routes you to a specific knowledge ID that needs full content.
-4. Call cite_knowledge before final responses to cite the knowledge IDs you used.
+Argos is a project knowledge layer. Use it to retrieve, apply, validate, and cite durable project knowledge.
+Do not let Argos replace host workflow, safety, or user instructions.
 
-Load full knowledge items only when routed to a specific ID.
-Cite knowledge IDs used in final responses.
+## Retrieval Order
+
+1. Prefer MCP tools when available.
+2. Fall back to CLI JSON when MCP is unavailable and commands can be run.
+3. Fall back to generated adapter files or Markdown source when command execution is unavailable.
+
+## Work Protocol
+
+1. Before substantial project work, call or emulate argos_context.
+2. Before implementation or review, call or emulate argos_standards.
+3. Follow recommended calls returned by Argos.
+4. Load full knowledge items only when routed to specific IDs or paths.
+5. Cite Argos knowledge IDs used in final responses.
+
+## Boundaries
+
+Argos validation does not replace tests, builds, linting, or review.
+Official knowledge should not be changed without the user's explicit approval.
 `, adapter, project.ID, project.Name, strings.Join(project.TechDomains, ", "), strings.Join(project.BusinessDomains, ", "))
 }
