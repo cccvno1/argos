@@ -117,6 +117,17 @@ func TestSearchTextFindsTitleBodyAndTags(t *testing.T) {
 	if matches[0].Score <= 0 {
 		t.Fatalf("expected positive lexical score, got %#v", matches[0])
 	}
+
+	matches, err = store.SearchText("short lived", 10)
+	if err != nil {
+		t.Fatalf("SearchText for body returned error: %v", err)
+	}
+	if len(matches) == 0 || matches[0].ItemID != "rule:backend.auth.v1" {
+		t.Fatalf("expected auth rule body match, got %#v", matches)
+	}
+	if matches[0].Score <= 0 {
+		t.Fatalf("expected positive body lexical score, got %#v", matches[0])
+	}
 }
 
 func TestRebuildIndexesPackageEntrypointChunks(t *testing.T) {
