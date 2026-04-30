@@ -341,23 +341,36 @@ func TestToolCallArgosDiscoverNoneReturnsCoverageGaps(t *testing.T) {
 		t.Fatalf("expected success result: %#v", result)
 	}
 	text := firstContentText(t, result)
-	for _, fragment := range []string{
-		`"coverage"`,
-		`"status": "none"`,
-		`"coverage_gaps"`,
-		`"source": "unmatched_intent"`,
-		`"argos_backed": false`,
-	} {
-		if !strings.Contains(text, fragment) {
-			t.Fatalf("expected %q in discover response: %s", fragment, text)
+
+	var decoded query.DiscoveryResponse
+	if err := json.Unmarshal([]byte(text), &decoded); err != nil {
+		t.Fatalf("decode discover response: %v; text=%s", err, text)
+	}
+	if decoded.Coverage.Status != "none" {
+		t.Fatalf("expected none coverage, got %q", decoded.Coverage.Status)
+	}
+	if len(decoded.CoverageGaps) == 0 {
+		t.Fatalf("expected coverage gaps, got none: %#v", decoded)
+	}
+	hasUnmatchedIntent := false
+	for _, gap := range decoded.CoverageGaps {
+		if gap.Source == "unmatched_intent" {
+			hasUnmatchedIntent = true
+		}
+		if gap.ArgosBacked {
+			t.Fatalf("expected coverage gap to be argos_backed=false, got %#v", gap)
 		}
 	}
-	legacyKey := `"gap_` + `candidates"`
-	if strings.Contains(text, legacyKey) {
-		t.Fatalf("discover should not return legacy gap candidates: %s", text)
+	if !hasUnmatchedIntent {
+		t.Fatalf("expected unmatched_intent coverage gap, got %#v", decoded.CoverageGaps)
 	}
-	if strings.Contains(text, `"body"`) {
-		t.Fatalf("discover should not return full body: %s", text)
+	for _, item := range decoded.Items {
+		if item.Body != "" {
+			t.Fatalf("discover should not return full body: %#v", item)
+		}
+	}
+	if strings.Contains(text, "gap_candidates") {
+		t.Fatalf("discover should not return legacy gap candidates: %s", text)
 	}
 }
 
