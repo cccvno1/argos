@@ -130,6 +130,69 @@ func TestSearchTextFindsTitleBodyAndTags(t *testing.T) {
 	}
 }
 
+func TestSearchTextReturnsNoMatchesForSymbolsOnlyQuery(t *testing.T) {
+	root := t.TempDir()
+	item := testItem("rule:backend.auth.v1", "Refresh token auth rule")
+
+	dbPath := filepath.Join(root, "argos/index.db")
+	if err := Rebuild(dbPath, []knowledge.Item{item}); err != nil {
+		t.Fatalf("Rebuild returned error: %v", err)
+	}
+	store, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open returned error: %v", err)
+	}
+	defer store.Close()
+
+	matches, err := store.SearchText("!!! ()", 10)
+	if err != nil {
+		t.Fatalf("SearchText returned error: %v", err)
+	}
+	if len(matches) != 0 {
+		t.Fatalf("expected no matches, got %#v", matches)
+	}
+}
+
+func TestSearchTextNormalizesRelativeScores(t *testing.T) {
+	root := t.TempDir()
+	strong := testItem("rule:backend.auth.strong.v1", "Refresh token refresh rule")
+	strong.Body = "Refresh refresh refresh token rotation."
+	weak := testItem("rule:backend.auth.weak.v1", "Token rule")
+	weak.Body = "Refresh token rotation."
+
+	dbPath := filepath.Join(root, "argos/index.db")
+	if err := Rebuild(dbPath, []knowledge.Item{strong, weak}); err != nil {
+		t.Fatalf("Rebuild returned error: %v", err)
+	}
+	store, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open returned error: %v", err)
+	}
+	defer store.Close()
+
+	matches, err := store.SearchText("refresh", 10)
+	if err != nil {
+		t.Fatalf("SearchText returned error: %v", err)
+	}
+	if len(matches) < 2 {
+		t.Fatalf("expected multiple matches, got %#v", matches)
+	}
+
+	allSame := true
+	for _, match := range matches[1:] {
+		if match.Score != matches[0].Score {
+			allSame = false
+			break
+		}
+	}
+	if allSame {
+		t.Fatalf("expected relative score variation, got %#v", matches)
+	}
+	if matches[0].Score < 0.99 || matches[0].Score > 1 {
+		t.Fatalf("expected top score near 1, got %#v", matches[0])
+	}
+}
+
 func TestRebuildIndexesPackageEntrypointChunks(t *testing.T) {
 	root := t.TempDir()
 	pkg := testItem("package:backend.auth-refresh.v1", "Auth refresh package")

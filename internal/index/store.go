@@ -161,6 +161,7 @@ func (s *Store) createSchema(db execer) error {
 	text TEXT NOT NULL,
 	token_estimate INTEGER NOT NULL
 )`,
+		`CREATE INDEX knowledge_chunks_item_ordinal_idx ON knowledge_chunks(item_id, ordinal)`,
 		`CREATE TABLE knowledge_vectors (
 	chunk_id TEXT NOT NULL,
 	provider TEXT NOT NULL,
@@ -442,29 +443,48 @@ func (s *Store) SearchText(query string, limit int) ([]TextMatch, error) {
 	if limit <= 0 {
 		limit = 20
 	}
+	fts := ftsQuery(query)
+	if fts == "" {
+		return nil, nil
+	}
 	rows, err := s.db.Query(`
 SELECT item_id, section, bm25(knowledge_fts) AS rank
 FROM knowledge_fts
 WHERE knowledge_fts MATCH ?
 ORDER BY rank
-LIMIT ?`, ftsQuery(query), limit)
+LIMIT ?`, fts, limit)
 	if err != nil {
 		return nil, fmt.Errorf("search text: %w", err)
 	}
 	defer rows.Close()
 
-	var matches []TextMatch
+	type rankedMatch struct {
+		match    TextMatch
+		strength float64
+	}
+	var ranked []rankedMatch
+	var maxStrength float64
 	for rows.Next() {
 		var match TextMatch
 		var rank float64
 		if err := rows.Scan(&match.ItemID, &match.Section, &rank); err != nil {
 			return nil, fmt.Errorf("scan text match: %w", err)
 		}
-		match.Score = 1 / (1 + maxFloat(rank, 0))
-		matches = append(matches, match)
+		strength := lexicalStrength(rank)
+		if strength > maxStrength {
+			maxStrength = strength
+		}
+		ranked = append(ranked, rankedMatch{match: match, strength: strength})
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate text matches: %w", err)
+	}
+	matches := make([]TextMatch, 0, len(ranked))
+	for _, result := range ranked {
+		if maxStrength > 0 {
+			result.match.Score = result.strength / maxStrength
+		}
+		matches = append(matches, result.match)
 	}
 	return matches, nil
 }
@@ -607,9 +627,12 @@ func ftsQuery(query string) string {
 	return strings.Join(terms, " OR ")
 }
 
-func maxFloat(a, b float64) float64 {
-	if a > b {
-		return a
+func lexicalStrength(rank float64) float64 {
+	if rank < 0 {
+		return -rank
 	}
-	return b
+	if rank == 0 {
+		return 0
+	}
+	return 1 / (1 + rank)
 }
