@@ -622,6 +622,26 @@ func TestContextRecommendsDiscoveryForBroadWork(t *testing.T) {
 	}
 }
 
+func TestContextDoesNotRecommendMapForNarrowImplementationWork(t *testing.T) {
+	service := New(nil)
+	result := service.Context(ContextRequest{
+		Project: "mall-api",
+		Phase:   "implementation",
+		Task:    "fix typo",
+	})
+
+	var tools []string
+	for _, call := range result.RecommendedNextCalls {
+		tools = append(tools, call.Tool)
+	}
+	if !contains(tools, "argos_discover") || !contains(tools, "argos_standards") {
+		t.Fatalf("expected discover and standards recommendations, got %#v", result.RecommendedNextCalls)
+	}
+	if contains(tools, "argos_map") {
+		t.Fatalf("did not expect map recommendation for narrow implementation work: %#v", result.RecommendedNextCalls)
+	}
+}
+
 func TestGetKnowledgeItemReturnsFullBody(t *testing.T) {
 	store := buildQueryTestStore(t)
 	defer store.Close()
