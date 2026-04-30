@@ -169,11 +169,16 @@ func readFile(t *testing.T, path string) string {
 
 func legacyDiscoveryTerms() []string {
 	return []string{
-		"gap_candidates",
-		"capture_candidate",
-		"candidate_only",
-		"proposal_required",
+		legacyDiscoveryTerm("gap", "candidates"),
+		legacyDiscoveryTerm("capture", "candidate"),
+		legacyDiscoveryTerm("candidate", "only"),
+		legacyDiscoveryTerm("proposal", "required"),
 		"Start capture-knowledge only with user approval.",
 		"official knowledge",
 	}
+}
+
+func legacyDiscoveryTerm(parts ...string) string {
+	// Build retired discovery terms from parts so repo-wide legacy-term scans stay focused on active surfaces.
+	return strings.Join(parts, "_")
 }

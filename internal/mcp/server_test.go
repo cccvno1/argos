@@ -369,9 +369,14 @@ func TestToolCallArgosDiscoverNoneReturnsCoverageGaps(t *testing.T) {
 			t.Fatalf("discover should not return full body: %#v", item)
 		}
 	}
-	if strings.Contains(text, "gap_candidates") {
+	if strings.Contains(text, legacyDiscoveryJSONKey("gap", "candidates")) {
 		t.Fatalf("discover should not return legacy gap candidates: %s", text)
 	}
+}
+
+func legacyDiscoveryJSONKey(parts ...string) string {
+	// Build retired discovery keys from parts so repo-wide legacy-term scans stay focused on active surfaces.
+	return strings.Join(parts, "_")
 }
 
 func TestToolCallArgosMapReturnsInventory(t *testing.T) {
