@@ -58,6 +58,36 @@ Before substantial work, an agent should load relevant Argos context and
 standards. Before final answers that relied on Argos knowledge, it should cite
 the knowledge IDs it used.
 
+## Discovery
+
+Discovery is the agent-facing knowledge navigation layer. It helps agents
+inventory available knowledge, route current work to relevant knowledge, and
+avoid Argos-backed claims when no strong match exists.
+
+The default discovery path is local and lightweight: SQLite metadata, file
+scope matching, tags, package entrypoints, and FTS5 full-text search. Embedding
+and vector search are optional future enhancements; `argos discover` works
+without Ollama, model downloads, GPU hardware, or a background service.
+
+Use:
+
+```bash
+argos discover --json --project <project> --phase <phase> --task "<task>" --query "<query>"
+argos map --json --project <project> --domain <domain>
+```
+
+`argos map` returns inventory and orientation. `argos discover` returns ranked
+routes, `why_matched`, `coverage`, and `next_calls`. Neither command returns
+full Markdown bodies. Load selected full items with `get_knowledge_item` and
+cite used IDs with `cite_knowledge`.
+
+Coverage states:
+
+- `strong`: load recommended high-priority IDs before work.
+- `partial`: useful knowledge exists, but gaps remain.
+- `weak`: skim summaries or inspect the map; do not treat results as authority.
+- `none`: proceed without Argos-specific claims and do not cite Argos knowledge.
+
 ## Knowledge Authoring
 
 Single knowledge items live under `knowledge/items/`.
@@ -125,6 +155,13 @@ The server supports tool discovery with `tools/list` and implements these
   Arguments: `project`, `phase`, `task`, `files`.
 - `argos_standards`: returns active standards for project work from the local
   index. Arguments: `project`, `task_type`, `files`, `limit`.
+- `argos_discover`: returns ranked knowledge routes, coverage, explanations,
+  and next calls without full bodies. Arguments: `project`, `phase`, `task`,
+  `query`, `files`, `types`, `tags`, `domains`, `status`, `include_inbox`,
+  `include_deprecated`, `limit`.
+- `argos_map`: returns project/domain knowledge inventory without full bodies.
+  Arguments: `project`, `domain`, `types`, `include_inbox`,
+  `include_deprecated`.
 - `get_knowledge_item`: fetches one indexed knowledge item including its full
   body. Arguments: `id`.
 - `cite_knowledge`: returns citation metadata for indexed knowledge items and
@@ -148,5 +185,7 @@ argos promote --path <candidate>
 argos index
 argos install-adapters
 argos context --json --project <project>
+argos discover --json --project <project> --task <task>
+argos map --json --project <project>
 argos mcp
 ```
