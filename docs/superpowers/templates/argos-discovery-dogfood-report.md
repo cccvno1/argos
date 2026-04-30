@@ -24,6 +24,7 @@ Workspace: `<fixture workspace path>`
 ## Observed Results
 
 - Actual coverage:
+- Action policy:
 - Discovered IDs:
 - Loaded IDs:
 - Cited IDs:
@@ -36,6 +37,7 @@ Workspace: `<fixture workspace path>`
 - Weak/none no-overclaim: `pass|fail|not-applicable`
 - Citation accountability: `pass|fail|not-applicable`
 - Cited IDs subset of loaded-and-used IDs: `pass|fail|not-applicable`
+- Action policy followed: `pass|fail`
 - Context contamination: `pass|fail`
 
 ## Result

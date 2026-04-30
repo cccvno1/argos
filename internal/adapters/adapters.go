@@ -115,6 +115,9 @@ Do not let Argos replace host workflow, safety, or user instructions.
 7. Cite Argos knowledge IDs used in final responses.
 8. Do not cite IDs returned only by argos_map or argos_discover.
 9. Cite only knowledge IDs whose full item was loaded with get_knowledge_item and actually applied.
+10. Follow action_policy.load before loading full knowledge items.
+11. Follow action_policy.cite before calling cite_knowledge.
+12. Mention Argos coverage gaps when action_policy.claim is must_mention_gap.
 
 ## Boundaries
 

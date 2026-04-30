@@ -48,6 +48,9 @@ func TestRenderedAdaptersIncludeStableKnowledgeContract(t *testing.T) {
 				"Cite Argos knowledge IDs used in final responses.",
 				"Do not cite IDs returned only by argos_map or argos_discover.",
 				"Cite only knowledge IDs whose full item was loaded with get_knowledge_item and actually applied.",
+				"Follow action_policy.load before loading full knowledge items.",
+				"Follow action_policy.cite before calling cite_knowledge.",
+				"Mention Argos coverage gaps when action_policy.claim is must_mention_gap.",
 				"Argos validation does not replace tests, builds, linting, or review.",
 			} {
 				if !strings.Contains(tt.body, expected) {
