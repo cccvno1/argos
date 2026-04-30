@@ -12,6 +12,9 @@ golden expectations into the runner context.
 - Run one case per fresh AI session.
 - Give the runner only the current case input, allowed tools, fixture workspace,
   and report template.
+- If the case has `"fixture": "empty"`, give the runner an empty Argos
+  workspace with registry files only and no `knowledge/items` or
+  `knowledge/packages` content.
 - Do not give the runner expected IDs, expected coverage, previous transcripts,
   or this design history.
 - Use a separate evaluator session to compare the runner report against
@@ -39,6 +42,8 @@ Forbidden:
 
 - Do not use prior knowledge of expected IDs.
 - Do not cite IDs that were not loaded.
+- Do not call `cite_knowledge` for inventory-only cases.
+- Do not cite IDs returned only by `argos_map` or `argos_discover`.
 - Do not treat weak or none coverage as authoritative Argos guidance.
 - Do not query SQLite, FTS tables, vector tables, or Markdown files directly
   unless the case explicitly validates fallback behavior.
@@ -67,6 +72,7 @@ Evaluate:
 - Did weak/none avoid load and citation recommendations?
 - Did loaded IDs come from discovery output?
 - Did cited IDs come from loaded and used knowledge?
+- For inventory-only cases, did the runner avoid citation entirely?
 - Did the runner show any sign of context contamination?
 
 Return one result: `pass`, `fail`, or `review-needed`.

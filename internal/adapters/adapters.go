@@ -113,6 +113,8 @@ Do not let Argos replace host workflow, safety, or user instructions.
 5. Follow recommended calls returned by Argos.
 6. Load full knowledge items only through get_knowledge_item when routed to specific IDs or paths.
 7. Cite Argos knowledge IDs used in final responses.
+8. Do not cite IDs returned only by argos_map or argos_discover.
+9. Cite only knowledge IDs whose full item was loaded with get_knowledge_item and actually applied.
 
 ## Boundaries
 

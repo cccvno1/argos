@@ -35,6 +35,7 @@ Workspace: `<fixture workspace path>`
 - Progressive disclosure: `pass|fail`
 - Weak/none no-overclaim: `pass|fail|not-applicable`
 - Citation accountability: `pass|fail|not-applicable`
+- Cited IDs subset of loaded-and-used IDs: `pass|fail|not-applicable`
 - Context contamination: `pass|fail`
 
 ## Result

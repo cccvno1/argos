@@ -17,6 +17,7 @@ type CaseFile struct {
 
 type Case struct {
 	ID        string   `json:"id"`
+	Fixture   string   `json:"fixture"`
 	Operation string   `json:"operation"`
 	Input     Input    `json:"input"`
 	Expected  Expected `json:"expected"`
@@ -107,6 +108,30 @@ func CopyWorkspace(t testing.TB) string {
 	return dst
 }
 
+func CopyEmptyWorkspace(t testing.TB) string {
+	t.Helper()
+	dst := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dst, "knowledge"), 0o755); err != nil {
+		t.Fatalf("create empty workspace knowledge directory: %v", err)
+	}
+	files := map[string]string{
+		"cases.json":              `{"cases":[]}` + "\n",
+		"knowledge/domains.yaml":  "tech_domains: [backend, security, database, payments, platform]\nbusiness_domains: [account, order, billing]\n",
+		"knowledge/projects.yaml": "projects:\n  - id: mall-api\n    name: Mall API\n    path: services/mall-api\n    tech_domains: [backend, security]\n    business_domains: [account]\n",
+		"knowledge/types.yaml":    "types: [rule, decision, lesson, runbook, reference, package]\n",
+	}
+	for rel, body := range files {
+		path := filepath.Join(dst, rel)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("create empty workspace directory for %s: %v", rel, err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatalf("write empty workspace file %s: %v", rel, err)
+		}
+	}
+	return dst
+}
+
 func BuildIndexedWorkspace(t testing.TB) (string, *index.Store) {
 	t.Helper()
 	root := CopyWorkspace(t)
@@ -121,6 +146,27 @@ func BuildIndexedWorkspace(t testing.TB) (string, *index.Store) {
 	store, err := index.Open(dbPath)
 	if err != nil {
 		t.Fatalf("open golden index: %v", err)
+	}
+	return root, store
+}
+
+func BuildIndexedEmptyWorkspace(t testing.TB) (string, *index.Store) {
+	t.Helper()
+	root := CopyEmptyWorkspace(t)
+	items, err := knowledge.LoadOfficial(root)
+	if err != nil {
+		t.Fatalf("load empty knowledge workspace: %v", err)
+	}
+	if len(items) != 0 {
+		t.Fatalf("expected empty knowledge workspace, got %#v", items)
+	}
+	dbPath := filepath.Join(root, "argos", "index.db")
+	if err := index.Rebuild(dbPath, nil); err != nil {
+		t.Fatalf("rebuild empty index: %v", err)
+	}
+	store, err := index.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open empty index: %v", err)
 	}
 	return root, store
 }

@@ -1,12 +1,10 @@
 package query
 
 import (
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"argos/internal/discoverytest"
-	"argos/internal/index"
 )
 
 func TestGoldenDiscoveryCases(t *testing.T) {
@@ -73,17 +71,13 @@ func TestGoldenMapCases(t *testing.T) {
 }
 
 func TestGoldenMapEmptyCase(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "argos", "index.db")
-	if err := index.Rebuild(dbPath, nil); err != nil {
-		t.Fatalf("Rebuild returned error: %v", err)
+	tc := discoverytest.CaseByID(t, discoverytest.LoadCases(t), "map_inventory_empty")
+	if tc.Fixture != "empty" {
+		t.Fatalf("expected map_inventory_empty to use empty fixture, got %q", tc.Fixture)
 	}
-	store, err := index.Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open returned error: %v", err)
-	}
+	_, store := discoverytest.BuildIndexedEmptyWorkspace(t)
 	defer store.Close()
 	service := New(store)
-	tc := discoverytest.CaseByID(t, discoverytest.LoadCases(t), "map_inventory_empty")
 
 	result, err := service.Map(MapRequest{Project: tc.Input.Project})
 	if err != nil {

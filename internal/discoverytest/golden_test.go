@@ -14,6 +14,9 @@ func TestLoadCasesReadsGoldenCases(t *testing.T) {
 	if CaseByID(t, cases, "strong_auth_refresh_full_signal").Expected.Coverage != "strong" {
 		t.Fatalf("expected strong_auth_refresh_full_signal to expect strong coverage")
 	}
+	if CaseByID(t, cases, "map_inventory_empty").Fixture != "empty" {
+		t.Fatalf("expected map_inventory_empty to use empty fixture")
+	}
 }
 
 func TestCopyWorkspaceCopiesKnowledgeAndCases(t *testing.T) {
@@ -43,5 +46,24 @@ func TestBuildIndexedWorkspaceCreatesQueryableStore(t *testing.T) {
 	}
 	if item.Body == "" {
 		t.Fatalf("expected indexed item body")
+	}
+}
+
+func TestBuildIndexedEmptyWorkspaceCreatesEmptyStore(t *testing.T) {
+	root, store := BuildIndexedEmptyWorkspace(t)
+	defer store.Close()
+
+	if _, err := os.Stat(filepath.Join(root, "knowledge", "domains.yaml")); err != nil {
+		t.Fatalf("expected empty workspace registry: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "knowledge", "items")); !os.IsNotExist(err) {
+		t.Fatalf("expected no official items directory, got err %v", err)
+	}
+	items, err := store.ListItems()
+	if err != nil {
+		t.Fatalf("ListItems returned error: %v", err)
+	}
+	if len(items) != 0 {
+		t.Fatalf("expected empty indexed store, got %#v", items)
 	}
 }

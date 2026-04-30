@@ -14,6 +14,7 @@
     },
     {
       "id": "map_inventory_empty",
+      "fixture": "empty",
       "operation": "map-empty",
       "input": {"project": "unknown-api"},
       "expected": {"groups_empty": true, "no_bodies": true}
