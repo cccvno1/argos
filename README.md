@@ -49,6 +49,11 @@ Agents should prefer the richest available path:
 MCP -> CLI JSON -> generated adapter files -> Markdown source
 ```
 
+Generated adapters define a minimum contract for tools that read project
+instruction files: preserve host workflow control, prefer MCP, fall back to CLI
+JSON or Markdown source, load full knowledge only when routed, and cite Argos
+knowledge IDs that informed final responses.
+
 Before substantial work, an agent should load relevant Argos context and
 standards. Before final answers that relied on Argos knowledge, it should cite
 the knowledge IDs it used.
