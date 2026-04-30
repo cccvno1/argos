@@ -1,5 +1,11 @@
 # Argos Discovery Dogfood Round 4
 
+> Superseded terminology note: this report used the earlier `gap_candidates`
+> wording. The active Discovery direction after
+> `2026-04-30-argos-shared-knowledge-discovery-semantics-design.md` is
+> `coverage_gaps`, meaning uncovered shared-knowledge needs rather than capture
+> or upload candidates.
+
 Date: 2026-04-30
 Workspace: `/tmp/argos-round4-full-v3jaVr`
 Binary: `/tmp/argos-dogfood`
