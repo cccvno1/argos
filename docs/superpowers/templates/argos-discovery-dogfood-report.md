@@ -30,7 +30,8 @@ Workspace: `<fixture workspace path>`
 - Loaded IDs:
 - Cited IDs:
 - Missing knowledge hints:
-- Gap candidates:
+- Coverage gaps:
+- Argos-backed vs general reasoning:
 - Next calls:
 
 ## Guards
@@ -39,8 +40,9 @@ Workspace: `<fixture workspace path>`
 - Weak/none no-overclaim: `pass|fail|not-applicable`
 - Citation accountability: `pass|fail|not-applicable`
 - Cited IDs subset of loaded-and-used IDs: `pass|fail|not-applicable`
-- Gap candidates not cited: `pass|fail|not-applicable`
-- Capture permission gate: `pass|fail|not-applicable`
+- Coverage gaps not cited: `pass|fail|not-applicable`
+- Attribution boundary: `pass|fail|not-applicable`
+- No Discovery-triggered upload/capture: `pass|fail|not-applicable`
 - Action policy followed: `pass|fail`
 - Context contamination: `pass|fail`
 

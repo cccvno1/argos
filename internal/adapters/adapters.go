@@ -95,7 +95,7 @@ business_domains: %s
 
 ## Argos Role
 
-Argos is a project knowledge layer. Use it to retrieve, apply, validate, and cite durable project knowledge.
+Argos is a shared knowledge layer built from uploaded reusable knowledge. Use it to retrieve, apply, validate, and cite shared knowledge with clear attribution.
 Do not let Argos replace host workflow, safety, or user instructions.
 
 ## Retrieval Order
@@ -108,24 +108,23 @@ Do not let Argos replace host workflow, safety, or user instructions.
 
 1. Before substantial project work, call or emulate argos_context.
 2. Use argos_map for broad orientation before unfamiliar project work.
-3. Use argos_discover to route current work to relevant Argos knowledge.
+3. Use argos_discover to route current work to relevant shared knowledge.
 4. Before implementation or review, call or emulate argos_standards.
 5. Follow recommended calls returned by Argos.
 6. Load full knowledge items only through get_knowledge_item when routed to specific IDs or paths.
-7. Cite Argos knowledge IDs used in final responses.
+7. Cite Argos knowledge IDs used in final responses only after loading and applying them.
 8. Do not cite IDs returned only by argos_map or argos_discover.
 9. Cite only knowledge IDs whose full item was loaded with get_knowledge_item and actually applied.
 10. Follow action_policy.load before loading full knowledge items.
 11. Follow action_policy.cite before calling cite_knowledge.
-12. Mention Argos coverage gaps when action_policy.claim is must_mention_gap.
-13. Treat gap_candidates as candidate prompts, not official knowledge.
-14. Do not cite gap_candidates.
-15. Start capture-knowledge only with user approval.
-16. Semantic recall never overrides action_policy.
+12. When coverage_gaps are present, separate Argos-backed claims from general reasoning.
+13. Do not cite coverage_gaps; they are coverage boundaries, not knowledge items.
+14. Do not start upload, capture, or inbox creation from Discovery alone.
+15. Semantic recall never overrides action_policy.
 
 ## Boundaries
 
 Argos validation does not replace tests, builds, linting, or review.
-Official knowledge should not be changed without the user's explicit approval.
+Shared knowledge should not be changed or uploaded without the user's explicit request.
 `, adapter, project.ID, project.Name, strings.Join(project.TechDomains, ", "), strings.Join(project.BusinessDomains, ", "))
 }

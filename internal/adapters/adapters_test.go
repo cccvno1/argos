@@ -35,30 +35,41 @@ func TestRenderedAdaptersIncludeStableKnowledgeContract(t *testing.T) {
 				"name: Mall API",
 				"tech_domains: backend, database",
 				"business_domains: account, order",
-				"Argos is a project knowledge layer.",
+				"Argos is a shared knowledge layer built from uploaded reusable knowledge.",
 				"Do not let Argos replace host workflow, safety, or user instructions.",
 				"Prefer MCP tools when available.",
 				"Fall back to CLI JSON when MCP is unavailable and commands can be run.",
 				"Fall back to generated adapter files or Markdown source when command execution is unavailable.",
 				"Before substantial project work, call or emulate argos_context.",
-				"Use argos_discover to route current work to relevant Argos knowledge.",
+				"Use argos_discover to route current work to relevant shared knowledge.",
 				"Use argos_map for broad orientation before unfamiliar project work.",
 				"Before implementation or review, call or emulate argos_standards.",
 				"Load full knowledge items only through get_knowledge_item when routed to specific IDs or paths.",
-				"Cite Argos knowledge IDs used in final responses.",
+				"Cite Argos knowledge IDs used in final responses only after loading and applying them.",
 				"Do not cite IDs returned only by argos_map or argos_discover.",
 				"Cite only knowledge IDs whose full item was loaded with get_knowledge_item and actually applied.",
 				"Follow action_policy.load before loading full knowledge items.",
 				"Follow action_policy.cite before calling cite_knowledge.",
-				"Mention Argos coverage gaps when action_policy.claim is must_mention_gap.",
-				"Treat gap_candidates as candidate prompts, not official knowledge.",
-				"Do not cite gap_candidates.",
-				"Start capture-knowledge only with user approval.",
+				"When coverage_gaps are present, separate Argos-backed claims from general reasoning.",
+				"Do not cite coverage_gaps; they are coverage boundaries, not knowledge items.",
+				"Do not start upload, capture, or inbox creation from Discovery alone.",
 				"Semantic recall never overrides action_policy.",
 				"Argos validation does not replace tests, builds, linting, or review.",
 			} {
 				if !strings.Contains(tt.body, expected) {
 					t.Fatalf("expected %q in %s adapter:\n%s", expected, tt.name, tt.body)
+				}
+			}
+			for _, forbidden := range []string{
+				"gap_" + "candidates",
+				"capture_" + "candidate",
+				"candidate_" + "only",
+				"proposal_" + "required",
+				"Start capture-" + "knowledge only with user approval.",
+				"official " + "knowledge",
+			} {
+				if strings.Contains(tt.body, forbidden) {
+					t.Fatalf("did not expect %q in %s adapter:\n%s", forbidden, tt.name, tt.body)
 				}
 			}
 		})
@@ -108,7 +119,7 @@ func TestRenderCursorRuleKeepsCursorFrontmatter(t *testing.T) {
 		"description: Argos progressive knowledge protocol for mall-api",
 		"alwaysApply: true",
 		"# Project Knowledge",
-		"Argos is a project knowledge layer.",
+		"Argos is a shared knowledge layer built from uploaded reusable knowledge.",
 	} {
 		if !strings.Contains(body, expected) {
 			t.Fatalf("expected %q in Cursor rule:\n%s", expected, body)
