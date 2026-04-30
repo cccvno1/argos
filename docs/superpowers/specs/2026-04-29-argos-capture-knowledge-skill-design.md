@@ -5,11 +5,8 @@ Date: 2026-04-29
 ## Purpose
 
 Argos needs an agent-facing skill that turns natural user intent into deliberate
-knowledge capture. A user should be able to say things like "remember this",
-"turn this into a reusable standard", or "capture this API convention" while
-they are already working. The agent then uses Argos conventions and CLI commands
-under the hood, without asking the user to memorize Argos file layouts or
-commands.
+knowledge capture. The agent uses Argos conventions and CLI commands under the
+hood, without asking the user to memorize Argos file layouts or commands.
 
 The skill is named `capture-knowledge`.
 
@@ -94,23 +91,10 @@ when the desired documentation language is genuinely unclear.
 
 The skill should trigger when the user explicitly wants durable knowledge
 captured or when the agent sees a clear chance to preserve reusable knowledge and
-asks for permission.
+asks for permission. The trigger is durable intent, not a specific phrase or
+language.
 
-Explicit user triggers include:
-
-- "记下来"
-- "把这个沉淀成知识库"
-- "创建一个知识包"
-- "capture this"
-- "turn this into a standard"
-- "make this reusable for future agents"
-
-Agent-suggested triggers must be phrased as a question, not an action:
-
-```text
-This looks reusable. Would you like me to run the capture-knowledge workflow and
-propose an Argos knowledge entry for it?
-```
+Agent-suggested triggers must be phrased as permission requests, not actions.
 
 The skill should not trigger for ordinary explanations, one-off debugging
 updates, temporary notes, or speculative ideas unless the user asks to preserve
@@ -172,13 +156,8 @@ these outcomes:
 - related index results found
 - check could not be completed, with the reason
 
-When overlap exists, the agent must ask the user to choose the next action before
-writing:
-
-```text
-I found related knowledge. Do you want to create a new entry, update an existing
-entry, or stop this capture?
-```
+When overlap exists, the agent must ask the user to choose whether to create new
+knowledge, update existing knowledge, or stop the capture before writing.
 
 The agent must not silently merge, replace, or update existing knowledge.
 
@@ -226,9 +205,9 @@ The agent must not default to `priority: must`. That priority requires explicit
 user authorization because it changes how future agents should treat the
 knowledge.
 
-The `Omitted Structure` section is required for packages. It should name optional
-directories that are intentionally not created, such as `scripts/` or `assets/`,
-and briefly explain why they are unnecessary for this package.
+The `Omitted Structure` section is required for packages. It should name
+optional directories that are intentionally not created and briefly explain why
+they are unnecessary for this package.
 
 ## Delivery Paths
 
@@ -290,7 +269,7 @@ The proposal's `Source Context` section should use these groups:
 Assumptions must not be written as facts. Any assumption that affects correctness
 or trust must also appear in `Open Questions`.
 
-Examples of correctness-affecting assumptions:
+Correctness-affecting assumptions include:
 
 - a code example is production-ready
 - an API contract is authoritative
@@ -389,65 +368,10 @@ This skill does not:
 
 Those decisions can be designed later as separate workflows.
 
-## Example Interaction
-
-User:
-
-```text
-把我们刚才讨论的 Redis key 命名规范沉淀成知识库
-```
-
-Agent:
-
-```text
-I will run the capture-knowledge workflow first. I will check existing Argos
-knowledge, then propose what to create before writing files.
-```
-
-Agent checks existing knowledge, then proposes:
-
-```text
-Title: Redis Key Naming Standard
-Why This Is Durable Knowledge:
-The naming rules affect future implementation and review across Redis-backed
-features.
-
-Why This Should Be A Package:
-The standard needs a short entrypoint, rationale, examples, and a review
-checklist.
-
-Entrypoint:
-- ID: package:backend.redis.key-naming.v1
-- Path: backend/redis/key-naming
-- Status: draft
-- Priority: should
-- Tags: redis, naming, cache
-
-Proposed Structure:
-- KNOWLEDGE.md
-- references/rationale.md
-- examples/go/cache_keys.go (trust: illustrative)
-- checklists/review.md
-
-Omitted Structure:
-- scripts/ because no automated verification is defined
-- assets/ because the package has no binary or media assets
-
-Existing Knowledge Check:
-Related official package found: package:backend.redis.best-practices.v1
-
-Delivery Path:
-Please choose inbox candidate or PR-style change before I write files.
-```
-
-The agent waits. If the user chooses inbox candidate, the agent writes under
-`knowledge/.inbox/packages/backend/redis/key-naming/` and validates that path.
-
 ## Open Questions For Implementation Planning
 
 - Should the first implementation create a complete local `capture-knowledge`
-  skill folder, or should it first add repo documentation and examples for the
-  workflow?
+  skill folder, or should it first add repo documentation for the workflow?
 - Should package capture be implemented before item capture, with item capture
   documented as a smaller follow-up?
 - Should the skill include helper scripts for proposal generation, or should it

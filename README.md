@@ -1,31 +1,59 @@
 # Argos
 
-Argos is a local-first knowledge substrate for AI development workflows.
+Argos is a local-first knowledge substrate for AI coding workflows.
 
-## MVP
+Argos is not meant to be a human-facing note app or a CLI that every user has
+to learn. The preferred experience is conversational: a person works with an AI
+agent to author, refine, validate, publish, retrieve, and cite durable project
+knowledge. Argos provides the file protocol, validation, index, adapters, and
+MCP tools that make that experience stable across AI coding tools.
 
-- Markdown knowledge items with YAML frontmatter
-- Controlled registries for domains, projects, and types
-- Rebuildable local SQLite index
-- Static adapters for AI coding tools
-- MCP server for progressive knowledge disclosure
-- Workflow contracts for agent and skill systems
+## Human Experience
 
-## Commands
+Humans should be able to express knowledge intent in natural language: enable
+Argos for a project, refine source material into durable knowledge, preserve a
+lesson, ask future agents to consult existing knowledge, or check work against
+published knowledge.
 
-```bash
-argos init
-argos validate
-argos validate --inbox
-argos validate --path <path>
-argos promote --path <candidate>
-argos index
-argos install-adapters
-argos context --json --project <project>
-argos mcp
+The agent performs the Argos operations under the hood: reading source context,
+checking existing knowledge, proposing a knowledge shape, writing inbox
+candidates after approval, validating files, promoting reviewed knowledge, and
+refreshing the local index.
+
+## Relationship To Workflow Systems
+
+Argos complements host workflow systems: project instructions, skills, plugins,
+adapter rules, and tool-native workflows. It must not replace or override their
+control flow.
+
+- Host workflow systems decide how work proceeds: brainstorming, planning, TDD,
+  debugging, review, verification, and branch completion.
+- Argos provides the project knowledge those workflows should remember:
+  standards, decisions, lessons, examples, runbooks, references, and packages.
+- When both are available, workflow instructions stay in charge and call Argos
+  only to retrieve, capture, validate, or cite knowledge.
+
+## Agent Experience
+
+Argos supports several integration paths so different AI coding tools can use
+the same knowledge base:
+
+- MCP tools for dynamic retrieval.
+- Static adapters for tools that read project instruction files.
+- CLI JSON and validation commands for agents that can run local commands.
+- Markdown source files as the durable system of record.
+
+Agents should prefer the richest available path:
+
+```text
+MCP -> CLI JSON -> generated adapter files -> Markdown source
 ```
 
-## Knowledge Packages
+Before substantial work, an agent should load relevant Argos context and
+standards. Before final answers that relied on Argos knowledge, it should cite
+the knowledge IDs it used.
+
+## Knowledge Authoring
 
 Single knowledge items live under `knowledge/items/`.
 
@@ -34,42 +62,48 @@ Structured knowledge packages live under `knowledge/packages/` and use
 `references/`, `examples/`, `checklists/`, `scripts/`, and `assets/`.
 
 Package candidates are created under `knowledge/.inbox/packages/` and reviewed
-before promotion:
+before promotion.
 
-```bash
-argos validate --path knowledge/.inbox/packages/backend/redis/best-practices
-argos promote --path knowledge/.inbox/packages/backend/redis/best-practices
-argos index
-```
+High-quality knowledge is expected to be refined. A typical authoring workflow
+is:
 
-`argos validate` checks official knowledge. `argos validate --inbox` checks inbox
-candidates. `argos validate --path <path>` checks one item or package.
+1. The user gives the agent source material, a decision, or a lesson.
+2. The agent reads the relevant source context and checks existing Argos
+   knowledge.
+3. The agent separates observed facts, user-provided intent, assumptions,
+   open questions, examples, counterexamples, and verification evidence.
+4. The agent proposes an item or package shape and asks for approval.
+5. The agent writes an inbox candidate only after approval.
+6. The agent runs Argos validation and reports the result.
+7. The user reviews and decides whether to promote the candidate.
 
-## Agent Skills
+Official knowledge should not be mutated silently. Inbox candidates are the
+default path for AI-authored or imported knowledge.
+
+## Capture Knowledge Skill
 
 Argos includes an installable `capture-knowledge` skill source at
 `skills/capture-knowledge/`.
 
 Use this skill when a user asks an agent to remember, preserve, document, or
-turn reusable project knowledge into Argos knowledge. The skill does not add new
-Argos commands. It guides the agent through existing Argos workflows:
+turn reusable project knowledge into Argos knowledge. The skill is
+proposal-first and agent-facing. It guides the agent to:
 
+- gather enough context to author accurate knowledge
 - check existing `knowledge/items/`, `knowledge/packages/`, and
   `knowledge/.inbox/` content
+- distinguish facts, assumptions, examples, counterexamples, and validation
+  evidence
 - propose the knowledge shape before writing files
 - ask whether overlap means create new, update existing, or stop
 - ask for an inbox candidate or PR-style delivery path
 - write package files only after approval
 - run `argos validate --path TARGET_PATH`
 
-The skill is intentionally proposal-first. It must not silently mutate official
-knowledge, promote inbox candidates, execute package scripts, or set
-`priority: must` without explicit user approval.
-
 Human-facing documentation written through the skill should match the user's
 language. Argos protocol fields stay stable: frontmatter keys, IDs, paths,
-required section headings, commands, filenames, and technical identifiers are not
-translated.
+required section headings, commands, filenames, and technical identifiers are
+not translated.
 
 ## MCP
 
@@ -82,8 +116,8 @@ argos mcp
 The server supports tool discovery with `tools/list` and implements these
 `tools/call` entries:
 
-- `argos_context`: returns workflow context and recommended next calls. Arguments:
-  `project`, `phase`, `task`, `files`.
+- `argos_context`: returns workflow context and recommended next calls.
+  Arguments: `project`, `phase`, `task`, `files`.
 - `argos_standards`: returns active standards for project work from the local
   index. Arguments: `project`, `task_type`, `files`, `limit`.
 - `get_knowledge_item`: fetches one indexed knowledge item including its full
@@ -93,3 +127,21 @@ The server supports tool discovery with `tools/list` and implements these
 
 Run `argos index` before calling index-backed tools:
 `argos_standards`, `get_knowledge_item`, and `cite_knowledge`.
+
+## Agent/Internal Commands
+
+These commands are stable operations for agents and automation. Humans can run
+them directly when debugging Argos, but they are not the primary user
+experience.
+
+```bash
+argos init
+argos validate
+argos validate --inbox
+argos validate --path <path>
+argos promote --path <candidate>
+argos index
+argos install-adapters
+argos context --json --project <project>
+argos mcp
+```
