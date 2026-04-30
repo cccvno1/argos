@@ -69,6 +69,23 @@ func TestRenderedAdaptersDoNotAdvertiseUnimplementedWorkflowTools(t *testing.T) 
 	}
 }
 
+func TestRenderCursorRuleKeepsCursorFrontmatter(t *testing.T) {
+	project := registry.Project{ID: "mall-api", Name: "Mall API"}
+	body := RenderCursorRule(project)
+
+	for _, expected := range []string{
+		"---\n",
+		"description: Argos progressive knowledge protocol for mall-api",
+		"alwaysApply: true",
+		"# Project Knowledge",
+		"Argos is a project knowledge layer.",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("expected %q in Cursor rule:\n%s", expected, body)
+		}
+	}
+}
+
 func TestInstallRejectsInvalidProjectIDs(t *testing.T) {
 	tests := []struct {
 		name      string
