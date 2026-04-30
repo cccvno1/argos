@@ -548,6 +548,7 @@ Hard filters remove results that should not be considered:
 - deprecated knowledge unless `include_deprecated` is true
 - non-matching explicit `types`
 - non-matching explicit `tags`
+- non-matching explicit `domains`
 - non-matching explicit `status`
 - knowledge outside the requested project unless it is global or cross-project
 
