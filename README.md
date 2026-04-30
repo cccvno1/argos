@@ -168,7 +168,8 @@ The server supports tool discovery with `tools/list` and implements these
   reports missing ids. Arguments: `ids`.
 
 Run `argos index` before calling index-backed tools:
-`argos_standards`, `get_knowledge_item`, and `cite_knowledge`.
+`argos_standards`, `argos_discover`, `argos_map`, `get_knowledge_item`, and
+`cite_knowledge`.
 
 ## Agent/Internal Commands
 
