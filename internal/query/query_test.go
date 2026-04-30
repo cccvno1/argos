@@ -423,6 +423,50 @@ func TestDiscoverCoverageGapsForNoneCoverage(t *testing.T) {
 	}
 }
 
+func TestDiscoverCoverageGapsReportRestrictiveFilterExclusion(t *testing.T) {
+	store := buildDiscoveryTestStore(t)
+	defer store.Close()
+	service := New(store)
+
+	result, err := service.Discover(DiscoverRequest{
+		Project: "mall-api",
+		Phase:   "implementation",
+		Task:    "add refresh token endpoint",
+		Query:   "refresh token",
+		Tags:    []string{"payments"},
+		Limit:   5,
+	})
+	if err != nil {
+		t.Fatalf("Discover returned error: %v", err)
+	}
+	if result.Coverage.Status != "none" {
+		t.Fatalf("expected none coverage, got %#v", result.Coverage)
+	}
+	assertCoverageGapSources(t, result.CoverageGaps, []string{"filter_excluded"})
+}
+
+func TestDiscoverCoverageGapsIncludeDeprecatedIsNotRestrictiveFilter(t *testing.T) {
+	store := buildDiscoveryTestStore(t)
+	defer store.Close()
+	service := New(store)
+
+	result, err := service.Discover(DiscoverRequest{
+		Project:           "mall-api",
+		Phase:             "implementation",
+		Task:              "add payment webhook signature verification",
+		Query:             "payment webhook signature",
+		IncludeDeprecated: true,
+		Limit:             5,
+	})
+	if err != nil {
+		t.Fatalf("Discover returned error: %v", err)
+	}
+	if result.Coverage.Status != "none" {
+		t.Fatalf("expected none coverage, got %#v", result.Coverage)
+	}
+	assertCoverageGapSources(t, result.CoverageGaps, []string{"unmatched_intent"})
+}
+
 func TestDiscoverWeakCoverageGapsAreNotArgosBacked(t *testing.T) {
 	store := buildDiscoveryStore(t, []knowledge.Item{{
 		Path:            "knowledge/items/backend/generic-token.md",

@@ -372,7 +372,7 @@ func (s *Service) Discover(req DiscoverRequest) (DiscoveryResponse, error) {
 		Coverage:     coverage,
 		ActionPolicy: discoveryActionPolicy(coverage),
 		Recall:       defaultRecallState(),
-		CoverageGaps: coverageGapsForCoverage(coverage, req, intent),
+		CoverageGaps: coverageGapsForCoverage(coverage, req, intent, items, lexical),
 		Items:        results,
 		NextCalls:    nextCalls,
 	}, nil
@@ -908,7 +908,7 @@ func defaultRecallState() RecallState {
 	}
 }
 
-func coverageGapsForCoverage(coverage Coverage, req DiscoverRequest, intent string) []CoverageGap {
+func coverageGapsForCoverage(coverage Coverage, req DiscoverRequest, intent string, items []knowledge.Item, lexical map[string]float64) []CoverageGap {
 	if coverage.Status == "strong" || len(coverage.MissingKnowledgeHints) == 0 {
 		return nil
 	}
@@ -916,7 +916,7 @@ func coverageGapsForCoverage(coverage Coverage, req DiscoverRequest, intent stri
 	if need == "" {
 		return nil
 	}
-	source := coverageGapSource(coverage, req)
+	source := coverageGapSource(coverage, req, intent, items, lexical)
 	severity := coverageGapSeverity(coverage, source)
 	return []CoverageGap{{
 		Need:        need,
@@ -947,8 +947,8 @@ func coverageGapNeed(req DiscoverRequest, intent string) string {
 	return strings.TrimSpace(task + " / " + query)
 }
 
-func coverageGapSource(coverage Coverage, req DiscoverRequest) string {
-	if hasExplicitDiscoveryFilters(req) && coverage.Status == "none" {
+func coverageGapSource(coverage Coverage, req DiscoverRequest, intent string, items []knowledge.Item, lexical map[string]float64) string {
+	if coverage.Status == "none" && hasRestrictiveDiscoveryFilters(req) && restrictiveFiltersExcludedRelevantKnowledge(req, intent, items, lexical) {
 		return "filter_excluded"
 	}
 	switch coverage.Status {
@@ -961,8 +961,26 @@ func coverageGapSource(coverage Coverage, req DiscoverRequest) string {
 	}
 }
 
-func hasExplicitDiscoveryFilters(req DiscoverRequest) bool {
-	return len(req.Types) > 0 || len(req.Tags) > 0 || len(req.Domains) > 0 || len(req.Status) > 0 || req.IncludeDeprecated
+func hasRestrictiveDiscoveryFilters(req DiscoverRequest) bool {
+	return len(req.Types) > 0 || len(req.Tags) > 0 || len(req.Domains) > 0 || len(req.Status) > 0
+}
+
+func restrictiveFiltersExcludedRelevantKnowledge(req DiscoverRequest, intent string, items []knowledge.Item, lexical map[string]float64) bool {
+	unfiltered := req
+	unfiltered.Types = nil
+	unfiltered.Tags = nil
+	unfiltered.Domains = nil
+	unfiltered.Status = nil
+
+	for _, item := range items {
+		if !discoverCandidateAllowed(item, unfiltered) || discoverCandidateAllowed(item, req) {
+			continue
+		}
+		if lexical[item.ID] > 0 || lexicalTermScore(item, intent) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func coverageGapSeverity(coverage Coverage, source string) string {
