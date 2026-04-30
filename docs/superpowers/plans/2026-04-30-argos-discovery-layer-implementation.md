@@ -30,7 +30,7 @@
 - Modify: `internal/index/store_test.go`
 - Modify: `internal/index/store.go`
 
-- [ ] **Step 1: Write failing index tests for tags, FTS, chunks, and metadata**
+- [x] **Step 1: Write failing index tests for tags, FTS, chunks, and metadata**
 
 Add these tests to `internal/index/store_test.go` after `TestCheckSchemaAcceptsRebuiltIndex`:
 
@@ -139,7 +139,7 @@ func TestRebuildIndexesPackageEntrypointChunks(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run index tests to verify they fail**
+- [x] **Step 2: Run index tests to verify they fail**
 
 Run:
 
@@ -149,7 +149,7 @@ go test ./internal/index -run 'TestRebuildStoresDiscoveryMetadata|TestSearchText
 
 Expected: FAIL because `DiscoveryCapabilities`, `SearchText`, `ListChunks`, and tag persistence do not exist yet.
 
-- [ ] **Step 3: Add discovery index types**
+- [x] **Step 3: Add discovery index types**
 
 In `internal/index/store.go`, add these exported types near `type Store`:
 
@@ -179,7 +179,7 @@ type Chunk struct {
 }
 ```
 
-- [ ] **Step 4: Replace the index schema with discovery-ready tables**
+- [x] **Step 4: Replace the index schema with discovery-ready tables**
 
 Update `createSchema` in `internal/index/store.go` so it creates tags, FTS, chunks, vector placeholder, and metadata:
 
@@ -247,7 +247,7 @@ func (s *Store) createSchema(db execer) error {
 }
 ```
 
-- [ ] **Step 5: Persist tags and populate FTS/chunks during inserts**
+- [x] **Step 5: Persist tags and populate FTS/chunks during inserts**
 
 Update `insertItem` so it serializes tags, writes `tags` into `knowledge_items`, inserts item-level FTS, and inserts chunks. The body of `insertItem` should include this structure:
 
@@ -327,7 +327,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?)`,
 }
 ```
 
-- [ ] **Step 6: Add chunk helpers**
+- [x] **Step 6: Add chunk helpers**
 
 Add these helpers near the bottom of `internal/index/store.go`:
 
@@ -398,7 +398,7 @@ func estimateTokens(text string) int {
 }
 ```
 
-- [ ] **Step 7: Update GetItem and ListItems to read tags**
+- [x] **Step 7: Update GetItem and ListItems to read tags**
 
 In `GetItem` and `ListItems`, add `tags` to the SELECT list and scan target, then unmarshal it into `item.Tags`:
 
@@ -416,7 +416,7 @@ if err := unmarshalJSON(tags, &item.Tags); err != nil {
 
 For `ListItems`, return `nil, fmt.Errorf("%s: deserialize tags: %w", item.ID, err)` on tag unmarshal failure.
 
-- [ ] **Step 8: Add search, chunk, and capability methods**
+- [x] **Step 8: Add search, chunk, and capability methods**
 
 Add these methods to `internal/index/store.go`:
 
@@ -512,7 +512,7 @@ func maxFloat(a, b float64) float64 {
 }
 ```
 
-- [ ] **Step 9: Update CheckSchema**
+- [x] **Step 9: Update CheckSchema**
 
 Update `CheckSchema` so it verifies the new tables:
 
@@ -530,7 +530,7 @@ for _, stmt := range []string{
 }
 ```
 
-- [ ] **Step 10: Run index tests**
+- [x] **Step 10: Run index tests**
 
 Run:
 
@@ -540,7 +540,7 @@ go test ./internal/index -count=1
 
 Expected: PASS.
 
-- [ ] **Step 11: Commit the discovery index schema**
+- [x] **Step 11: Commit the discovery index schema**
 
 Run:
 
@@ -555,7 +555,7 @@ git commit -m "feat: extend index for discovery"
 - Modify: `internal/query/query_test.go`
 - Modify: `internal/query/query.go`
 
-- [ ] **Step 1: Write failing discovery query tests**
+- [x] **Step 1: Write failing discovery query tests**
 
 Add these tests to `internal/query/query_test.go` near the existing standards tests:
 
@@ -755,7 +755,7 @@ func buildDiscoveryTestStore(t *testing.T) *index.Store {
 }
 ```
 
-- [ ] **Step 2: Run query tests to verify they fail**
+- [x] **Step 2: Run query tests to verify they fail**
 
 Run:
 
@@ -765,7 +765,7 @@ go test ./internal/query -run 'TestDiscover|TestMap' -count=1
 
 Expected: FAIL because `Discover`, `Map`, and their types do not exist.
 
-- [ ] **Step 3: Add discovery response types**
+- [x] **Step 3: Add discovery response types**
 
 Add these types to `internal/query/query.go` after `ContextRequest`:
 
@@ -875,7 +875,7 @@ type RecommendedCall struct {
 }
 ```
 
-- [ ] **Step 4: Implement Discover and Map**
+- [x] **Step 4: Implement Discover and Map**
 
 Add `Discover` and `Map` methods to `internal/query/query.go`:
 
@@ -990,7 +990,7 @@ func (s *Service) Map(req MapRequest) (MapResponse, error) {
 }
 ```
 
-- [ ] **Step 5: Add discovery scoring helpers**
+- [x] **Step 5: Add discovery scoring helpers**
 
 Add these helpers below existing helpers in `internal/query/query.go`:
 
@@ -1318,7 +1318,7 @@ func sortedKeys(values map[string]bool) []string {
 }
 ```
 
-- [ ] **Step 6: Run query tests**
+- [x] **Step 6: Run query tests**
 
 Run:
 
@@ -1328,7 +1328,7 @@ go test ./internal/query -count=1
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit query discovery**
+- [x] **Step 7: Commit query discovery**
 
 Run:
 
@@ -1343,7 +1343,7 @@ git commit -m "feat: add discovery query service"
 - Modify: `internal/cli/cli_test.go`
 - Modify: `internal/cli/cli.go`
 
-- [ ] **Step 1: Write failing CLI tests**
+- [x] **Step 1: Write failing CLI tests**
 
 Add these tests to `internal/cli/cli_test.go` near the context/index tests:
 
@@ -1453,7 +1453,7 @@ Refresh token endpoints must rotate tokens and require auth middleware.
 }
 ```
 
-- [ ] **Step 2: Run CLI tests to verify they fail**
+- [x] **Step 2: Run CLI tests to verify they fail**
 
 Run:
 
@@ -1463,7 +1463,7 @@ go test ./internal/cli -run 'TestRunDiscover|TestRunMap' -count=1
 
 Expected: FAIL because `discover` and `map` commands do not exist.
 
-- [ ] **Step 3: Add CLI command cases**
+- [x] **Step 3: Add CLI command cases**
 
 In `internal/cli/cli.go`, add `discover` and `map` cases before `mcp`:
 
@@ -1528,7 +1528,7 @@ case "map":
 	return printJSON(stdout, stderr, result)
 ```
 
-- [ ] **Step 4: Add CLI helpers**
+- [x] **Step 4: Add CLI helpers**
 
 Add these helpers to `internal/cli/cli.go`:
 
@@ -1576,7 +1576,7 @@ func printJSON(stdout io.Writer, stderr io.Writer, value any) int {
 }
 ```
 
-- [ ] **Step 5: Run CLI tests**
+- [x] **Step 5: Run CLI tests**
 
 Run:
 
@@ -1586,7 +1586,7 @@ go test ./internal/cli -count=1
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit CLI discovery commands**
+- [x] **Step 6: Commit CLI discovery commands**
 
 Run:
 
@@ -1601,7 +1601,7 @@ git commit -m "feat: expose discovery in cli"
 - Modify: `internal/mcp/server_test.go`
 - Modify: `internal/mcp/server.go`
 
-- [ ] **Step 1: Write failing MCP tests**
+- [x] **Step 1: Write failing MCP tests**
 
 Update `TestServerHandlesToolsList` and `TestToolsListIncludesConcreteSchemasForImplementedTools` to include `argos_discover` and `argos_map`.
 
@@ -1661,7 +1661,7 @@ func TestToolCallArgosDiscoverWithoutIndexReturnsToolError(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run MCP tests to verify they fail**
+- [x] **Step 2: Run MCP tests to verify they fail**
 
 Run:
 
@@ -1671,7 +1671,7 @@ go test ./internal/mcp -run 'TestServerHandlesToolsList|TestToolsListIncludesCon
 
 Expected: FAIL because MCP tools do not exist.
 
-- [ ] **Step 3: Add MCP tool call cases**
+- [x] **Step 3: Add MCP tool call cases**
 
 In `internal/mcp/server.go`, add cases to `callTool` before `get_knowledge_item`:
 
@@ -1718,7 +1718,7 @@ case "argos_map":
 	return result, nil, err
 ```
 
-- [ ] **Step 4: Add MCP schemas**
+- [x] **Step 4: Add MCP schemas**
 
 Add tool definitions to `tools()`:
 
@@ -1765,7 +1765,7 @@ func booleanProperty(description string) map[string]any {
 }
 ```
 
-- [ ] **Step 5: Run MCP tests**
+- [x] **Step 5: Run MCP tests**
 
 Run:
 
@@ -1775,7 +1775,7 @@ go test ./internal/mcp -count=1
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit MCP discovery tools**
+- [x] **Step 6: Commit MCP discovery tools**
 
 Run:
 
@@ -1792,7 +1792,7 @@ git commit -m "feat: expose discovery over mcp"
 - Modify: `internal/adapters/adapters_test.go`
 - Modify: `internal/adapters/adapters.go`
 
-- [ ] **Step 1: Update context recommendation tests**
+- [x] **Step 1: Update context recommendation tests**
 
 In `TestContextRecommendationsOnlyUseCallableTools`, add:
 
@@ -1822,7 +1822,7 @@ func TestContextRecommendsDiscoveryForBroadWork(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Implement context recommendations**
+- [x] **Step 2: Implement context recommendations**
 
 Update `Context` in `internal/query/query.go` so it returns:
 
@@ -1838,7 +1838,7 @@ if req.Phase == "planning" || strings.Contains(strings.ToLower(req.Task), "under
 
 Return `calls` as `RecommendedNextCalls`.
 
-- [ ] **Step 3: Update adapter contract tests**
+- [x] **Step 3: Update adapter contract tests**
 
 In `internal/adapters/adapters_test.go`, add these expected strings to `TestRenderedAdaptersIncludeStableKnowledgeContract`:
 
@@ -1856,7 +1856,7 @@ Update the old expectation:
 
 to the new explicit `get_knowledge_item` wording.
 
-- [ ] **Step 4: Update adapter rendering**
+- [x] **Step 4: Update adapter rendering**
 
 In `internal/adapters/adapters.go`, update `renderMarkdown` Work Protocol:
 
@@ -1870,7 +1870,7 @@ In `internal/adapters/adapters.go`, update `renderMarkdown` Work Protocol:
 7. Cite Argos knowledge IDs used in final responses.
 ```
 
-- [ ] **Step 5: Run query and adapter tests**
+- [x] **Step 5: Run query and adapter tests**
 
 Run:
 
@@ -1880,7 +1880,7 @@ go test ./internal/query ./internal/adapters -count=1
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit context and adapter updates**
+- [x] **Step 6: Commit context and adapter updates**
 
 Run:
 
@@ -1894,7 +1894,7 @@ git commit -m "feat: route agents through discovery"
 **Files:**
 - Modify: `README.md`
 
-- [ ] **Step 1: Add README discovery section**
+- [x] **Step 1: Add README discovery section**
 
 After the Agent Experience section, add:
 
@@ -1930,7 +1930,7 @@ Coverage states:
 - `none`: proceed without Argos-specific claims and do not cite Argos knowledge.
 ```
 
-- [ ] **Step 2: Update MCP tool list**
+- [x] **Step 2: Update MCP tool list**
 
 In README MCP section, add:
 
@@ -1944,7 +1944,7 @@ In README MCP section, add:
   `include_deprecated`.
 ```
 
-- [ ] **Step 3: Update command list**
+- [x] **Step 3: Update command list**
 
 Add:
 
@@ -1953,7 +1953,7 @@ argos discover --json --project <project> --task <task>
 argos map --json --project <project>
 ```
 
-- [ ] **Step 4: Verify README text**
+- [x] **Step 4: Verify README text**
 
 Run:
 
@@ -1963,7 +1963,7 @@ rg -n "## Discovery|argos discover|argos map|coverage|without Ollama|argos_disco
 
 Expected: all new Discovery v1 references are found.
 
-- [ ] **Step 5: Commit docs**
+- [x] **Step 5: Commit docs**
 
 Run:
 
@@ -1977,7 +1977,7 @@ git commit -m "docs: document discovery workflow"
 **Files:**
 - Verify all changed files.
 
-- [ ] **Step 1: Format Go files**
+- [x] **Step 1: Format Go files**
 
 Run:
 
@@ -1987,7 +1987,7 @@ gofmt -w internal/index/store.go internal/index/store_test.go internal/query/que
 
 Expected: command exits 0.
 
-- [ ] **Step 2: Run focused package tests**
+- [x] **Step 2: Run focused package tests**
 
 Run:
 
@@ -1997,7 +1997,7 @@ go test ./internal/index ./internal/query ./internal/cli ./internal/mcp ./intern
 
 Expected: PASS.
 
-- [ ] **Step 3: Run full test suite**
+- [x] **Step 3: Run full test suite**
 
 Run:
 
@@ -2007,7 +2007,7 @@ go test ./...
 
 Expected: PASS.
 
-- [ ] **Step 4: Run vet**
+- [x] **Step 4: Run vet**
 
 Run:
 
@@ -2017,7 +2017,7 @@ go vet ./...
 
 Expected: exit 0.
 
-- [ ] **Step 5: Check diff hygiene**
+- [x] **Step 5: Check diff hygiene**
 
 Run:
 
@@ -2027,7 +2027,7 @@ git diff --check
 
 Expected: exit 0.
 
-- [ ] **Step 6: Verify no unimplemented tools are recommended**
+- [x] **Step 6: Verify no unimplemented tools are recommended**
 
 Run:
 
@@ -2037,7 +2037,7 @@ rg -n "argos_requirements|argos_risks|argos_operations" internal README.md docs/
 
 Expected: only historical design/spec references may appear; generated adapters, query recommendations, README Discovery docs, and MCP tool list must not advertise these as callable tools.
 
-- [ ] **Step 7: Inspect final status**
+- [x] **Step 7: Inspect final status**
 
 Run:
 

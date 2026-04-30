@@ -21,7 +21,7 @@
 **Files:**
 - Modify: `internal/adapters/adapters_test.go`
 
-- [ ] **Step 1: Replace the current single-output test with a table-driven contract test**
+- [x] **Step 1: Replace the current single-output test with a table-driven contract test**
 
 Replace `TestRenderAGENTSIncludesProgressiveProtocol` with:
 
@@ -72,7 +72,7 @@ func TestRenderedAdaptersIncludeStableKnowledgeContract(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Keep unsupported-tool guardrails**
+- [x] **Step 2: Keep unsupported-tool guardrails**
 
 Add this test after the new table-driven contract test:
 
@@ -93,7 +93,7 @@ func TestRenderedAdaptersDoNotAdvertiseUnimplementedWorkflowTools(t *testing.T) 
 }
 ```
 
-- [ ] **Step 3: Run the focused test and verify it fails**
+- [x] **Step 3: Run the focused test and verify it fails**
 
 Run:
 
@@ -103,7 +103,7 @@ go test ./internal/adapters -run 'TestRenderedAdapters' -count=1
 
 Expected: FAIL because the current rendered adapters do not include the stronger contract strings.
 
-- [ ] **Step 4: Commit the failing tests**
+- [x] **Step 4: Commit the failing tests**
 
 Run:
 
@@ -117,7 +117,7 @@ git commit -m "test: define adapter knowledge contract"
 **Files:**
 - Modify: `internal/adapters/adapters.go`
 
-- [ ] **Step 1: Replace `renderMarkdown` with contract sections**
+- [x] **Step 1: Replace `renderMarkdown` with contract sections**
 
 Update `renderMarkdown` to this shape:
 
@@ -159,7 +159,7 @@ Official knowledge should not be changed without the user's explicit approval.
 }
 ```
 
-- [ ] **Step 2: Run the focused adapter tests**
+- [x] **Step 2: Run the focused adapter tests**
 
 Run:
 
@@ -169,7 +169,7 @@ go test ./internal/adapters -run 'TestRenderedAdapters' -count=1
 
 Expected: PASS.
 
-- [ ] **Step 3: Run all adapter tests**
+- [x] **Step 3: Run all adapter tests**
 
 Run:
 
@@ -179,7 +179,7 @@ go test ./internal/adapters -count=1
 
 Expected: PASS.
 
-- [ ] **Step 4: Commit the renderer change**
+- [x] **Step 4: Commit the renderer change**
 
 Run:
 
@@ -193,7 +193,7 @@ git commit -m "feat: strengthen generated adapter contract"
 **Files:**
 - Modify: `internal/adapters/adapters_test.go`
 
-- [ ] **Step 1: Add a Cursor-specific wrapper test**
+- [x] **Step 1: Add a Cursor-specific wrapper test**
 
 Add this test near the adapter rendering tests:
 
@@ -216,7 +216,7 @@ func TestRenderCursorRuleKeepsCursorFrontmatter(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run the Cursor wrapper test**
+- [x] **Step 2: Run the Cursor wrapper test**
 
 Run:
 
@@ -226,7 +226,7 @@ go test ./internal/adapters -run TestRenderCursorRuleKeepsCursorFrontmatter -cou
 
 Expected: PASS.
 
-- [ ] **Step 3: Commit the wrapper test**
+- [x] **Step 3: Commit the wrapper test**
 
 Run:
 
@@ -240,7 +240,7 @@ git commit -m "test: cover cursor adapter wrapper"
 **Files:**
 - Modify: `README.md`
 
-- [ ] **Step 1: Update the Agent Experience section**
+- [x] **Step 1: Update the Agent Experience section**
 
 In `README.md`, keep the existing integration-path list and add this paragraph after the retrieval order block:
 
@@ -251,7 +251,7 @@ JSON or Markdown source, load full knowledge only when routed, and cite Argos
 knowledge IDs that informed final responses.
 ```
 
-- [ ] **Step 2: Verify the README contains the contract summary**
+- [x] **Step 2: Verify the README contains the contract summary**
 
 Run:
 
@@ -261,7 +261,7 @@ rg -n "Generated adapters define a minimum contract|preserve host workflow contr
 
 Expected: the new paragraph is matched.
 
-- [ ] **Step 3: Commit the docs alignment**
+- [x] **Step 3: Commit the docs alignment**
 
 Run:
 
@@ -275,7 +275,7 @@ git commit -m "docs: describe adapter contract"
 **Files:**
 - Verify all changed files.
 
-- [ ] **Step 1: Format Go files**
+- [x] **Step 1: Format Go files**
 
 Run:
 
@@ -285,7 +285,7 @@ gofmt -w internal/adapters/adapters.go internal/adapters/adapters_test.go
 
 Expected: command exits 0.
 
-- [ ] **Step 2: Run full tests**
+- [x] **Step 2: Run full tests**
 
 Run:
 
@@ -295,7 +295,7 @@ go test ./...
 
 Expected: PASS for all packages.
 
-- [ ] **Step 3: Run vet**
+- [x] **Step 3: Run vet**
 
 Run:
 
@@ -305,7 +305,7 @@ go vet ./...
 
 Expected: exit 0.
 
-- [ ] **Step 4: Check diff hygiene**
+- [x] **Step 4: Check diff hygiene**
 
 Run:
 
@@ -315,7 +315,7 @@ git diff --check
 
 Expected: exit 0.
 
-- [ ] **Step 5: Commit formatting-only changes if any exist**
+- [x] **Step 5: Commit formatting-only changes if any exist**
 
 Run:
 
