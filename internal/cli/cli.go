@@ -116,13 +116,68 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			Phase:   *phase,
 			Task:    *task,
 		})
-		body, err := json.MarshalIndent(result, "", "  ")
-		if err != nil {
-			fmt.Fprintf(stderr, "marshal context response: %v\n", err)
+		return printJSON(stdout, stderr, result)
+	case "discover":
+		flags := flag.NewFlagSet("discover", flag.ContinueOnError)
+		flags.SetOutput(stderr)
+		jsonOut := flags.Bool("json", false, "print JSON output")
+		project := flags.String("project", "", "project id")
+		phase := flags.String("phase", "", "workflow phase")
+		task := flags.String("task", "", "task description")
+		queryText := flags.String("query", "", "search query")
+		var files multiValueFlag
+		flags.Var(&files, "files", "file path to match; may be repeated")
+		if err := flags.Parse(args[1:]); err != nil {
+			return 2
+		}
+		if !*jsonOut {
+			fmt.Fprintln(stderr, "discover: --json is required")
+			return 2
+		}
+		store, closeStore, available := openIndexStore(stderr)
+		if !available {
 			return 1
 		}
-		fmt.Fprintln(stdout, string(body))
-		return 0
+		defer closeStore()
+		result, err := query.New(store).Discover(query.DiscoverRequest{
+			Project: *project,
+			Phase:   *phase,
+			Task:    *task,
+			Query:   *queryText,
+			Files:   files,
+		})
+		if err != nil {
+			fmt.Fprintf(stderr, "discover: %v\n", err)
+			return 1
+		}
+		return printJSON(stdout, stderr, result)
+	case "map":
+		flags := flag.NewFlagSet("map", flag.ContinueOnError)
+		flags.SetOutput(stderr)
+		jsonOut := flags.Bool("json", false, "print JSON output")
+		project := flags.String("project", "", "project id")
+		domain := flags.String("domain", "", "domain filter")
+		if err := flags.Parse(args[1:]); err != nil {
+			return 2
+		}
+		if !*jsonOut {
+			fmt.Fprintln(stderr, "map: --json is required")
+			return 2
+		}
+		store, closeStore, available := openIndexStore(stderr)
+		if !available {
+			return 1
+		}
+		defer closeStore()
+		result, err := query.New(store).Map(query.MapRequest{
+			Project: *project,
+			Domain:  *domain,
+		})
+		if err != nil {
+			fmt.Fprintf(stderr, "map: %v\n", err)
+			return 1
+		}
+		return printJSON(stdout, stderr, result)
 	case "mcp":
 		root, err := os.Getwd()
 		if err != nil {
@@ -168,6 +223,56 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		printUsage(stderr)
 		return 2
 	}
+}
+
+type multiValueFlag []string
+
+func (f *multiValueFlag) String() string {
+	return strings.Join(*f, ",")
+}
+
+func (f *multiValueFlag) Set(value string) error {
+	*f = append(*f, value)
+	return nil
+}
+
+func openIndexStore(stderr io.Writer) (*index.Store, func(), bool) {
+	root, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(stderr, "get current directory: %v\n", err)
+		return nil, func() {}, false
+	}
+
+	dbPath := filepath.Join(root, "argos", "index.db")
+	info, err := os.Stat(dbPath)
+	if err != nil || !info.Mode().IsRegular() {
+		fmt.Fprintln(stderr, "index not available: run argos index first")
+		return nil, func() {}, false
+	}
+
+	store, err := index.Open(dbPath)
+	if err != nil {
+		fmt.Fprintln(stderr, "index not available: run argos index first")
+		return nil, func() {}, false
+	}
+	if err := store.CheckSchema(); err != nil {
+		_ = store.Close()
+		fmt.Fprintln(stderr, "index not available: run argos index first")
+		return nil, func() {}, false
+	}
+	return store, func() {
+		_ = store.Close()
+	}, true
+}
+
+func printJSON(stdout io.Writer, stderr io.Writer, value any) int {
+	body, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		fmt.Fprintf(stderr, "marshal JSON response: %v\n", err)
+		return 1
+	}
+	fmt.Fprintln(stdout, string(body))
+	return 0
 }
 
 func openMCPServer(root string) (*mcp.Server, func(), bool) {
@@ -288,6 +393,8 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  index")
 	fmt.Fprintln(w, "  install-adapters")
 	fmt.Fprintln(w, "  context")
+	fmt.Fprintln(w, "  discover")
+	fmt.Fprintln(w, "  map")
 	fmt.Fprintln(w, "  mcp")
 	fmt.Fprintln(w, "  promote")
 }

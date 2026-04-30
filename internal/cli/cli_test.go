@@ -248,6 +248,84 @@ func TestRunIndexIncludesOfficialPackages(t *testing.T) {
 	}
 }
 
+func TestRunDiscoverReturnsJSONRoutes(t *testing.T) {
+	root := t.TempDir()
+	writeCLIDiscoveryWorkspace(t, root)
+	chdir(t, root)
+	if code := Run([]string{"index"}, io.Discard, io.Discard); code != 0 {
+		t.Fatalf("index failed with code %d", code)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{"discover", "--json", "--project", "mall-api", "--phase", "implementation", "--task", "add refresh token endpoint", "--query", "refresh token", "--files", "internal/auth/session.go"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stderr=%q", code, stderr.String())
+	}
+	var result struct {
+		Coverage struct {
+			Status string `json:"status"`
+		} `json:"coverage"`
+		Items []struct {
+			ID   string `json:"id"`
+			Body string `json:"body"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, stdout.String())
+	}
+	if result.Coverage.Status != "strong" {
+		t.Fatalf("expected strong coverage: %s", stdout.String())
+	}
+	if len(result.Items) == 0 || result.Items[0].ID != "rule:backend.auth.v1" {
+		t.Fatalf("expected auth rule: %s", stdout.String())
+	}
+	if strings.Contains(stdout.String(), "Full body implementation detail") {
+		t.Fatalf("discover should not print full body: %s", stdout.String())
+	}
+}
+
+func TestRunMapReturnsJSONInventory(t *testing.T) {
+	root := t.TempDir()
+	writeCLIDiscoveryWorkspace(t, root)
+	chdir(t, root)
+	if code := Run([]string{"index"}, io.Discard, io.Discard); code != 0 {
+		t.Fatalf("index failed with code %d", code)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{"map", "--json", "--project", "mall-api", "--domain", "backend"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stderr=%q", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"packages"`) || !strings.Contains(stdout.String(), `"rule"`) {
+		t.Fatalf("expected inventory JSON: %s", stdout.String())
+	}
+	if strings.Contains(stdout.String(), "Full body implementation detail") {
+		t.Fatalf("map should not print full body: %s", stdout.String())
+	}
+}
+
+func TestRunDiscoverRequiresIndex(t *testing.T) {
+	root := t.TempDir()
+	writeCLIDiscoveryWorkspace(t, root)
+	chdir(t, root)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{"discover", "--json", "--project", "mall-api", "--query", "auth"}, &stdout, &stderr)
+
+	if code != 1 {
+		t.Fatalf("expected exit code 1, got %d", code)
+	}
+	if !strings.Contains(stderr.String(), "index not available: run argos index first") {
+		t.Fatalf("unexpected stderr: %q", stderr.String())
+	}
+}
+
 func TestRunIndexRejectsInvalidKnowledgeWithoutReplacingExistingIndex(t *testing.T) {
 	root := t.TempDir()
 	writeCLIFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend]
@@ -660,6 +738,40 @@ business_domains: [account]
 `)
 	writeCLIFile(t, root, "knowledge/projects.yaml", "projects: []\n")
 	writeCLIFile(t, root, "knowledge/types.yaml", "types: [rule, package]\n")
+}
+
+func writeCLIDiscoveryWorkspace(t *testing.T, root string) {
+	t.Helper()
+	writeCLIFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend, security]
+business_domains: [account]
+`)
+	writeCLIFile(t, root, "knowledge/projects.yaml", `projects:
+  - id: mall-api
+    name: Mall API
+    path: services/mall-api
+    tech_domains: [backend, security]
+    business_domains: [account]
+`)
+	writeCLIFile(t, root, "knowledge/types.yaml", "types: [rule, package]\n")
+	writeCLIFile(t, root, "knowledge/items/backend/auth.md", `---
+id: rule:backend.auth.v1
+title: Refresh token auth rule
+type: rule
+tech_domains: [backend, security]
+business_domains: [account]
+projects: [mall-api]
+status: active
+priority: must
+applies_to:
+  files: ["internal/auth/**"]
+updated_at: 2026-04-29
+tags: [auth, refresh-token]
+---
+Refresh token auth guidance.
+
+Full body implementation detail: refresh token endpoints must rotate tokens and require auth middleware.
+`)
+	writeCLIFile(t, root, "knowledge/packages/backend/auth-refresh/KNOWLEDGE.md", validCLIPackage("package:backend.auth-refresh.v1"))
 }
 
 func validCLIPackage(id string) string {
