@@ -39,6 +39,10 @@ type Input struct {
 
 type Expected struct {
 	Coverage                         string         `json:"coverage"`
+	ActionAuthority                  string         `json:"action_authority"`
+	ActionLoad                       string         `json:"action_load"`
+	ActionCite                       string         `json:"action_cite"`
+	ActionClaim                      string         `json:"action_claim"`
 	TopID                            string         `json:"top_id"`
 	IncludeIDs                       []string       `json:"include_ids"`
 	ExcludeIDs                       []string       `json:"exclude_ids"`

@@ -314,6 +314,9 @@ func TestToolCallArgosDiscoverReturnsRoutes(t *testing.T) {
 	if !strings.Contains(text, `"coverage"`) || !strings.Contains(text, `"items"`) {
 		t.Fatalf("expected coverage and items in discover response: %s", text)
 	}
+	if !strings.Contains(text, `"action_policy"`) || !strings.Contains(text, `"authority": "strong"`) {
+		t.Fatalf("expected action policy in discover response: %s", text)
+	}
 	if strings.Contains(text, `"body"`) {
 		t.Fatalf("discover should not return full body: %s", text)
 	}
@@ -337,6 +340,9 @@ func TestToolCallArgosMapReturnsInventory(t *testing.T) {
 	text := firstContentText(t, result)
 	if !strings.Contains(text, `"inventory"`) {
 		t.Fatalf("expected inventory in map response: %s", text)
+	}
+	if !strings.Contains(text, `"action_policy"`) || !strings.Contains(text, `"authority": "inventory"`) {
+		t.Fatalf("expected inventory action policy in map response: %s", text)
 	}
 	if strings.Contains(text, `"body"`) {
 		t.Fatalf("map should not return full body: %s", text)

@@ -42,6 +42,9 @@ func TestGoldenCLIDiscoverMatchesQueryBehavior(t *testing.T) {
 	if result.Coverage.Status != tc.Expected.Coverage {
 		t.Fatalf("expected coverage %q, got %#v", tc.Expected.Coverage, result.Coverage)
 	}
+	if result.ActionPolicy.Authority != tc.Expected.ActionAuthority {
+		t.Fatalf("expected action authority %q, got %#v", tc.Expected.ActionAuthority, result.ActionPolicy)
+	}
 	if !containsGoldenDiscoveryID(result.Items, tc.Expected.IncludeIDs[0]) {
 		t.Fatalf("expected ID %s in %#v", tc.Expected.IncludeIDs[0], result.Items)
 	}
@@ -67,6 +70,9 @@ func TestGoldenCLIMapMatchesQueryBehavior(t *testing.T) {
 	var result query.MapResponse
 	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 		t.Fatalf("parse map JSON: %v\n%s", err, stdout.String())
+	}
+	if result.ActionPolicy.Authority != tc.Expected.ActionAuthority {
+		t.Fatalf("expected action authority %q, got %#v", tc.Expected.ActionAuthority, result.ActionPolicy)
 	}
 	for typ, min := range tc.Expected.InventoryTypesMin {
 		if result.Inventory.Types[typ] < min {

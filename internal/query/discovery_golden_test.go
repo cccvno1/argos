@@ -34,6 +34,7 @@ func TestGoldenDiscoveryCases(t *testing.T) {
 				t.Fatalf("Discover returned error: %v", err)
 			}
 			assertCoverage(t, result.Coverage, tc.Expected.Coverage, result.Items)
+			assertActionPolicyMatchesExpected(t, result.ActionPolicy, tc.Expected)
 			assertDiscoveryIDs(t, result.Items, tc.Expected.IncludeIDs, tc.Expected.ExcludeIDs)
 			assertTopID(t, result.Items, tc.Expected.TopID)
 			assertNoDiscoveryBodies(t, result.Items, tc.Expected.NoBodies)
@@ -61,6 +62,7 @@ func TestGoldenMapCases(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Map returned error: %v", err)
 			}
+			assertActionPolicyMatchesExpected(t, result.ActionPolicy, tc.Expected)
 			assertInventoryMinimums(t, result.Inventory.Types, tc.Expected.InventoryTypesMin)
 			assertStringIncludes(t, result.Inventory.Domains, tc.Expected.IncludeDomains)
 			assertStringIncludes(t, result.Inventory.Tags, tc.Expected.IncludeTags)
@@ -83,6 +85,7 @@ func TestGoldenMapEmptyCase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Map returned error: %v", err)
 	}
+	assertActionPolicyMatchesExpected(t, result.ActionPolicy, tc.Expected)
 	if tc.Expected.GroupsEmpty && len(result.Groups) != 0 {
 		t.Fatalf("expected empty groups, got %#v", result.Groups)
 	}
@@ -99,6 +102,7 @@ func TestGoldenDeprecatedMapCase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Map returned error: %v", err)
 	}
+	assertActionPolicyMatchesExpected(t, result.ActionPolicy, tc.Expected)
 	assertMapIDs(t, result.Groups, []string{tc.Expected.IncludeDeprecatedIDWhenRequested}, nil)
 }
 
@@ -144,6 +148,20 @@ func assertCoverage(t *testing.T, got Coverage, want string, items []DiscoveryIt
 	if want != "" && got.Status != want {
 		t.Fatalf("expected coverage %q, got %#v with items %#v", want, got, items)
 	}
+}
+
+func assertActionPolicyMatchesExpected(t *testing.T, got ActionPolicy, expected discoverytest.Expected) {
+	t.Helper()
+	if expected.ActionAuthority == "" {
+		return
+	}
+	want := ActionPolicy{
+		Authority: expected.ActionAuthority,
+		Load:      expected.ActionLoad,
+		Cite:      expected.ActionCite,
+		Claim:     expected.ActionClaim,
+	}
+	assertActionPolicy(t, got, want)
 }
 
 func assertDiscoveryIDs(t *testing.T, items []DiscoveryItem, include []string, exclude []string) {

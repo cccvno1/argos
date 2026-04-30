@@ -5,6 +5,10 @@
       "operation": "map",
       "input": {"project": "mall-api"},
       "expected": {
+        "action_authority": "inventory",
+        "action_load": "forbidden",
+        "action_cite": "forbidden",
+        "action_claim": "forbidden",
         "inventory_types_min": {"rule": 2, "package": 1},
         "include_domains": ["backend", "security"],
         "include_tags": ["auth", "refresh-token"],
@@ -17,13 +21,24 @@
       "fixture": "empty",
       "operation": "map-empty",
       "input": {"project": "unknown-api"},
-      "expected": {"groups_empty": true, "no_bodies": true}
+      "expected": {
+        "action_authority": "inventory",
+        "action_load": "forbidden",
+        "action_cite": "forbidden",
+        "action_claim": "forbidden",
+        "groups_empty": true,
+        "no_bodies": true
+      }
     },
     {
       "id": "map_hides_deprecated_by_default",
       "operation": "map",
       "input": {"project": "mall-api"},
       "expected": {
+        "action_authority": "inventory",
+        "action_load": "forbidden",
+        "action_cite": "forbidden",
+        "action_claim": "forbidden",
         "exclude_ids": ["rule:backend.deprecated-auth.v1"],
         "include_deprecated_id_when_requested": "rule:backend.deprecated-auth.v1",
         "no_bodies": true
@@ -34,6 +49,10 @@
       "operation": "map",
       "input": {"project": "mall-api"},
       "expected": {
+        "action_authority": "inventory",
+        "action_load": "forbidden",
+        "action_cite": "forbidden",
+        "action_claim": "forbidden",
         "include_ids": ["reference:backend.global-refresh.v1"],
         "exclude_ids": ["rule:warehouse.auth.v1"],
         "no_bodies": true
@@ -52,6 +71,10 @@
       },
       "expected": {
         "coverage": "strong",
+        "action_authority": "strong",
+        "action_load": "recommended",
+        "action_cite": "after_loaded_and_used",
+        "action_claim": "allowed",
         "top_id": "rule:backend.auth-refresh.v1",
         "include_ids": ["rule:backend.auth-refresh.v1", "decision:backend.session-renewal.v1"],
         "exclude_ids": ["rule:backend.deprecated-auth.v1"],
@@ -70,6 +93,10 @@
       },
       "expected": {
         "coverage": "strong",
+        "action_authority": "strong",
+        "action_load": "recommended",
+        "action_cite": "after_loaded_and_used",
+        "action_claim": "allowed",
         "include_ids": ["rule:backend.auth-refresh.v1"],
         "exclude_ids": ["reference:backend.cache-policy.v1"],
         "no_bodies": true
@@ -86,6 +113,10 @@
       },
       "expected": {
         "coverage": "strong",
+        "action_authority": "strong",
+        "action_load": "recommended",
+        "action_cite": "after_loaded_and_used",
+        "action_claim": "allowed",
         "include_ids": ["rule:backend.auth-refresh.v1"],
         "exclude_ids": ["reference:backend.cache-policy.v1"],
         "no_bodies": true
@@ -104,6 +135,10 @@
       },
       "expected": {
         "coverage": "strong",
+        "action_authority": "strong",
+        "action_load": "recommended",
+        "action_cite": "after_loaded_and_used",
+        "action_claim": "allowed",
         "top_id": "rule:backend.auth-refresh.v1",
         "include_ids": ["rule:backend.generic.v1"],
         "why_contains": ["file scope matched"],
@@ -123,6 +158,10 @@
       },
       "expected": {
         "coverage": "partial",
+        "action_authority": "partial",
+        "action_load": "allowed",
+        "action_cite": "after_loaded_and_used",
+        "action_claim": "must_mention_gap",
         "include_ids": ["reference:backend.cache-policy.v1"],
         "require_missing_hints": true,
         "no_bodies": true
@@ -140,6 +179,10 @@
       },
       "expected": {
         "coverage": "partial",
+        "action_authority": "partial",
+        "action_load": "allowed",
+        "action_cite": "after_loaded_and_used",
+        "action_claim": "must_mention_gap",
         "include_ids": ["lesson:backend.auth-debug.v1"],
         "require_missing_hints": true,
         "no_bodies": true
@@ -158,6 +201,10 @@
       },
       "expected": {
         "coverage": "partial",
+        "action_authority": "partial",
+        "action_load": "allowed",
+        "action_cite": "after_loaded_and_used",
+        "action_claim": "must_mention_gap",
         "include_ids": ["package:backend.auth-refresh.v1"],
         "exclude_ids": ["references/example.md"],
         "no_bodies": true
@@ -175,6 +222,10 @@
       },
       "expected": {
         "coverage": "weak",
+        "action_authority": "weak",
+        "action_load": "forbidden",
+        "action_cite": "forbidden",
+        "action_claim": "forbidden",
         "forbid_next_call_tools": ["get_knowledge_item", "cite_knowledge"],
         "no_bodies": true
       }
@@ -192,6 +243,10 @@
       },
       "expected": {
         "coverage": "weak",
+        "action_authority": "weak",
+        "action_load": "forbidden",
+        "action_cite": "forbidden",
+        "action_claim": "forbidden",
         "forbid_next_call_tools": ["get_knowledge_item", "cite_knowledge"],
         "no_bodies": true
       }
@@ -208,6 +263,10 @@
       },
       "expected": {
         "coverage": "none",
+        "action_authority": "none",
+        "action_load": "forbidden",
+        "action_cite": "forbidden",
+        "action_claim": "forbidden",
         "items_empty": true,
         "forbid_next_call_tools": ["get_knowledge_item", "cite_knowledge"],
         "no_bodies": true
@@ -225,6 +284,10 @@
       },
       "expected": {
         "coverage": "none",
+        "action_authority": "none",
+        "action_load": "forbidden",
+        "action_cite": "forbidden",
+        "action_claim": "forbidden",
         "exclude_ids": ["rule:warehouse.auth.v1"],
         "forbid_next_call_tools": ["get_knowledge_item", "cite_knowledge"],
         "no_bodies": true
@@ -243,6 +306,10 @@
       },
       "expected": {
         "coverage": "none",
+        "action_authority": "none",
+        "action_load": "forbidden",
+        "action_cite": "forbidden",
+        "action_claim": "forbidden",
         "items_empty": true,
         "forbid_next_call_tools": ["get_knowledge_item", "cite_knowledge"],
         "no_bodies": true
@@ -261,6 +328,10 @@
       },
       "expected": {
         "coverage": "strong",
+        "action_authority": "strong",
+        "action_load": "recommended",
+        "action_cite": "after_loaded_and_used",
+        "action_claim": "allowed",
         "include_ids": ["rule:backend.auth-refresh.v1"],
         "load_ids": ["rule:backend.auth-refresh.v1"],
         "cite_ids": ["rule:backend.auth-refresh.v1"],
@@ -280,6 +351,10 @@
       },
       "expected": {
         "coverage": "strong",
+        "action_authority": "strong",
+        "action_load": "recommended",
+        "action_cite": "after_loaded_and_used",
+        "action_claim": "allowed",
         "include_ids": ["rule:backend.auth-refresh.v1"],
         "no_bodies": true
       }
@@ -289,6 +364,10 @@
       "operation": "cli-map",
       "input": {"project": "mall-api"},
       "expected": {
+        "action_authority": "inventory",
+        "action_load": "forbidden",
+        "action_cite": "forbidden",
+        "action_claim": "forbidden",
         "inventory_types_min": {"rule": 2, "package": 1},
         "include_ids": ["package:backend.auth-refresh.v1"],
         "no_bodies": true
