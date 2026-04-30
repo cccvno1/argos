@@ -325,7 +325,7 @@ func TestToolCallArgosDiscoverReturnsRoutes(t *testing.T) {
 	}
 }
 
-func TestToolCallArgosDiscoverNoneReturnsGapCandidates(t *testing.T) {
+func TestToolCallArgosDiscoverNoneReturnsCoverageGaps(t *testing.T) {
 	_, store := discoverytest.BuildIndexedWorkspace(t)
 	defer store.Close()
 	server := NewServerWithStore(store)
@@ -344,14 +344,17 @@ func TestToolCallArgosDiscoverNoneReturnsGapCandidates(t *testing.T) {
 	for _, fragment := range []string{
 		`"coverage"`,
 		`"status": "none"`,
-		`"gap_candidates"`,
-		`"kind": "standard"`,
-		`"authority": "candidate_only"`,
-		`"capture_mode": "proposal_required"`,
+		`"coverage_gaps"`,
+		`"source": "unmatched_intent"`,
+		`"argos_backed": false`,
 	} {
 		if !strings.Contains(text, fragment) {
 			t.Fatalf("expected %q in discover response: %s", fragment, text)
 		}
+	}
+	legacyKey := `"gap_` + `candidates"`
+	if strings.Contains(text, legacyKey) {
+		t.Fatalf("discover should not return legacy gap candidates: %s", text)
 	}
 	if strings.Contains(text, `"body"`) {
 		t.Fatalf("discover should not return full body: %s", text)

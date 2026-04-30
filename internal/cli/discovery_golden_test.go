@@ -58,7 +58,7 @@ func TestGoldenCLIDiscoverMatchesQueryBehavior(t *testing.T) {
 	}
 }
 
-func TestGoldenCLIDiscoverNoneIncludesGapCandidates(t *testing.T) {
+func TestGoldenCLIDiscoverNoneIncludesCoverageGaps(t *testing.T) {
 	root, store := discoverytest.BuildIndexedWorkspace(t)
 	defer store.Close()
 	chdir(t, root)
@@ -84,11 +84,15 @@ func TestGoldenCLIDiscoverNoneIncludesGapCandidates(t *testing.T) {
 	if result.Coverage.Status != "none" {
 		t.Fatalf("expected none coverage, got %#v", result.Coverage)
 	}
-	assertCLIGapCandidateKinds(t, result.GapCandidates, tc.Expected.GapCandidateKinds)
-	for _, candidate := range result.GapCandidates {
-		if candidate.Authority != "candidate_only" {
-			t.Fatalf("expected candidate-only gap candidate, got %#v", candidate)
+	assertCLICoverageGapSources(t, result.CoverageGaps, tc.Expected.CoverageGapSources)
+	for _, gap := range result.CoverageGaps {
+		if gap.ArgosBacked {
+			t.Fatalf("expected CLI coverage gap not to be Argos-backed, got %#v", gap)
 		}
+	}
+	legacyKey := `"gap_` + `candidates"`
+	if strings.Contains(stdout.String(), legacyKey) {
+		t.Fatalf("CLI discover should not return legacy gap candidates: %s", stdout.String())
 	}
 }
 
@@ -158,18 +162,18 @@ func containsGoldenDiscoveryID(items []query.DiscoveryItem, id string) bool {
 	return false
 }
 
-func assertCLIGapCandidateKinds(t *testing.T, got []query.GapCandidate, want []string) {
+func assertCLICoverageGapSources(t *testing.T, got []query.CoverageGap, want []string) {
 	t.Helper()
 	if len(got) != len(want) {
-		t.Fatalf("expected gap candidate kinds %v, got %#v", want, got)
+		t.Fatalf("expected coverage gap sources %v, got %#v", want, got)
 	}
 	seen := map[string]bool{}
-	for _, candidate := range got {
-		seen[candidate.Kind] = true
+	for _, gap := range got {
+		seen[gap.Source] = true
 	}
-	for _, kind := range want {
-		if !seen[kind] {
-			t.Fatalf("expected gap candidate kind %q in %#v", kind, got)
+	for _, source := range want {
+		if !seen[source] {
+			t.Fatalf("expected coverage gap source %q in %#v", source, got)
 		}
 	}
 }
