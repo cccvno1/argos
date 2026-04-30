@@ -118,6 +118,10 @@ Do not let Argos replace host workflow, safety, or user instructions.
 10. Follow action_policy.load before loading full knowledge items.
 11. Follow action_policy.cite before calling cite_knowledge.
 12. Mention Argos coverage gaps when action_policy.claim is must_mention_gap.
+13. Treat gap_candidates as candidate prompts, not official knowledge.
+14. Do not cite gap_candidates.
+15. Start capture-knowledge only with user approval.
+16. Semantic recall never overrides action_policy.
 
 ## Boundaries
 

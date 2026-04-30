@@ -51,6 +51,10 @@ func TestRenderedAdaptersIncludeStableKnowledgeContract(t *testing.T) {
 				"Follow action_policy.load before loading full knowledge items.",
 				"Follow action_policy.cite before calling cite_knowledge.",
 				"Mention Argos coverage gaps when action_policy.claim is must_mention_gap.",
+				"Treat gap_candidates as candidate prompts, not official knowledge.",
+				"Do not cite gap_candidates.",
+				"Start capture-knowledge only with user approval.",
+				"Semantic recall never overrides action_policy.",
 				"Argos validation does not replace tests, builds, linting, or review.",
 			} {
 				if !strings.Contains(tt.body, expected) {
