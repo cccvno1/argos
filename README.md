@@ -88,6 +88,29 @@ Coverage states:
 - `weak`: skim summaries or inspect the map; do not treat results as authority.
 - `none`: proceed without Argos-specific claims and do not cite Argos knowledge.
 
+### Discovery Validation
+
+Discovery has a golden validation harness under `testdata/discovery-golden/`.
+
+Run automated validation with:
+
+```bash
+go test ./internal/discoverytest ./internal/query ./internal/cli ./internal/mcp ./internal/adapters
+```
+
+The golden corpus and `cases.json` verify inventory, strong/partial/weak/none
+coverage, progressive disclosure, citation guardrails, and entrypoint
+consistency.
+
+AI dogfood validation uses:
+
+- `docs/superpowers/checklists/2026-04-30-argos-discovery-dogfood-checklist.md`
+- `docs/superpowers/templates/argos-discovery-dogfood-report.md`
+
+Dogfood runners must use fresh minimal context per case. Do not give runner
+agents expected IDs, expected coverage, prior transcripts, or design history.
+Evaluate reports separately against `testdata/discovery-golden/cases.json`.
+
 ## Knowledge Authoring
 
 Single knowledge items live under `knowledge/items/`.
