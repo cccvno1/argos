@@ -157,11 +157,10 @@ The server supports tool discovery with `tools/list` and implements these
   index. Arguments: `project`, `task_type`, `files`, `limit`.
 - `argos_discover`: returns ranked knowledge routes, coverage, explanations,
   and next calls without full bodies. Arguments: `project`, `phase`, `task`,
-  `query`, `files`, `types`, `tags`, `domains`, `status`, `include_inbox`,
+  `query`, `files`, `types`, `tags`, `domains`, `status`,
   `include_deprecated`, `limit`.
 - `argos_map`: returns project/domain knowledge inventory without full bodies.
-  Arguments: `project`, `domain`, `types`, `include_inbox`,
-  `include_deprecated`.
+  Arguments: `project`, `domain`, `types`, `include_deprecated`.
 - `get_knowledge_item`: fetches one indexed knowledge item including its full
   body. Arguments: `id`.
 - `cite_knowledge`: returns citation metadata for indexed knowledge items and

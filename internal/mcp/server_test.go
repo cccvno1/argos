@@ -88,13 +88,15 @@ func TestToolsListIncludesConcreteSchemasForImplementedTools(t *testing.T) {
 	assertToolSchemaPropertyBounds(t, result.Tools, "argos_standards", "limit", 1, 5)
 	assertToolSchemaDisallowsAdditionalProperties(t, result.Tools, "argos_standards")
 
-	assertToolSchemaHasProperties(t, result.Tools, "argos_discover", []string{"project", "phase", "task", "query", "files", "types", "tags", "domains", "status", "include_inbox", "include_deprecated", "limit"})
+	assertToolSchemaHasProperties(t, result.Tools, "argos_discover", []string{"project", "phase", "task", "query", "files", "types", "tags", "domains", "status", "include_deprecated", "limit"})
+	assertToolSchemaLacksProperty(t, result.Tools, "argos_discover", "include_inbox")
 	assertToolSchemaRequired(t, result.Tools, "argos_discover", []string{"project"})
 	assertToolSchemaAnyOfRequiresOneOf(t, result.Tools, "argos_discover", []string{"task", "query"})
 	assertToolSchemaPropertyBounds(t, result.Tools, "argos_discover", "limit", 1, 20)
 	assertToolSchemaDisallowsAdditionalProperties(t, result.Tools, "argos_discover")
 
-	assertToolSchemaHasProperties(t, result.Tools, "argos_map", []string{"project", "domain", "types", "include_inbox", "include_deprecated"})
+	assertToolSchemaHasProperties(t, result.Tools, "argos_map", []string{"project", "domain", "types", "include_deprecated"})
+	assertToolSchemaLacksProperty(t, result.Tools, "argos_map", "include_inbox")
 	assertToolSchemaRequired(t, result.Tools, "argos_map", []string{"project"})
 	assertToolSchemaDisallowsAdditionalProperties(t, result.Tools, "argos_map")
 
@@ -383,6 +385,20 @@ func TestToolCallArgosDiscoverExplicitLimitOutOfRangeReturnsToolError(t *testing
 	}
 }
 
+func TestToolCallArgosDiscoverRejectsIncludeInboxArgument(t *testing.T) {
+	store := buildMCPTestStore(t)
+	defer store.Close()
+	server := NewServerWithStore(store)
+
+	var out bytes.Buffer
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_discover","arguments":{"project":"mall-api","query":"auth","include_inbox":true}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	assertToolErrorContains(t, out.Bytes(), "invalid arguments for argos_discover")
+}
+
 func TestToolCallArgosMapWithoutIndexReturnsToolError(t *testing.T) {
 	server := NewServer(query.New(nil))
 	var out bytes.Buffer
@@ -393,6 +409,20 @@ func TestToolCallArgosMapWithoutIndexReturnsToolError(t *testing.T) {
 	}
 
 	assertToolErrorContains(t, out.Bytes(), "index not available: run argos index first")
+}
+
+func TestToolCallArgosMapRejectsIncludeInboxArgument(t *testing.T) {
+	store := buildMCPTestStore(t)
+	defer store.Close()
+	server := NewServerWithStore(store)
+
+	var out bytes.Buffer
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_map","arguments":{"project":"mall-api","include_inbox":true}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	assertToolErrorContains(t, out.Bytes(), "invalid arguments for argos_map")
 }
 
 func TestToolCallGetKnowledgeItemReturnsFullBody(t *testing.T) {
@@ -918,6 +948,25 @@ func assertToolSchemaHasProperties(t *testing.T, tools []struct {
 
 	for _, propertyName := range propertyNames {
 		assertToolSchemaHasProperty(t, tools, toolName, propertyName)
+	}
+}
+
+func assertToolSchemaLacksProperty(t *testing.T, tools []struct {
+	Name        string         `json:"name"`
+	InputSchema map[string]any `json:"inputSchema"`
+}, toolName string, propertyName string) {
+	t.Helper()
+
+	tool := findTool(tools, toolName)
+	if tool == nil {
+		t.Fatalf("expected %s tool", toolName)
+	}
+	properties, ok := tool.InputSchema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected %s inputSchema properties object, got %#v", toolName, tool.InputSchema["properties"])
+	}
+	if _, ok := properties[propertyName]; ok {
+		t.Fatalf("expected %s inputSchema to omit property %s, got %#v", toolName, propertyName, properties)
 	}
 }
 

@@ -126,12 +126,34 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		task := flags.String("task", "", "task description")
 		queryText := flags.String("query", "", "search query")
 		var files multiValueFlag
+		var types multiValueFlag
+		var tags multiValueFlag
+		var domains multiValueFlag
+		var statuses multiValueFlag
 		flags.Var(&files, "files", "file path to match; may be repeated")
+		flags.Var(&types, "types", "knowledge item type to include; may be repeated")
+		flags.Var(&tags, "tags", "tag to include; may be repeated")
+		flags.Var(&domains, "domains", "domain to include; may be repeated")
+		flags.Var(&statuses, "status", "status to include; may be repeated")
+		includeDeprecated := flags.Bool("include-deprecated", false, "include deprecated knowledge items")
+		limit := flags.Int("limit", 0, "maximum number of discovery items to return")
 		if err := flags.Parse(args[1:]); err != nil {
 			return 2
 		}
 		if !*jsonOut {
 			fmt.Fprintln(stderr, "discover: --json is required")
+			return 2
+		}
+		if strings.TrimSpace(*project) == "" {
+			fmt.Fprintln(stderr, "discover: --project is required")
+			return 2
+		}
+		if strings.TrimSpace(*task) == "" && strings.TrimSpace(*queryText) == "" {
+			fmt.Fprintln(stderr, "discover: --task or --query is required")
+			return 2
+		}
+		if flagProvided(flags, "limit") && (*limit < 1 || *limit > 20) {
+			fmt.Fprintln(stderr, "discover: --limit must be between 1 and 20")
 			return 2
 		}
 		store, closeStore, available := openIndexStore(stderr)
@@ -140,11 +162,17 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		}
 		defer closeStore()
 		result, err := query.New(store).Discover(query.DiscoverRequest{
-			Project: *project,
-			Phase:   *phase,
-			Task:    *task,
-			Query:   *queryText,
-			Files:   files,
+			Project:           *project,
+			Phase:             *phase,
+			Task:              *task,
+			Query:             *queryText,
+			Files:             files,
+			Types:             types,
+			Tags:              tags,
+			Domains:           domains,
+			Status:            statuses,
+			IncludeDeprecated: *includeDeprecated,
+			Limit:             *limit,
 		})
 		if err != nil {
 			fmt.Fprintf(stderr, "discover: %v\n", err)
@@ -157,11 +185,18 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		jsonOut := flags.Bool("json", false, "print JSON output")
 		project := flags.String("project", "", "project id")
 		domain := flags.String("domain", "", "domain filter")
+		var types multiValueFlag
+		flags.Var(&types, "types", "knowledge item type to include; may be repeated")
+		includeDeprecated := flags.Bool("include-deprecated", false, "include deprecated knowledge items")
 		if err := flags.Parse(args[1:]); err != nil {
 			return 2
 		}
 		if !*jsonOut {
 			fmt.Fprintln(stderr, "map: --json is required")
+			return 2
+		}
+		if strings.TrimSpace(*project) == "" {
+			fmt.Fprintln(stderr, "map: --project is required")
 			return 2
 		}
 		store, closeStore, available := openIndexStore(stderr)
@@ -170,8 +205,10 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		}
 		defer closeStore()
 		result, err := query.New(store).Map(query.MapRequest{
-			Project: *project,
-			Domain:  *domain,
+			Project:           *project,
+			Domain:            *domain,
+			Types:             types,
+			IncludeDeprecated: *includeDeprecated,
 		})
 		if err != nil {
 			fmt.Fprintf(stderr, "map: %v\n", err)
@@ -238,6 +275,16 @@ func (f *multiValueFlag) Set(value string) error {
 	}
 	*f = append(*f, value)
 	return nil
+}
+
+func flagProvided(flags *flag.FlagSet, name string) bool {
+	found := false
+	flags.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			found = true
+		}
+	})
+	return found
 }
 
 func openIndexStore(stderr io.Writer) (*index.Store, func(), bool) {

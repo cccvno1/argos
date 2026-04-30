@@ -39,7 +39,6 @@ type DiscoverRequest struct {
 	Tags              []string `json:"tags"`
 	Domains           []string `json:"domains"`
 	Status            []string `json:"status"`
-	IncludeInbox      bool     `json:"include_inbox"`
 	IncludeDeprecated bool     `json:"include_deprecated"`
 	Limit             int      `json:"limit"`
 }
@@ -48,7 +47,6 @@ type MapRequest struct {
 	Project           string   `json:"project"`
 	Domain            string   `json:"domain"`
 	Types             []string `json:"types"`
-	IncludeInbox      bool     `json:"include_inbox"`
 	IncludeDeprecated bool     `json:"include_deprecated"`
 }
 
@@ -552,9 +550,6 @@ func discoverCandidateAllowed(item knowledge.Item, req DiscoverRequest) bool {
 	if item.Status == "deprecated" && !req.IncludeDeprecated {
 		return false
 	}
-	if item.Status == "inbox" && !req.IncludeInbox {
-		return false
-	}
 	if !projectMatches(item, req.Project) {
 		return false
 	}
@@ -564,24 +559,17 @@ func discoverCandidateAllowed(item knowledge.Item, req DiscoverRequest) bool {
 	if len(req.Status) > 0 && !contains(req.Status, item.Status) {
 		return false
 	}
-	for _, tag := range req.Tags {
-		if !contains(item.Tags, tag) {
-			return false
-		}
+	if len(req.Tags) > 0 && !containsAny(item.Tags, req.Tags) {
+		return false
 	}
-	for _, domain := range req.Domains {
-		if !contains(item.TechDomains, domain) && !contains(item.BusinessDomains, domain) {
-			return false
-		}
+	if len(req.Domains) > 0 && !containsAnyDomain(item, req.Domains) {
+		return false
 	}
 	return true
 }
 
 func mapCandidateAllowed(item knowledge.Item, req MapRequest) bool {
 	if item.Status == "deprecated" && !req.IncludeDeprecated {
-		return false
-	}
-	if item.Status == "inbox" && !req.IncludeInbox {
 		return false
 	}
 	if !projectMatches(item, req.Project) {
@@ -925,6 +913,24 @@ func titleWord(word string) string {
 func contains(values []string, target string) bool {
 	for _, value := range values {
 		if value == target {
+			return true
+		}
+	}
+	return false
+}
+
+func containsAny(values []string, requested []string) bool {
+	for _, value := range requested {
+		if contains(values, value) {
+			return true
+		}
+	}
+	return false
+}
+
+func containsAnyDomain(item knowledge.Item, domains []string) bool {
+	for _, domain := range domains {
+		if contains(item.TechDomains, domain) || contains(item.BusinessDomains, domain) {
 			return true
 		}
 	}

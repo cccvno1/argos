@@ -206,7 +206,6 @@ tools only.
   "tags": ["auth"],
   "domains": ["backend", "security"],
   "status": ["active"],
-  "include_inbox": false,
   "include_deprecated": false,
   "limit": 8
 }
@@ -328,7 +327,6 @@ Weak or empty discovery should include missing knowledge hints when useful:
   "project": "mall-api",
   "domain": "backend",
   "types": ["rule", "decision", "lesson", "runbook", "reference", "package"],
-  "include_inbox": false,
   "include_deprecated": false
 }
 ```
@@ -548,11 +546,14 @@ Discovery uses a deterministic hybrid pipeline:
 Hard filters remove results that should not be considered:
 
 - deprecated knowledge unless `include_deprecated` is true
-- inbox candidates unless `include_inbox` is true
 - non-matching explicit `types`
 - non-matching explicit `tags`
 - non-matching explicit `status`
 - knowledge outside the requested project unless it is global or cross-project
+
+Inbox discovery is out of scope for Discovery v1 because the local discovery
+index contains official knowledge only; inbox candidates remain path-based
+validation and promotion inputs rather than queryable status-based results.
 
 ### Recall Signals
 

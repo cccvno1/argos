@@ -471,7 +471,6 @@ func tools() []tool {
 				"project":            stringProperty("Project identifier."),
 				"domain":             stringProperty("Domain filter."),
 				"types":              stringArrayProperty("Knowledge item types to include."),
-				"include_inbox":      booleanProperty("Include inbox knowledge items."),
 				"include_deprecated": booleanProperty("Include deprecated knowledge items."),
 			}, []string{"project"}),
 		},
@@ -515,7 +514,6 @@ func discoverInputSchema() map[string]any {
 		"tags":               stringArrayProperty("Tags to include."),
 		"domains":            stringArrayProperty("Domains to include."),
 		"status":             stringArrayProperty("Statuses to include."),
-		"include_inbox":      booleanProperty("Include inbox knowledge items."),
 		"include_deprecated": booleanProperty("Include deprecated knowledge items."),
 		"limit":              integerProperty("Maximum number of discovery items to return.", 1, 20),
 	}, []string{"project"})

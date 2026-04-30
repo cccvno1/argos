@@ -320,6 +320,87 @@ func TestRunDiscoverAcceptsRepeatedFiles(t *testing.T) {
 	}
 }
 
+func TestRunDiscoverAcceptsDiscoveryFiltersAndLimit(t *testing.T) {
+	root := t.TempDir()
+	writeCLIDiscoveryWorkspace(t, root)
+	chdir(t, root)
+	if code := Run([]string{"index"}, io.Discard, io.Discard); code != 0 {
+		t.Fatalf("index failed with code %d", code)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{
+		"discover", "--json",
+		"--project", "mall-api",
+		"--query", "auth",
+		"--types", "rule",
+		"--tags", "missing",
+		"--tags", "auth",
+		"--domains", "missing",
+		"--domains", "security",
+		"--status", "active",
+		"--include-deprecated",
+		"--limit", "1",
+	}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stderr=%q", code, stderr.String())
+	}
+	var result struct {
+		Items []struct {
+			ID string `json:"id"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, stdout.String())
+	}
+	if len(result.Items) != 1 || result.Items[0].ID != "rule:backend.auth.v1" {
+		t.Fatalf("expected one filtered auth rule from CLI flags, got %s", stdout.String())
+	}
+}
+
+func TestRunDiscoverRejectsMissingProject(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{"discover", "--json", "--query", "auth"}, &stdout, &stderr)
+
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d", code)
+	}
+	if !strings.Contains(stderr.String(), "discover: --project is required") {
+		t.Fatalf("unexpected stderr: %q", stderr.String())
+	}
+}
+
+func TestRunDiscoverRejectsMissingTaskAndQuery(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{"discover", "--json", "--project", "mall-api"}, &stdout, &stderr)
+
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d", code)
+	}
+	if !strings.Contains(stderr.String(), "discover: --task or --query is required") {
+		t.Fatalf("unexpected stderr: %q", stderr.String())
+	}
+}
+
+func TestRunDiscoverRejectsExplicitLimitOutOfRange(t *testing.T) {
+	for _, limit := range []string{"0", "21"} {
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+		code := Run([]string{"discover", "--json", "--project", "mall-api", "--query", "auth", "--limit", limit}, &stdout, &stderr)
+
+		if code != 2 {
+			t.Fatalf("expected exit code 2 for limit %s, got %d", limit, code)
+		}
+		if !strings.Contains(stderr.String(), "discover: --limit must be between 1 and 20") {
+			t.Fatalf("unexpected stderr for limit %s: %q", limit, stderr.String())
+		}
+	}
+}
+
 func TestRunMapReturnsJSONInventory(t *testing.T) {
 	root := t.TempDir()
 	writeCLIDiscoveryWorkspace(t, root)
@@ -340,6 +421,42 @@ func TestRunMapReturnsJSONInventory(t *testing.T) {
 	}
 	if strings.Contains(stdout.String(), "Full body implementation detail") {
 		t.Fatalf("map should not print full body: %s", stdout.String())
+	}
+}
+
+func TestRunMapAcceptsTypesAndIncludeDeprecated(t *testing.T) {
+	root := t.TempDir()
+	writeCLIDiscoveryWorkspace(t, root)
+	chdir(t, root)
+	if code := Run([]string{"index"}, io.Discard, io.Discard); code != 0 {
+		t.Fatalf("index failed with code %d", code)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{"map", "--json", "--project", "mall-api", "--domain", "backend", "--types", "package", "--include-deprecated"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stderr=%q", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"package": 1`) {
+		t.Fatalf("expected map to honor --types package: %s", stdout.String())
+	}
+	if strings.Contains(stdout.String(), `"rule"`) {
+		t.Fatalf("expected map to filter out rules: %s", stdout.String())
+	}
+}
+
+func TestRunMapRejectsMissingProject(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{"map", "--json", "--domain", "backend"}, &stdout, &stderr)
+
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d", code)
+	}
+	if !strings.Contains(stderr.String(), "map: --project is required") {
+		t.Fatalf("unexpected stderr: %q", stderr.String())
 	}
 }
 

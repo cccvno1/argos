@@ -296,6 +296,97 @@ func TestDiscoverFiltersTypesTagsAndDeprecated(t *testing.T) {
 	}
 }
 
+func TestDiscoverTagsFilterMatchesAnyRequestedTag(t *testing.T) {
+	store := buildDiscoveryTestStore(t)
+	defer store.Close()
+	service := New(store)
+
+	result, err := service.Discover(DiscoverRequest{
+		Project: "mall-api",
+		Query:   "auth",
+		Tags:    []string{"missing", "auth"},
+		Limit:   5,
+	})
+	if err != nil {
+		t.Fatalf("Discover returned error: %v", err)
+	}
+	if !containsDiscoveryItem(result.Items, "rule:backend.auth.v1") {
+		t.Fatalf("expected auth item with one matching requested tag, got %#v", result.Items)
+	}
+}
+
+func TestDiscoverDomainsFilterMatchesAnyRequestedDomain(t *testing.T) {
+	store := buildDiscoveryTestStore(t)
+	defer store.Close()
+	service := New(store)
+
+	result, err := service.Discover(DiscoverRequest{
+		Project: "mall-api",
+		Query:   "auth",
+		Domains: []string{"missing", "security"},
+		Limit:   5,
+	})
+	if err != nil {
+		t.Fatalf("Discover returned error: %v", err)
+	}
+	if !containsDiscoveryItem(result.Items, "rule:backend.auth.v1") {
+		t.Fatalf("expected auth item with one matching requested domain, got %#v", result.Items)
+	}
+}
+
+func TestDiscoverExplicitTagsAndDomainsMustMatchAtLeastOneValuePerField(t *testing.T) {
+	store := buildDiscoveryTestStore(t)
+	defer store.Close()
+	service := New(store)
+
+	for _, tc := range []struct {
+		name string
+		req  DiscoverRequest
+	}{
+		{
+			name: "tags",
+			req: DiscoverRequest{
+				Project: "mall-api",
+				Query:   "auth",
+				Tags:    []string{"missing"},
+				Limit:   5,
+			},
+		},
+		{
+			name: "domains",
+			req: DiscoverRequest{
+				Project: "mall-api",
+				Query:   "auth",
+				Domains: []string{"missing"},
+				Limit:   5,
+			},
+		},
+		{
+			name: "tags and domains",
+			req: DiscoverRequest{
+				Project: "mall-api",
+				Query:   "auth",
+				Tags:    []string{"auth"},
+				Domains: []string{"missing"},
+				Limit:   5,
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := service.Discover(tc.req)
+			if err != nil {
+				t.Fatalf("Discover returned error: %v", err)
+			}
+			if len(result.Items) != 0 {
+				t.Fatalf("expected no items for non-matching explicit filter, got %#v", result.Items)
+			}
+			if result.Coverage.Status == "strong" {
+				t.Fatalf("expected non-strong coverage for non-matching explicit filter, got %#v", result.Coverage)
+			}
+		})
+	}
+}
+
 func TestDiscoverWeakSingleTermGenericLexicalMatchDoesNotProduceStrongCoverageOrLoadCalls(t *testing.T) {
 	store := buildDiscoveryStore(t, []knowledge.Item{{
 		Path:            "knowledge/items/backend/generic-token.md",
@@ -671,6 +762,15 @@ func TestCiteKnowledgeReportsMissingIDs(t *testing.T) {
 	if len(result.Missing) != 1 || result.Missing[0] != "missing.v1" {
 		t.Fatalf("expected missing id, got %#v", result.Missing)
 	}
+}
+
+func containsDiscoveryItem(items []DiscoveryItem, id string) bool {
+	for _, item := range items {
+		if item.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 func ruleWithPriority(id string, priority string) knowledge.Item {
