@@ -288,8 +288,8 @@ func (s *Server) callTool(data json.RawMessage) (toolCallResult, *rpcError, erro
 		if err != nil {
 			return textToolError("invalid arguments for argos_discover: " + err.Error()), nil, nil
 		}
-		if limitProvided && (req.Limit < 0 || req.Limit > 20) {
-			return textToolError("invalid arguments for argos_discover: limit must be between 0 and 20"), nil, nil
+		if limitProvided && (req.Limit < 1 || req.Limit > 20) {
+			return textToolError("invalid arguments for argos_discover: limit must be between 1 and 20"), nil, nil
 		}
 		if s.store == nil {
 			return textToolError("index not available: run argos index first"), nil, nil
@@ -462,20 +462,7 @@ func tools() []tool {
 		{
 			Name:        "argos_discover",
 			Description: "Discover relevant knowledge routes for current work.",
-			InputSchema: objectSchema(map[string]any{
-				"project":            stringProperty("Project identifier."),
-				"phase":              stringProperty("Workflow phase."),
-				"task":               stringProperty("Current task description."),
-				"query":              stringProperty("Search query."),
-				"files":              stringArrayProperty("Files relevant to the current task."),
-				"types":              stringArrayProperty("Knowledge item types to include."),
-				"tags":               stringArrayProperty("Tags to include."),
-				"domains":            stringArrayProperty("Domains to include."),
-				"status":             stringArrayProperty("Statuses to include."),
-				"include_inbox":      booleanProperty("Include inbox knowledge items."),
-				"include_deprecated": booleanProperty("Include deprecated knowledge items."),
-				"limit":              integerProperty("Maximum number of discovery items to return.", 0, 20),
-			}, []string{"project"}),
+			InputSchema: discoverInputSchema(),
 		},
 		{
 			Name:        "argos_map",
@@ -513,6 +500,28 @@ func objectSchema(properties map[string]any, required []string) map[string]any {
 	}
 	if len(required) > 0 {
 		schema["required"] = required
+	}
+	return schema
+}
+
+func discoverInputSchema() map[string]any {
+	schema := objectSchema(map[string]any{
+		"project":            stringProperty("Project identifier."),
+		"phase":              stringProperty("Workflow phase."),
+		"task":               stringProperty("Current task description."),
+		"query":              stringProperty("Search query."),
+		"files":              stringArrayProperty("Files relevant to the current task."),
+		"types":              stringArrayProperty("Knowledge item types to include."),
+		"tags":               stringArrayProperty("Tags to include."),
+		"domains":            stringArrayProperty("Domains to include."),
+		"status":             stringArrayProperty("Statuses to include."),
+		"include_inbox":      booleanProperty("Include inbox knowledge items."),
+		"include_deprecated": booleanProperty("Include deprecated knowledge items."),
+		"limit":              integerProperty("Maximum number of discovery items to return.", 1, 20),
+	}, []string{"project"})
+	schema["anyOf"] = []map[string]any{
+		{"required": []string{"task"}},
+		{"required": []string{"query"}},
 	}
 	return schema
 }

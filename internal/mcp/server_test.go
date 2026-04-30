@@ -90,7 +90,8 @@ func TestToolsListIncludesConcreteSchemasForImplementedTools(t *testing.T) {
 
 	assertToolSchemaHasProperties(t, result.Tools, "argos_discover", []string{"project", "phase", "task", "query", "files", "types", "tags", "domains", "status", "include_inbox", "include_deprecated", "limit"})
 	assertToolSchemaRequired(t, result.Tools, "argos_discover", []string{"project"})
-	assertToolSchemaPropertyBounds(t, result.Tools, "argos_discover", "limit", 0, 20)
+	assertToolSchemaAnyOfRequiresOneOf(t, result.Tools, "argos_discover", []string{"task", "query"})
+	assertToolSchemaPropertyBounds(t, result.Tools, "argos_discover", "limit", 1, 20)
 	assertToolSchemaDisallowsAdditionalProperties(t, result.Tools, "argos_discover")
 
 	assertToolSchemaHasProperties(t, result.Tools, "argos_map", []string{"project", "domain", "types", "include_inbox", "include_deprecated"})
@@ -344,6 +345,49 @@ func TestToolCallArgosDiscoverWithoutIndexReturnsToolError(t *testing.T) {
 	var out bytes.Buffer
 
 	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_discover","arguments":{"project":"mall-api","task":"add refresh token endpoint"}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	assertToolErrorContains(t, out.Bytes(), "index not available: run argos index first")
+}
+
+func TestToolCallArgosDiscoverMissingTaskAndQueryReturnsToolError(t *testing.T) {
+	store := buildMCPTestStore(t)
+	defer store.Close()
+	server := NewServerWithStore(store)
+
+	var out bytes.Buffer
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_discover","arguments":{"project":"mall-api"}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	assertToolErrorContains(t, out.Bytes(), "invalid arguments for argos_discover: task or query is required")
+}
+
+func TestToolCallArgosDiscoverExplicitLimitOutOfRangeReturnsToolError(t *testing.T) {
+	store := buildMCPTestStore(t)
+	defer store.Close()
+	server := NewServerWithStore(store)
+
+	for _, limit := range []int{0, 21} {
+		var out bytes.Buffer
+		line := []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_discover","arguments":{"project":"mall-api","task":"add refresh token endpoint","limit":` + strconv.Itoa(limit) + `}}}`)
+		err := server.HandleLine(line, &out)
+		if err != nil {
+			t.Fatalf("HandleLine returned error for limit %d: %v", limit, err)
+		}
+
+		assertToolErrorContains(t, out.Bytes(), "invalid arguments for argos_discover: limit must be between 1 and 20")
+	}
+}
+
+func TestToolCallArgosMapWithoutIndexReturnsToolError(t *testing.T) {
+	server := NewServer(query.New(nil))
+	var out bytes.Buffer
+
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_map","arguments":{"project":"mall-api"}}}`), &out)
 	if err != nil {
 		t.Fatalf("HandleLine returned error: %v", err)
 	}
@@ -925,6 +969,39 @@ func assertToolSchemaPropertyBounds(t *testing.T, tools []struct {
 	}
 	if got := property["maximum"]; got != float64(maximum) {
 		t.Fatalf("expected %s.%s maximum %d, got %#v", toolName, propertyName, maximum, got)
+	}
+}
+
+func assertToolSchemaAnyOfRequiresOneOf(t *testing.T, tools []struct {
+	Name        string         `json:"name"`
+	InputSchema map[string]any `json:"inputSchema"`
+}, toolName string, propertyNames []string) {
+	t.Helper()
+
+	tool := findTool(tools, toolName)
+	if tool == nil {
+		t.Fatalf("expected %s tool", toolName)
+	}
+	anyOf, ok := tool.InputSchema["anyOf"].([]any)
+	if !ok {
+		t.Fatalf("expected %s inputSchema anyOf array, got %#v", toolName, tool.InputSchema["anyOf"])
+	}
+	if len(anyOf) != len(propertyNames) {
+		t.Fatalf("expected %s anyOf to contain %v, got %#v", toolName, propertyNames, anyOf)
+	}
+	for i, propertyName := range propertyNames {
+		option, ok := anyOf[i].(map[string]any)
+		if !ok {
+			t.Fatalf("expected %s anyOf option %d to be an object, got %#v", toolName, i, anyOf[i])
+		}
+		required, ok := option["required"].([]any)
+		if !ok || len(required) != 1 {
+			t.Fatalf("expected %s anyOf option %d required array, got %#v", toolName, i, option["required"])
+		}
+		got, ok := required[0].(string)
+		if !ok || got != propertyName {
+			t.Fatalf("expected %s anyOf option %d to require %q, got %#v", toolName, i, propertyName, required)
+		}
 	}
 }
 
