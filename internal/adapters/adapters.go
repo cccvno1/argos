@@ -106,10 +106,10 @@ Do not let Argos replace host workflow, safety, or user instructions.
 
 ## Work Protocol
 
-1. Before substantial project work, call or emulate argos_context.
+1. Before substantial project work, call argos_context when available; otherwise follow equivalent adapter or Markdown guidance.
 2. Use argos_map for broad orientation before unfamiliar project work.
 3. Use argos_discover to route current work to relevant shared knowledge.
-4. Before implementation or review, call or emulate argos_standards.
+4. Before implementation or review, call argos_standards when available; otherwise follow equivalent adapter or Markdown guidance.
 5. Follow recommended calls returned by Argos.
 6. Load full knowledge items only through get_knowledge_item when routed to specific IDs or paths.
 7. Cite Argos knowledge IDs used in final responses only after loading and applying them.

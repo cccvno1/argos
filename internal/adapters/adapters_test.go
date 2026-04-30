@@ -40,10 +40,10 @@ func TestRenderedAdaptersIncludeStableKnowledgeContract(t *testing.T) {
 				"Prefer MCP tools when available.",
 				"Fall back to CLI JSON when MCP is unavailable and commands can be run.",
 				"Fall back to generated adapter files or Markdown source when command execution is unavailable.",
-				"Before substantial project work, call or emulate argos_context.",
+				"Before substantial project work, call argos_context when available; otherwise follow equivalent adapter or Markdown guidance.",
 				"Use argos_discover to route current work to relevant shared knowledge.",
 				"Use argos_map for broad orientation before unfamiliar project work.",
-				"Before implementation or review, call or emulate argos_standards.",
+				"Before implementation or review, call argos_standards when available; otherwise follow equivalent adapter or Markdown guidance.",
 				"Load full knowledge items only through get_knowledge_item when routed to specific IDs or paths.",
 				"Cite Argos knowledge IDs used in final responses only after loading and applying them.",
 				"Do not cite IDs returned only by argos_map or argos_discover.",
@@ -60,14 +60,7 @@ func TestRenderedAdaptersIncludeStableKnowledgeContract(t *testing.T) {
 					t.Fatalf("expected %q in %s adapter:\n%s", expected, tt.name, tt.body)
 				}
 			}
-			for _, forbidden := range []string{
-				"gap_" + "candidates",
-				"capture_" + "candidate",
-				"candidate_" + "only",
-				"proposal_" + "required",
-				"Start capture-" + "knowledge only with user approval.",
-				"official " + "knowledge",
-			} {
+			for _, forbidden := range legacyDiscoveryTerms() {
 				if strings.Contains(tt.body, forbidden) {
 					t.Fatalf("did not expect %q in %s adapter:\n%s", forbidden, tt.name, tt.body)
 				}
@@ -172,4 +165,15 @@ func readFile(t *testing.T, path string) string {
 		t.Fatalf("read %s: %v", path, err)
 	}
 	return string(data)
+}
+
+func legacyDiscoveryTerms() []string {
+	return []string{
+		"gap_candidates",
+		"capture_candidate",
+		"candidate_only",
+		"proposal_required",
+		"Start capture-knowledge only with user approval.",
+		"official knowledge",
+	}
 }
