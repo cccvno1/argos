@@ -144,6 +144,38 @@ It should cover:
 The automated harness is the regression layer. It should fail on behavioral
 drift that would make agents overtrust, overfetch, or miss relevant knowledge.
 
+### Context Isolation
+
+AI dogfood runs must not rely on the current design conversation or any previous
+case transcript. Otherwise the runner can be contaminated by known case names,
+expected IDs, earlier failures, or the author's intent.
+
+Each dogfood case should run in a fresh, minimal context:
+
+- one case per independent AI session
+- no previous case transcripts
+- no golden expected IDs or expected coverage
+- no full design spec unless the case explicitly validates documentation use
+- no hints about which knowledge should be discovered
+- only the current case input, allowed tools, workspace path, checklist, and
+  report template
+
+The harness should separate runner and evaluator roles:
+
+- the runner receives only the task input and performs the workflow
+- the runner produces a transcript and structured report
+- the evaluator receives the report, transcript, and golden expectations
+- the evaluator decides pass, fail, or review-needed
+
+The runner must ground every claim in tool output. A report should fail if it
+mentions, loads, or cites an ID that did not appear in the runner's discovery or
+loading transcript.
+
+At least one dogfood case should act as a contamination probe. For example, a
+case may use an unrelated task after auth-refresh cases have been discussed.
+If the runner mentions auth-refresh knowledge without tool evidence, the
+dogfood run is contaminated and should fail.
+
 ### AI Dogfood Checklist
 
 The AI dogfood checklist is a written procedure for an AI agent to execute.
