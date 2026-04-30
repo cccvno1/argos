@@ -218,8 +218,8 @@
       "input": {
         "project": "mall-api",
         "phase": "implementation",
-        "task": "update warehouse auth flow",
-        "query": "warehouse auth",
+        "task": "update warehouse picking flow",
+        "query": "warehouse picking scanner",
         "limit": 5
       },
       "expected": {

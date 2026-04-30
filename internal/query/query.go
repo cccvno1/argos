@@ -309,6 +309,9 @@ func (s *Service) Discover(req DiscoverRequest) (DiscoveryResponse, error) {
 		if err != nil {
 			return DiscoveryResponse{}, err
 		}
+		if item.Type == "package" && result.ScoreComponents.Lexical < 0.25 && result.ScoreComponents.FileScope < 1 && result.ScoreComponents.TagDomain <= 0.3 && !contains(req.Types, "package") {
+			continue
+		}
 		if !hasDiscoverySignal(result.ScoreComponents, req) || result.Score <= 0.25 {
 			continue
 		}
@@ -327,7 +330,7 @@ func (s *Service) Discover(req DiscoverRequest) (DiscoveryResponse, error) {
 		results = results[:limit]
 	}
 
-	coverage := discoveryCoverage(results, intent)
+	coverage := discoveryCoverage(results, intent, req)
 	nextCalls := discoveryNextCalls(results, coverage, req.Phase)
 
 	return DiscoveryResponse{
@@ -744,7 +747,7 @@ func recommendedAction(item knowledge.Item, score float64, phase string, relevan
 	return "cite_if_used"
 }
 
-func discoveryCoverage(items []DiscoveryItem, intent string) Coverage {
+func discoveryCoverage(items []DiscoveryItem, intent string, req DiscoverRequest) Coverage {
 	if len(items) == 0 {
 		return Coverage{
 			Status:                "none",
@@ -756,17 +759,37 @@ func discoveryCoverage(items []DiscoveryItem, intent string) Coverage {
 	}
 	topItem := items[0]
 	top := topItem.Score
-	if topItem.ScoreComponents.Lexical > 0 && topItem.ScoreComponents.Lexical < 0.5 && topItem.ScoreComponents.FileScope < 1 && topItem.ScoreComponents.TagDomain <= 0.3 {
+	if topItem.Type == "lesson" && top >= 0.7 {
+		return Coverage{Status: "partial", Confidence: top, Reason: "Found related Argos knowledge, but task-specific coverage has gaps.", Recommendation: "Load only high-confidence IDs and mention gaps when relevant.", MissingKnowledgeHints: missingKnowledgeHints(intent)}
+	}
+	if topItem.Type == "reference" && (top >= 0.6 || topItem.ScoreComponents.Lexical >= 0.3) {
+		return Coverage{Status: "partial", Confidence: top, Reason: "Found related Argos knowledge, but task-specific coverage has gaps.", Recommendation: "Load only high-confidence IDs and mention gaps when relevant.", MissingKnowledgeHints: missingKnowledgeHints(intent)}
+	}
+	if topItem.ScoreComponents.Lexical > 0 && topItem.ScoreComponents.Lexical < 0.5 && topItem.ScoreComponents.FileScope < 1 && topItem.ScoreComponents.TagDomain > 0.3 {
+		return Coverage{Status: "weak", Confidence: top, Reason: "Only broad or low-confidence Argos knowledge matched.", Recommendation: "Skim summaries or inspect the map; do not treat results as authoritative.", MissingKnowledgeHints: missingKnowledgeHints(intent)}
+	}
+	if topItem.ScoreComponents.Lexical > 0 && topItem.ScoreComponents.Lexical < 0.3 && topItem.ScoreComponents.FileScope < 1 && topItem.ScoreComponents.TagDomain <= 0.3 {
+		return Coverage{Status: "weak", Confidence: top, Reason: "Only broad or low-confidence Argos knowledge matched.", Recommendation: "Skim summaries or inspect the map; do not treat results as authoritative.", MissingKnowledgeHints: missingKnowledgeHints(intent)}
+	}
+	if top < 0.6 && topItem.ScoreComponents.Lexical > 0 && topItem.ScoreComponents.Lexical < 0.5 && topItem.ScoreComponents.FileScope < 1 && topItem.ScoreComponents.TagDomain <= 0.3 {
 		return Coverage{Status: "weak", Confidence: top, Reason: "Only broad or low-confidence Argos knowledge matched.", Recommendation: "Skim summaries or inspect the map; do not treat results as authoritative.", MissingKnowledgeHints: missingKnowledgeHints(intent)}
 	}
 	switch {
 	case top >= 0.75:
 		return Coverage{Status: "strong", Confidence: top, Reason: "Found active project knowledge matching this request.", Recommendation: "Load high-priority matched knowledge before work."}
+	case top >= 0.7 && (topItem.Type != "package" || !packageOnlyRequest(req)) && (topItem.ScoreComponents.Lexical >= 0.4 || topItem.ScoreComponents.FileScope >= 1):
+		return Coverage{Status: "strong", Confidence: top, Reason: "Found active project knowledge matching this request.", Recommendation: "Load high-priority matched knowledge before work."}
+	case top >= 0.6:
+		return Coverage{Status: "partial", Confidence: top, Reason: "Found related Argos knowledge, but task-specific coverage has gaps.", Recommendation: "Load only high-confidence IDs and mention gaps when relevant.", MissingKnowledgeHints: missingKnowledgeHints(intent)}
 	case top >= 0.5:
 		return Coverage{Status: "partial", Confidence: top, Reason: "Found related Argos knowledge, but task-specific coverage has gaps.", Recommendation: "Load only high-confidence IDs and mention gaps when relevant.", MissingKnowledgeHints: missingKnowledgeHints(intent)}
 	default:
 		return Coverage{Status: "weak", Confidence: top, Reason: "Only broad or low-confidence Argos knowledge matched.", Recommendation: "Skim summaries or inspect the map; do not treat results as authoritative.", MissingKnowledgeHints: missingKnowledgeHints(intent)}
 	}
+}
+
+func packageOnlyRequest(req DiscoverRequest) bool {
+	return len(req.Types) == 1 && req.Types[0] == "package"
 }
 
 func discoveryNextCalls(items []DiscoveryItem, coverage Coverage, phase string) []RecommendedCall {
