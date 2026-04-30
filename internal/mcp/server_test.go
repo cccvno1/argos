@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"argos/internal/discoverytest"
 	"argos/internal/index"
 	"argos/internal/knowledge"
 	"argos/internal/query"
@@ -423,6 +424,50 @@ func TestToolCallArgosMapRejectsIncludeInboxArgument(t *testing.T) {
 	}
 
 	assertToolErrorContains(t, out.Bytes(), "invalid arguments for argos_map")
+}
+
+func TestGoldenMCPDiscoveryStrictSchema(t *testing.T) {
+	_, store := discoverytest.BuildIndexedWorkspace(t)
+	defer store.Close()
+	server := NewServerWithStore(store)
+
+	for _, tc := range []struct {
+		name string
+		line string
+		want string
+	}{
+		{
+			name: "discover unknown argument",
+			line: `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_discover","arguments":{"project":"mall-api","query":"auth","include_inbox":true}}}`,
+			want: "unknown field",
+		},
+		{
+			name: "discover missing task and query",
+			line: `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_discover","arguments":{"project":"mall-api"}}}`,
+			want: "task or query is required",
+		},
+		{
+			name: "discover bad limit",
+			line: `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_discover","arguments":{"project":"mall-api","query":"auth","limit":99}}}`,
+			want: "limit must be between 1 and 20",
+		},
+		{
+			name: "map unknown argument",
+			line: `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_map","arguments":{"project":"mall-api","include_inbox":true}}}`,
+			want: "unknown field",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			if err := server.HandleLine([]byte(tc.line), &out); err != nil {
+				t.Fatalf("HandleLine returned error: %v", err)
+			}
+			text := firstContentText(t, resultMap(t, decodeRPCResponse(t, out.Bytes())))
+			if !strings.Contains(text, tc.want) {
+				t.Fatalf("expected %q in %s", tc.want, text)
+			}
+		})
+	}
 }
 
 func TestToolCallGetKnowledgeItemReturnsFullBody(t *testing.T) {

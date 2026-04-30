@@ -71,6 +71,25 @@ func TestRenderedAdaptersDoNotAdvertiseUnimplementedWorkflowTools(t *testing.T) 
 	}
 }
 
+func TestGeneratedAdaptersDoNotRecommendDirectStorageQueries(t *testing.T) {
+	root := t.TempDir()
+	projects := []registry.Project{{
+		ID:              "mall-api",
+		Name:            "Mall API",
+		TechDomains:     []string{"backend"},
+		BusinessDomains: []string{"account"},
+	}}
+	if err := Install(root, projects); err != nil {
+		t.Fatalf("Install returned error: %v", err)
+	}
+	body := readFile(t, filepath.Join(root, "argos", "generated", "mall-api", "cursor-rules", "argos.mdc"))
+	for _, forbidden := range []string{"query SQLite", "query sqlite", "query vector", "knowledge_vectors", "knowledge_fts"} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("adapter should not recommend direct storage access %q:\n%s", forbidden, body)
+		}
+	}
+}
+
 func TestRenderCursorRuleKeepsCursorFrontmatter(t *testing.T) {
 	project := registry.Project{ID: "mall-api", Name: "Mall API"}
 	body := RenderCursorRule(project)
@@ -124,4 +143,13 @@ func TestInstallRejectsTraversalWithoutCreatingOutsidePath(t *testing.T) {
 	} else if !os.IsNotExist(err) {
 		t.Fatalf("stat traversal path %s: %v", outsidePath, err)
 	}
+}
+
+func readFile(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	return string(data)
 }
