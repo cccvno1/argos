@@ -10,14 +10,14 @@ support the current task. Discovery should not imply that the system owns an
 official project truth or that uncovered needs should automatically become new
 knowledge.
 
-The current `gap_candidates` model is directionally useful as a safety guard,
-but its naming and fields over-weight a capture workflow. This design replaces
-that model with shared-knowledge coverage semantics.
+The previous gap-candidate model was directionally useful as a safety guard,
+but its naming and fields over-weighted a capture workflow. This design
+replaces that model with shared-knowledge coverage semantics.
 
 ## Goals
 
-- Fully migrate Discovery away from `gap_candidates`, `GapCandidate`,
-  `capture_candidate`, `candidate_only`, and `proposal_required`.
+- Fully migrate Discovery away from the previous gap-candidate response model
+  and capture-oriented fields.
 - Introduce `coverage_gaps` as uncovered task needs, not upload proposals.
 - Make the agent separate Argos-backed knowledge from general reasoning.
 - Keep progressive disclosure, citation accountability, and `action_policy`.
@@ -63,23 +63,7 @@ dogfood should move to the new names in one slice.
 
 ## Response Model
 
-Replace:
-
-```json
-{
-  "gap_candidates": [
-    {
-      "kind": "standard",
-      "suggested_title": "Payment webhook signature verification standard",
-      "next_action": "capture_candidate",
-      "capture_mode": "proposal_required",
-      "authority": "candidate_only"
-    }
-  ]
-}
-```
-
-With:
+Use:
 
 ```json
 {
@@ -283,8 +267,8 @@ not apply. Discovery should avoid over-ranking it and report
 
 This migration should update:
 
-- `internal/query/query.go`: rename `GapCandidate` to `CoverageGap`, remove
-  capture-oriented fields, populate `coverage_gaps`.
+- `internal/query/query.go`: replace the previous gap-candidate type with
+  `CoverageGap`, remove capture-oriented fields, populate `coverage_gaps`.
 - `internal/query/query_test.go`: assert strong has no gaps; partial/weak/none
   have coverage gaps with `argos_backed=false`.
 - `internal/discoverytest/golden.go` and `testdata/discovery-golden/cases.json`:
@@ -330,8 +314,8 @@ focused tests when the underlying ranking metadata exists.
 
 ### Interface Tests
 
-CLI and MCP should expose `coverage_gaps` and should not expose
-`gap_candidates`.
+CLI and MCP should expose `coverage_gaps` and should not expose the retired
+gap-candidate JSON field.
 
 ### Adapter Tests
 
@@ -372,7 +356,7 @@ adapter wording, docs, and user-facing concepts beyond Discovery.
 
 ## Success Criteria
 
-- No production response exposes `gap_candidates`.
+- No production response exposes the retired gap-candidate JSON field.
 - No adapter instructs agents to treat Discovery gaps as capture prompts.
 - Partial/weak/none cases expose coverage boundaries rather than upload
   proposals.
