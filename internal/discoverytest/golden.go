@@ -44,7 +44,7 @@ type Expected struct {
 	ActionCite                       string         `json:"action_cite"`
 	ActionClaim                      string         `json:"action_claim"`
 	RecallSemanticStatus             string         `json:"recall_semantic_status"`
-	GapCandidateKinds                []string       `json:"gap_candidate_kinds"`
+	CoverageGapSources               []string       `json:"coverage_gap_sources"`
 	TopID                            string         `json:"top_id"`
 	IncludeIDs                       []string       `json:"include_ids"`
 	ExcludeIDs                       []string       `json:"exclude_ids"`

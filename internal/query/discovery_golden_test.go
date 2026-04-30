@@ -36,7 +36,7 @@ func TestGoldenDiscoveryCases(t *testing.T) {
 			assertCoverage(t, result.Coverage, tc.Expected.Coverage, result.Items)
 			assertActionPolicyMatchesExpected(t, result.ActionPolicy, tc.Expected)
 			assertRecallMatchesExpected(t, result.Recall, tc.Expected)
-			assertGapCandidatesMatchExpected(t, result.GapCandidates, tc.Expected.GapCandidateKinds)
+			assertCoverageGapsMatchExpected(t, result.CoverageGaps, tc.Expected.CoverageGapSources)
 			assertDiscoveryIDs(t, result.Items, tc.Expected.IncludeIDs, tc.Expected.ExcludeIDs)
 			assertTopID(t, result.Items, tc.Expected.TopID)
 			assertNoDiscoveryBodies(t, result.Items, tc.Expected.NoBodies)
@@ -176,15 +176,15 @@ func assertRecallMatchesExpected(t *testing.T, got RecallState, expected discove
 	}
 }
 
-func assertGapCandidatesMatchExpected(t *testing.T, got []GapCandidate, want []string) {
+func assertCoverageGapsMatchExpected(t *testing.T, got []CoverageGap, want []string) {
 	t.Helper()
 	if len(want) == 0 {
 		if len(got) != 0 {
-			t.Fatalf("expected no gap candidates, got %#v", got)
+			t.Fatalf("expected no coverage gaps, got %#v", got)
 		}
 		return
 	}
-	assertGapCandidateKinds(t, got, want)
+	assertCoverageGapSources(t, got, want)
 }
 
 func assertDiscoveryIDs(t *testing.T, items []DiscoveryItem, include []string, exclude []string) {

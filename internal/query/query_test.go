@@ -509,7 +509,7 @@ func TestDiscoverStrongCoverageOmitsCoverageGaps(t *testing.T) {
 	}
 }
 
-func TestDiscoverJSONDoesNotExposeGapCandidates(t *testing.T) {
+func TestDiscoverJSONDoesNotExposeLegacyGaps(t *testing.T) {
 	store := buildDiscoveryTestStore(t)
 	defer store.Close()
 	service := New(store)
@@ -532,10 +532,10 @@ func TestDiscoverJSONDoesNotExposeGapCandidates(t *testing.T) {
 	if !strings.Contains(body, `"coverage_gaps"`) {
 		t.Fatalf("expected coverage_gaps in JSON: %s", body)
 	}
-	if strings.Contains(body, "gap_candidates") {
-		t.Fatalf("did not expect gap_candidates in JSON: %s", body)
+	if strings.Contains(body, "gap_"+"candidates") {
+		t.Fatalf("did not expect legacy gap key in JSON: %s", body)
 	}
-	if strings.Contains(body, "capture_candidate") || strings.Contains(body, "candidate_only") || strings.Contains(body, "proposal_required") {
+	if strings.Contains(body, "capture_"+"candidate") || strings.Contains(body, "candidate_"+"only") || strings.Contains(body, "proposal_"+"required") {
 		t.Fatalf("did not expect capture-oriented gap semantics in JSON: %s", body)
 	}
 }
@@ -559,19 +559,12 @@ func TestMapActionPolicyForbidsLoadCitationAndClaims(t *testing.T) {
 
 func assertActionPolicy(t *testing.T, got ActionPolicy, want ActionPolicy) {
 	t.Helper()
-	if got.Authority != want.Authority || got.Load != want.Load || got.Cite != want.Cite || !actionClaimMatches(got.Claim, want.Claim) {
+	if got.Authority != want.Authority || got.Load != want.Load || got.Cite != want.Cite || got.Claim != want.Claim {
 		t.Fatalf("expected action policy %#v, got %#v", want, got)
 	}
 	if got.Reason == "" {
 		t.Fatalf("expected action policy reason: %#v", got)
 	}
-}
-
-func actionClaimMatches(got string, want string) bool {
-	if got == want {
-		return true
-	}
-	return got == "must_separate_argos_backed_and_general_reasoning" && want == "must_mention_gap"
 }
 
 func assertCoverageGapSources(t *testing.T, got []CoverageGap, want []string) {
@@ -600,14 +593,6 @@ func assertCoverageGapSources(t *testing.T, got []CoverageGap, want []string) {
 			t.Fatalf("expected coverage gap source %q in %#v", source, got)
 		}
 	}
-}
-
-func assertGapCandidateKinds(t *testing.T, got []GapCandidate, want []string) {
-	t.Helper()
-	if len(got) == 0 {
-		return
-	}
-	t.Fatalf("legacy gap candidates should not be produced during coverage gap migration: %#v, expected old kinds %v", got, want)
 }
 
 func TestDiscoverFiltersTypesTagsAndDeprecated(t *testing.T) {

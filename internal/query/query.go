@@ -57,17 +57,16 @@ type ContextResponse struct {
 }
 
 type DiscoveryResponse struct {
-	Project       string                      `json:"project"`
-	Phase         string                      `json:"phase"`
-	Query         string                      `json:"query"`
-	Capabilities  index.DiscoveryCapabilities `json:"capabilities"`
-	Coverage      Coverage                    `json:"coverage"`
-	ActionPolicy  ActionPolicy                `json:"action_policy"`
-	Recall        RecallState                 `json:"recall"`
-	CoverageGaps  []CoverageGap               `json:"coverage_gaps,omitempty"`
-	GapCandidates []GapCandidate              `json:"-"`
-	Items         []DiscoveryItem             `json:"items"`
-	NextCalls     []RecommendedCall           `json:"next_calls"`
+	Project      string                      `json:"project"`
+	Phase        string                      `json:"phase"`
+	Query        string                      `json:"query"`
+	Capabilities index.DiscoveryCapabilities `json:"capabilities"`
+	Coverage     Coverage                    `json:"coverage"`
+	ActionPolicy ActionPolicy                `json:"action_policy"`
+	Recall       RecallState                 `json:"recall"`
+	CoverageGaps []CoverageGap               `json:"coverage_gaps,omitempty"`
+	Items        []DiscoveryItem             `json:"items"`
+	NextCalls    []RecommendedCall           `json:"next_calls"`
 }
 
 type MapResponse struct {
@@ -111,8 +110,6 @@ type CoverageGap struct {
 	Severity    string `json:"severity"`
 	ArgosBacked bool   `json:"argos_backed"`
 }
-
-type GapCandidate = CoverageGap
 
 type Inventory struct {
 	Types    map[string]int  `json:"types"`
