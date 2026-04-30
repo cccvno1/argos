@@ -75,6 +75,7 @@
         "action_load": "recommended",
         "action_cite": "after_loaded_and_used",
         "action_claim": "allowed",
+        "recall_semantic_status": "disabled",
         "top_id": "rule:backend.auth-refresh.v1",
         "include_ids": ["rule:backend.auth-refresh.v1", "decision:backend.session-renewal.v1"],
         "exclude_ids": ["rule:backend.deprecated-auth.v1"],
@@ -97,6 +98,7 @@
         "action_load": "recommended",
         "action_cite": "after_loaded_and_used",
         "action_claim": "allowed",
+        "recall_semantic_status": "disabled",
         "include_ids": ["rule:backend.auth-refresh.v1"],
         "exclude_ids": ["reference:backend.cache-policy.v1"],
         "no_bodies": true
@@ -117,6 +119,7 @@
         "action_load": "recommended",
         "action_cite": "after_loaded_and_used",
         "action_claim": "allowed",
+        "recall_semantic_status": "disabled",
         "include_ids": ["rule:backend.auth-refresh.v1"],
         "exclude_ids": ["reference:backend.cache-policy.v1"],
         "no_bodies": true
@@ -139,6 +142,7 @@
         "action_load": "recommended",
         "action_cite": "after_loaded_and_used",
         "action_claim": "allowed",
+        "recall_semantic_status": "disabled",
         "top_id": "rule:backend.auth-refresh.v1",
         "include_ids": ["rule:backend.generic.v1"],
         "why_contains": ["file scope matched"],
@@ -162,6 +166,8 @@
         "action_load": "allowed",
         "action_cite": "after_loaded_and_used",
         "action_claim": "must_mention_gap",
+        "recall_semantic_status": "disabled",
+        "gap_candidate_kinds": ["standard", "decision", "lesson"],
         "include_ids": ["reference:backend.cache-policy.v1"],
         "require_missing_hints": true,
         "no_bodies": true
@@ -183,6 +189,8 @@
         "action_load": "allowed",
         "action_cite": "after_loaded_and_used",
         "action_claim": "must_mention_gap",
+        "recall_semantic_status": "disabled",
+        "gap_candidate_kinds": ["standard", "decision", "lesson"],
         "include_ids": ["lesson:backend.auth-debug.v1"],
         "require_missing_hints": true,
         "no_bodies": true
@@ -205,6 +213,8 @@
         "action_load": "allowed",
         "action_cite": "after_loaded_and_used",
         "action_claim": "must_mention_gap",
+        "recall_semantic_status": "disabled",
+        "gap_candidate_kinds": ["standard", "decision", "lesson"],
         "include_ids": ["package:backend.auth-refresh.v1"],
         "exclude_ids": ["references/example.md"],
         "no_bodies": true
@@ -226,6 +236,8 @@
         "action_load": "forbidden",
         "action_cite": "forbidden",
         "action_claim": "forbidden",
+        "recall_semantic_status": "disabled",
+        "gap_candidate_kinds": ["standard", "decision", "lesson"],
         "forbid_next_call_tools": ["get_knowledge_item", "cite_knowledge"],
         "no_bodies": true
       }
@@ -247,6 +259,8 @@
         "action_load": "forbidden",
         "action_cite": "forbidden",
         "action_claim": "forbidden",
+        "recall_semantic_status": "disabled",
+        "gap_candidate_kinds": ["standard", "decision", "lesson"],
         "forbid_next_call_tools": ["get_knowledge_item", "cite_knowledge"],
         "no_bodies": true
       }
@@ -267,6 +281,8 @@
         "action_load": "forbidden",
         "action_cite": "forbidden",
         "action_claim": "forbidden",
+        "recall_semantic_status": "disabled",
+        "gap_candidate_kinds": ["standard", "decision", "lesson"],
         "items_empty": true,
         "forbid_next_call_tools": ["get_knowledge_item", "cite_knowledge"],
         "no_bodies": true
@@ -288,6 +304,8 @@
         "action_load": "forbidden",
         "action_cite": "forbidden",
         "action_claim": "forbidden",
+        "recall_semantic_status": "disabled",
+        "gap_candidate_kinds": ["standard", "decision", "lesson"],
         "exclude_ids": ["rule:warehouse.auth.v1"],
         "forbid_next_call_tools": ["get_knowledge_item", "cite_knowledge"],
         "no_bodies": true
@@ -310,6 +328,8 @@
         "action_load": "forbidden",
         "action_cite": "forbidden",
         "action_claim": "forbidden",
+        "recall_semantic_status": "disabled",
+        "gap_candidate_kinds": ["standard", "decision", "lesson"],
         "items_empty": true,
         "forbid_next_call_tools": ["get_knowledge_item", "cite_knowledge"],
         "no_bodies": true
@@ -332,6 +352,7 @@
         "action_load": "recommended",
         "action_cite": "after_loaded_and_used",
         "action_claim": "allowed",
+        "recall_semantic_status": "disabled",
         "include_ids": ["rule:backend.auth-refresh.v1"],
         "load_ids": ["rule:backend.auth-refresh.v1"],
         "cite_ids": ["rule:backend.auth-refresh.v1"],
@@ -355,6 +376,7 @@
         "action_load": "recommended",
         "action_cite": "after_loaded_and_used",
         "action_claim": "allowed",
+        "recall_semantic_status": "disabled",
         "include_ids": ["rule:backend.auth-refresh.v1"],
         "no_bodies": true
       }

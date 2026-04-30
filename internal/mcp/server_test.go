@@ -317,6 +317,42 @@ func TestToolCallArgosDiscoverReturnsRoutes(t *testing.T) {
 	if !strings.Contains(text, `"action_policy"`) || !strings.Contains(text, `"authority": "strong"`) {
 		t.Fatalf("expected action policy in discover response: %s", text)
 	}
+	if !strings.Contains(text, `"recall"`) || !strings.Contains(text, `"semantic"`) {
+		t.Fatalf("expected recall state in discover response: %s", text)
+	}
+	if strings.Contains(text, `"body"`) {
+		t.Fatalf("discover should not return full body: %s", text)
+	}
+}
+
+func TestToolCallArgosDiscoverNoneReturnsGapCandidates(t *testing.T) {
+	_, store := discoverytest.BuildIndexedWorkspace(t)
+	defer store.Close()
+	server := NewServerWithStore(store)
+
+	var out bytes.Buffer
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_discover","arguments":{"project":"mall-api","phase":"implementation","task":"add payment webhook signature verification","query":"payment webhook signature","limit":5}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	result := resultMap(t, decodeRPCResponse(t, out.Bytes()))
+	if result["isError"] == true {
+		t.Fatalf("expected success result: %#v", result)
+	}
+	text := firstContentText(t, result)
+	for _, fragment := range []string{
+		`"coverage"`,
+		`"status": "none"`,
+		`"gap_candidates"`,
+		`"kind": "standard"`,
+		`"authority": "candidate_only"`,
+		`"capture_mode": "proposal_required"`,
+	} {
+		if !strings.Contains(text, fragment) {
+			t.Fatalf("expected %q in discover response: %s", fragment, text)
+		}
+	}
 	if strings.Contains(text, `"body"`) {
 		t.Fatalf("discover should not return full body: %s", text)
 	}
