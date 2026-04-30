@@ -305,7 +305,7 @@
         "action_cite": "forbidden",
         "action_claim": "forbidden",
         "recall_semantic_status": "disabled",
-        "coverage_gap_sources": ["unmatched_intent"],
+        "coverage_gap_sources": ["cross_domain_mismatch"],
         "exclude_ids": ["rule:warehouse.auth.v1"],
         "forbid_next_call_tools": ["get_knowledge_item", "cite_knowledge"],
         "no_bodies": true

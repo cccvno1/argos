@@ -948,8 +948,11 @@ func coverageGapNeed(req DiscoverRequest, intent string) string {
 }
 
 func coverageGapSource(coverage Coverage, req DiscoverRequest, intent string, items []knowledge.Item, lexical map[string]float64) string {
-	if coverage.Status == "none" && hasRestrictiveDiscoveryFilters(req) && restrictiveFiltersExcludedRelevantKnowledge(req, intent, items, lexical) {
+	if (coverage.Status == "none" || coverage.Status == "partial") && hasRestrictiveDiscoveryFilters(req) && restrictiveFiltersExcludedRelevantKnowledge(req, intent, items, lexical) {
 		return "filter_excluded"
+	}
+	if coverage.Status == "none" && crossDomainMismatchKnowledge(req, intent, items, lexical) {
+		return "cross_domain_mismatch"
 	}
 	switch coverage.Status {
 	case "partial":
@@ -977,6 +980,31 @@ func restrictiveFiltersExcludedRelevantKnowledge(req DiscoverRequest, intent str
 			continue
 		}
 		if lexical[item.ID] > 0 || lexicalTermScore(item, intent) > 0 {
+			unfilteredResult, err := discoveryItem(item, unfiltered, lexical[item.ID], nil, intent)
+			if err != nil {
+				continue
+			}
+			unfilteredCoverage := discoveryCoverage([]DiscoveryItem{unfilteredResult}, intent, unfiltered)
+			if unfilteredCoverage.Status == "strong" || unfilteredCoverage.Status == "partial" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func crossDomainMismatchKnowledge(req DiscoverRequest, intent string, items []knowledge.Item, lexical map[string]float64) bool {
+	if req.Project == "" {
+		return false
+	}
+	for _, item := range items {
+		if projectMatches(item, req.Project) {
+			continue
+		}
+		if item.Status == "deprecated" && !req.IncludeDeprecated {
+			continue
+		}
+		if maxFloat(lexical[item.ID], lexicalTermScore(item, intent)) >= 0.2 {
 			return true
 		}
 	}
@@ -1001,6 +1029,8 @@ func coverageGapReason(coverage Coverage, source string, need string) string {
 		return "Some shared knowledge matched, but it does not fully cover this task need: " + need
 	case "weak_match":
 		return "Only weak shared knowledge matched, so this need is not Argos-backed: " + need
+	case "cross_domain_mismatch":
+		return "Similar shared knowledge exists, but its project or domain scope does not match this task need: " + need
 	default:
 		return "No sufficiently relevant shared knowledge matched this task need: " + need
 	}

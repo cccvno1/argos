@@ -445,6 +445,94 @@ func TestDiscoverCoverageGapsReportRestrictiveFilterExclusion(t *testing.T) {
 	assertCoverageGapSources(t, result.CoverageGaps, []string{"filter_excluded"})
 }
 
+func TestDiscoverCoverageGapsDoNotReportFilterExclusionForOnlyWeakFilteredKnowledge(t *testing.T) {
+	store := buildDiscoveryStore(t, []knowledge.Item{{
+		Path:            "knowledge/items/backend/generic-token.md",
+		ID:              "rule:backend.generic-token.v1",
+		Title:           "Generic token rule",
+		Type:            "rule",
+		TechDomains:     []string{"backend"},
+		BusinessDomains: []string{"account"},
+		Projects:        []string{"mall-api"},
+		Status:          "active",
+		Priority:        "must",
+		UpdatedAt:       "2026-04-29",
+		Tags:            []string{"auth"},
+		Body:            "Token guidance applies to platform work.",
+	}})
+	defer store.Close()
+	service := New(store)
+
+	result, err := service.Discover(DiscoverRequest{
+		Project: "mall-api",
+		Phase:   "implementation",
+		Task:    "add warehouse barcode scanner",
+		Query:   "barcode scanner token",
+		Tags:    []string{"payments"},
+		Limit:   5,
+	})
+	if err != nil {
+		t.Fatalf("Discover returned error: %v", err)
+	}
+	if result.Coverage.Status != "none" {
+		t.Fatalf("expected none coverage, got %#v", result.Coverage)
+	}
+	assertCoverageGapSources(t, result.CoverageGaps, []string{"unmatched_intent"})
+}
+
+func TestDiscoverCoverageGapsReportFilterExclusionForPartialCoverage(t *testing.T) {
+	store := buildDiscoveryStore(t, []knowledge.Item{
+		{
+			Path:            "knowledge/items/backend/session-debug.md",
+			ID:              "lesson:backend.session-debug.v1",
+			Title:           "Session debugging lesson",
+			Type:            "lesson",
+			TechDomains:     []string{"backend"},
+			BusinessDomains: []string{"account"},
+			Projects:        []string{"mall-api"},
+			Status:          "active",
+			Priority:        "should",
+			UpdatedAt:       "2026-04-29",
+			Tags:            []string{"debugging"},
+			Body:            "When session renewal tests fail, inspect token rotation logs first.",
+		},
+		{
+			Path:            "knowledge/items/backend/session-rule.md",
+			ID:              "rule:backend.session-rule.v1",
+			Title:           "Session renewal rule",
+			Type:            "rule",
+			TechDomains:     []string{"backend"},
+			BusinessDomains: []string{"account"},
+			Projects:        []string{"mall-api"},
+			Status:          "active",
+			Priority:        "must",
+			AppliesTo:       knowledge.Scope{Files: []string{"internal/auth/**"}},
+			UpdatedAt:       "2026-04-29",
+			Tags:            []string{"auth"},
+			Body:            "Session renewal tests require token rotation logs and auth middleware checks.",
+		},
+	})
+	defer store.Close()
+	service := New(store)
+
+	result, err := service.Discover(DiscoverRequest{
+		Project: "mall-api",
+		Phase:   "debugging",
+		Task:    "debug session renewal test failure",
+		Query:   "session renewal tests fail logs",
+		Files:   []string{"internal/auth/session.go"},
+		Tags:    []string{"debugging"},
+		Limit:   5,
+	})
+	if err != nil {
+		t.Fatalf("Discover returned error: %v", err)
+	}
+	if result.Coverage.Status != "partial" {
+		t.Fatalf("expected partial coverage, got %#v", result.Coverage)
+	}
+	assertCoverageGapSources(t, result.CoverageGaps, []string{"filter_excluded"})
+}
+
 func TestDiscoverCoverageGapsIncludeDeprecatedIsNotRestrictiveFilter(t *testing.T) {
 	store := buildDiscoveryTestStore(t)
 	defer store.Close()
@@ -465,6 +553,40 @@ func TestDiscoverCoverageGapsIncludeDeprecatedIsNotRestrictiveFilter(t *testing.
 		t.Fatalf("expected none coverage, got %#v", result.Coverage)
 	}
 	assertCoverageGapSources(t, result.CoverageGaps, []string{"unmatched_intent"})
+}
+
+func TestDiscoverCoverageGapsReportCrossDomainMismatch(t *testing.T) {
+	store := buildDiscoveryStore(t, []knowledge.Item{{
+		Path:            "knowledge/items/warehouse/auth.md",
+		ID:              "rule:warehouse.auth.v1",
+		Title:           "Warehouse auth rule",
+		Type:            "rule",
+		TechDomains:     []string{"backend"},
+		BusinessDomains: []string{"order"},
+		Projects:        []string{"warehouse-api"},
+		Status:          "active",
+		Priority:        "must",
+		UpdatedAt:       "2026-04-29",
+		Tags:            []string{"warehouse"},
+		Body:            "Warehouse-only auth guidance must not route to Mall API tasks.",
+	}})
+	defer store.Close()
+	service := New(store)
+
+	result, err := service.Discover(DiscoverRequest{
+		Project: "mall-api",
+		Phase:   "implementation",
+		Task:    "update warehouse picking flow",
+		Query:   "warehouse picking scanner",
+		Limit:   5,
+	})
+	if err != nil {
+		t.Fatalf("Discover returned error: %v", err)
+	}
+	if result.Coverage.Status != "none" {
+		t.Fatalf("expected none coverage, got %#v", result.Coverage)
+	}
+	assertCoverageGapSources(t, result.CoverageGaps, []string{"cross_domain_mismatch"})
 }
 
 func TestDiscoverWeakCoverageGapsAreNotArgosBacked(t *testing.T) {
