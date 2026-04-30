@@ -64,7 +64,8 @@ type DiscoveryResponse struct {
 	Coverage      Coverage                    `json:"coverage"`
 	ActionPolicy  ActionPolicy                `json:"action_policy"`
 	Recall        RecallState                 `json:"recall"`
-	GapCandidates []GapCandidate              `json:"gap_candidates,omitempty"`
+	CoverageGaps  []CoverageGap               `json:"coverage_gaps,omitempty"`
+	GapCandidates []GapCandidate              `json:"-"`
 	Items         []DiscoveryItem             `json:"items"`
 	NextCalls     []RecommendedCall           `json:"next_calls"`
 }
@@ -103,15 +104,15 @@ type SemanticRecallState struct {
 	Reason   string `json:"reason,omitempty"`
 }
 
-type GapCandidate struct {
-	Kind           string `json:"kind"`
-	SuggestedTitle string `json:"suggested_title"`
-	Reason         string `json:"reason"`
-	Source         string `json:"source"`
-	NextAction     string `json:"next_action"`
-	CaptureMode    string `json:"capture_mode"`
-	Authority      string `json:"authority"`
+type CoverageGap struct {
+	Need        string `json:"need"`
+	Reason      string `json:"reason"`
+	Source      string `json:"source"`
+	Severity    string `json:"severity"`
+	ArgosBacked bool   `json:"argos_backed"`
 }
+
+type GapCandidate = CoverageGap
 
 type Inventory struct {
 	Types    map[string]int  `json:"types"`
@@ -367,16 +368,16 @@ func (s *Service) Discover(req DiscoverRequest) (DiscoveryResponse, error) {
 	nextCalls := discoveryNextCalls(results, coverage, req.Phase)
 
 	return DiscoveryResponse{
-		Project:       req.Project,
-		Phase:         req.Phase,
-		Query:         intent,
-		Capabilities:  caps,
-		Coverage:      coverage,
-		ActionPolicy:  discoveryActionPolicy(coverage),
-		Recall:        defaultRecallState(),
-		GapCandidates: gapCandidatesForCoverage(coverage),
-		Items:         results,
-		NextCalls:     nextCalls,
+		Project:      req.Project,
+		Phase:        req.Phase,
+		Query:        intent,
+		Capabilities: caps,
+		Coverage:     coverage,
+		ActionPolicy: discoveryActionPolicy(coverage),
+		Recall:       defaultRecallState(),
+		CoverageGaps: coverageGapsForCoverage(coverage, req, intent),
+		Items:        results,
+		NextCalls:    nextCalls,
 	}, nil
 }
 
@@ -843,8 +844,8 @@ func discoveryActionPolicy(coverage Coverage) ActionPolicy {
 			Authority: "partial",
 			Load:      "allowed",
 			Cite:      "after_loaded_and_used",
-			Claim:     "must_mention_gap",
-			Reason:    "Partial Argos coverage; load only relevant items and mention coverage gaps when applying them.",
+			Claim:     "must_separate_argos_backed_and_general_reasoning",
+			Reason:    "Partial Argos coverage; load only relevant shared knowledge and separate Argos-backed claims from general reasoning.",
 		}
 	case "weak":
 		return ActionPolicy{
@@ -910,36 +911,84 @@ func defaultRecallState() RecallState {
 	}
 }
 
-func gapCandidatesForCoverage(coverage Coverage) []GapCandidate {
+func coverageGapsForCoverage(coverage Coverage, req DiscoverRequest, intent string) []CoverageGap {
 	if coverage.Status == "strong" || len(coverage.MissingKnowledgeHints) == 0 {
 		return nil
 	}
-	kinds := []string{"standard", "decision", "lesson"}
-	candidates := make([]GapCandidate, 0, len(coverage.MissingKnowledgeHints))
-	for i, hint := range coverage.MissingKnowledgeHints {
-		kind := "reference"
-		if i < len(kinds) {
-			kind = kinds[i]
-		}
-		candidates = append(candidates, GapCandidate{
-			Kind:           kind,
-			SuggestedTitle: titleFromGapHint(hint, kind),
-			Reason:         "No official Argos " + kind + " knowledge matched: " + hint,
-			Source:         "missing_knowledge_hint",
-			NextAction:     "capture_candidate",
-			CaptureMode:    "proposal_required",
-			Authority:      "candidate_only",
-		})
+	need := coverageGapNeed(req, intent)
+	if need == "" {
+		return nil
 	}
-	return candidates
+	source := coverageGapSource(coverage, req)
+	severity := coverageGapSeverity(coverage, source)
+	return []CoverageGap{{
+		Need:        need,
+		Reason:      coverageGapReason(coverage, source, need),
+		Source:      source,
+		Severity:    severity,
+		ArgosBacked: false,
+	}}
 }
 
-func titleFromGapHint(hint string, kind string) string {
-	hint = strings.TrimSpace(hint)
-	if hint == "" {
-		return "Missing " + kind + " knowledge"
+func coverageGapNeed(req DiscoverRequest, intent string) string {
+	task := strings.TrimSpace(req.Task)
+	query := strings.TrimSpace(req.Query)
+	if task == "" {
+		return query
 	}
-	return strings.TrimSpace(strings.TrimSuffix(hint, " "+kind)) + " " + kind
+	if query == "" {
+		return task
+	}
+	taskLower := strings.ToLower(task)
+	queryLower := strings.ToLower(query)
+	if strings.Contains(taskLower, queryLower) {
+		return task
+	}
+	if strings.Contains(queryLower, taskLower) {
+		return query
+	}
+	return strings.TrimSpace(task + " / " + query)
+}
+
+func coverageGapSource(coverage Coverage, req DiscoverRequest) string {
+	if hasExplicitDiscoveryFilters(req) && coverage.Status == "none" {
+		return "filter_excluded"
+	}
+	switch coverage.Status {
+	case "partial":
+		return "partial_match"
+	case "weak":
+		return "weak_match"
+	default:
+		return "unmatched_intent"
+	}
+}
+
+func hasExplicitDiscoveryFilters(req DiscoverRequest) bool {
+	return len(req.Types) > 0 || len(req.Tags) > 0 || len(req.Domains) > 0 || len(req.Status) > 0 || req.IncludeDeprecated
+}
+
+func coverageGapSeverity(coverage Coverage, source string) string {
+	if coverage.Status == "none" {
+		return "blocking"
+	}
+	if source == "weak_match" || source == "partial_match" || source == "filter_excluded" {
+		return "important"
+	}
+	return "informational"
+}
+
+func coverageGapReason(coverage Coverage, source string, need string) string {
+	switch source {
+	case "filter_excluded":
+		return "Explicit discovery filters excluded shared knowledge that might otherwise match: " + need
+	case "partial_match":
+		return "Some shared knowledge matched, but it does not fully cover this task need: " + need
+	case "weak_match":
+		return "Only weak shared knowledge matched, so this need is not Argos-backed: " + need
+	default:
+		return "No sufficiently relevant shared knowledge matched this task need: " + need
+	}
 }
 
 func mapGroupKey(item knowledge.Item) string {

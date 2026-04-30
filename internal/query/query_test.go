@@ -1,7 +1,9 @@
 package query
 
 import (
+	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"argos/internal/index"
@@ -307,7 +309,7 @@ func TestDiscoverActionPolicyFollowsCoverage(t *testing.T) {
 				Authority: "partial",
 				Load:      "allowed",
 				Cite:      "after_loaded_and_used",
-				Claim:     "must_mention_gap",
+				Claim:     "must_separate_argos_backed_and_general_reasoning",
 			},
 		},
 		{
@@ -386,7 +388,7 @@ func TestDiscoverRecallStateDefaultsSemanticDisabled(t *testing.T) {
 	}
 }
 
-func TestDiscoverGapCandidatesForNoneCoverage(t *testing.T) {
+func TestDiscoverCoverageGapsForNoneCoverage(t *testing.T) {
 	store := buildDiscoveryTestStore(t)
 	defer store.Close()
 	service := New(store)
@@ -404,21 +406,86 @@ func TestDiscoverGapCandidatesForNoneCoverage(t *testing.T) {
 	if result.Coverage.Status != "none" {
 		t.Fatalf("expected none coverage, got %#v", result.Coverage)
 	}
-	assertGapCandidateKinds(t, result.GapCandidates, []string{"standard", "decision", "lesson"})
-	for _, candidate := range result.GapCandidates {
-		if candidate.NextAction != "capture_candidate" {
-			t.Fatalf("expected capture_candidate next action, got %#v", candidate)
+	assertCoverageGapSources(t, result.CoverageGaps, []string{"unmatched_intent"})
+	for _, gap := range result.CoverageGaps {
+		if gap.Need == "" {
+			t.Fatalf("expected coverage gap need, got %#v", gap)
 		}
-		if candidate.CaptureMode != "proposal_required" {
-			t.Fatalf("expected proposal_required capture mode, got %#v", candidate)
+		if gap.Reason == "" {
+			t.Fatalf("expected coverage gap reason, got %#v", gap)
 		}
-		if candidate.Authority != "candidate_only" {
-			t.Fatalf("expected candidate_only authority, got %#v", candidate)
+		if gap.Severity != "blocking" {
+			t.Fatalf("expected blocking severity for none coverage, got %#v", gap)
+		}
+		if gap.ArgosBacked {
+			t.Fatalf("coverage gaps must not be Argos-backed: %#v", gap)
 		}
 	}
 }
 
-func TestDiscoverStrongCoverageOmitsGapCandidates(t *testing.T) {
+func TestDiscoverWeakCoverageGapsAreNotArgosBacked(t *testing.T) {
+	store := buildDiscoveryStore(t, []knowledge.Item{{
+		Path:            "knowledge/items/backend/generic-token.md",
+		ID:              "rule:backend.generic-token.v1",
+		Title:           "Generic token rule",
+		Type:            "rule",
+		TechDomains:     []string{"backend"},
+		BusinessDomains: []string{"account"},
+		Projects:        []string{"mall-api"},
+		Status:          "active",
+		Priority:        "must",
+		UpdatedAt:       "2026-04-29",
+		Body:            "Token guidance applies to platform work.",
+	}})
+	defer store.Close()
+	service := New(store)
+
+	result, err := service.Discover(DiscoverRequest{
+		Project: "mall-api",
+		Phase:   "implementation",
+		Task:    "add warehouse barcode scanner",
+		Query:   "barcode scanner token",
+		Limit:   5,
+	})
+	if err != nil {
+		t.Fatalf("Discover returned error: %v", err)
+	}
+	if result.Coverage.Status != "weak" {
+		t.Fatalf("expected weak coverage, got %#v", result.Coverage)
+	}
+	assertCoverageGapSources(t, result.CoverageGaps, []string{"weak_match"})
+	for _, gap := range result.CoverageGaps {
+		if gap.ArgosBacked {
+			t.Fatalf("coverage gaps must not be Argos-backed: %#v", gap)
+		}
+	}
+}
+
+func TestDiscoverPartialCoverageUsesAttributionClaim(t *testing.T) {
+	store := buildDiscoveryTestStore(t)
+	defer store.Close()
+	service := New(store)
+
+	result, err := service.Discover(DiscoverRequest{
+		Project: "mall-api",
+		Phase:   "debugging",
+		Task:    "debug session renewal test failure",
+		Query:   "session renewal tests fail logs",
+		Limit:   5,
+	})
+	if err != nil {
+		t.Fatalf("Discover returned error: %v", err)
+	}
+	if result.Coverage.Status != "partial" {
+		t.Fatalf("expected partial coverage, got %#v", result.Coverage)
+	}
+	assertCoverageGapSources(t, result.CoverageGaps, []string{"partial_match"})
+	if result.ActionPolicy.Claim != "must_separate_argos_backed_and_general_reasoning" {
+		t.Fatalf("expected attribution claim policy, got %#v", result.ActionPolicy)
+	}
+}
+
+func TestDiscoverStrongCoverageOmitsCoverageGaps(t *testing.T) {
 	store := buildDiscoveryTestStore(t)
 	defer store.Close()
 	service := New(store)
@@ -437,8 +504,39 @@ func TestDiscoverStrongCoverageOmitsGapCandidates(t *testing.T) {
 	if result.Coverage.Status != "strong" {
 		t.Fatalf("expected strong coverage, got %#v", result.Coverage)
 	}
-	if len(result.GapCandidates) != 0 {
-		t.Fatalf("strong coverage should not produce gap candidates: %#v", result.GapCandidates)
+	if len(result.CoverageGaps) != 0 {
+		t.Fatalf("strong coverage should not produce coverage gaps: %#v", result.CoverageGaps)
+	}
+}
+
+func TestDiscoverJSONDoesNotExposeGapCandidates(t *testing.T) {
+	store := buildDiscoveryTestStore(t)
+	defer store.Close()
+	service := New(store)
+
+	result, err := service.Discover(DiscoverRequest{
+		Project: "mall-api",
+		Phase:   "implementation",
+		Task:    "add payment webhook signature verification",
+		Query:   "payment webhook signature",
+		Limit:   5,
+	})
+	if err != nil {
+		t.Fatalf("Discover returned error: %v", err)
+	}
+	data, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal discovery response: %v", err)
+	}
+	body := string(data)
+	if !strings.Contains(body, `"coverage_gaps"`) {
+		t.Fatalf("expected coverage_gaps in JSON: %s", body)
+	}
+	if strings.Contains(body, "gap_candidates") {
+		t.Fatalf("did not expect gap_candidates in JSON: %s", body)
+	}
+	if strings.Contains(body, "capture_candidate") || strings.Contains(body, "candidate_only") || strings.Contains(body, "proposal_required") {
+		t.Fatalf("did not expect capture-oriented gap semantics in JSON: %s", body)
 	}
 }
 
@@ -461,7 +559,7 @@ func TestMapActionPolicyForbidsLoadCitationAndClaims(t *testing.T) {
 
 func assertActionPolicy(t *testing.T, got ActionPolicy, want ActionPolicy) {
 	t.Helper()
-	if got.Authority != want.Authority || got.Load != want.Load || got.Cite != want.Cite || got.Claim != want.Claim {
+	if got.Authority != want.Authority || got.Load != want.Load || got.Cite != want.Cite || !actionClaimMatches(got.Claim, want.Claim) {
 		t.Fatalf("expected action policy %#v, got %#v", want, got)
 	}
 	if got.Reason == "" {
@@ -469,26 +567,47 @@ func assertActionPolicy(t *testing.T, got ActionPolicy, want ActionPolicy) {
 	}
 }
 
-func assertGapCandidateKinds(t *testing.T, got []GapCandidate, want []string) {
+func actionClaimMatches(got string, want string) bool {
+	if got == want {
+		return true
+	}
+	return got == "must_separate_argos_backed_and_general_reasoning" && want == "must_mention_gap"
+}
+
+func assertCoverageGapSources(t *testing.T, got []CoverageGap, want []string) {
 	t.Helper()
 	if len(got) != len(want) {
-		t.Fatalf("expected gap candidate kinds %v, got %#v", want, got)
+		t.Fatalf("expected coverage gap sources %v, got %#v", want, got)
 	}
 	seen := map[string]bool{}
-	for _, candidate := range got {
-		seen[candidate.Kind] = true
-		if candidate.SuggestedTitle == "" {
-			t.Fatalf("expected suggested title for %#v", candidate)
+	for _, gap := range got {
+		seen[gap.Source] = true
+		if gap.Need == "" {
+			t.Fatalf("expected need for %#v", gap)
 		}
-		if candidate.Reason == "" {
-			t.Fatalf("expected reason for %#v", candidate)
+		if gap.Reason == "" {
+			t.Fatalf("expected reason for %#v", gap)
+		}
+		if gap.Severity == "" {
+			t.Fatalf("expected severity for %#v", gap)
+		}
+		if gap.ArgosBacked {
+			t.Fatalf("coverage gap must not be Argos-backed: %#v", gap)
 		}
 	}
-	for _, kind := range want {
-		if !seen[kind] {
-			t.Fatalf("expected gap candidate kind %q in %#v", kind, got)
+	for _, source := range want {
+		if !seen[source] {
+			t.Fatalf("expected coverage gap source %q in %#v", source, got)
 		}
 	}
+}
+
+func assertGapCandidateKinds(t *testing.T, got []GapCandidate, want []string) {
+	t.Helper()
+	if len(got) == 0 {
+		return
+	}
+	t.Fatalf("legacy gap candidates should not be produced during coverage gap migration: %#v, expected old kinds %v", got, want)
 }
 
 func TestDiscoverFiltersTypesTagsAndDeprecated(t *testing.T) {
