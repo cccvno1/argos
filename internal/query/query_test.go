@@ -362,6 +362,86 @@ func TestDiscoverActionPolicyFollowsCoverage(t *testing.T) {
 	}
 }
 
+func TestDiscoverRecallStateDefaultsSemanticDisabled(t *testing.T) {
+	store := buildDiscoveryTestStore(t)
+	defer store.Close()
+	service := New(store)
+
+	result, err := service.Discover(DiscoverRequest{
+		Project: "mall-api",
+		Phase:   "implementation",
+		Task:    "add refresh token endpoint",
+		Query:   "refresh token",
+		Files:   []string{"internal/auth/session.go"},
+		Limit:   5,
+	})
+	if err != nil {
+		t.Fatalf("Discover returned error: %v", err)
+	}
+	if result.Recall.Semantic.Status != "disabled" {
+		t.Fatalf("expected semantic recall disabled, got %#v", result.Recall)
+	}
+	if result.Recall.Semantic.Reason == "" {
+		t.Fatalf("expected semantic recall reason, got %#v", result.Recall)
+	}
+}
+
+func TestDiscoverGapCandidatesForNoneCoverage(t *testing.T) {
+	store := buildDiscoveryTestStore(t)
+	defer store.Close()
+	service := New(store)
+
+	result, err := service.Discover(DiscoverRequest{
+		Project: "mall-api",
+		Phase:   "implementation",
+		Task:    "add payment webhook signature verification",
+		Query:   "payment webhook signature",
+		Limit:   5,
+	})
+	if err != nil {
+		t.Fatalf("Discover returned error: %v", err)
+	}
+	if result.Coverage.Status != "none" {
+		t.Fatalf("expected none coverage, got %#v", result.Coverage)
+	}
+	assertGapCandidateKinds(t, result.GapCandidates, []string{"standard", "decision", "lesson"})
+	for _, candidate := range result.GapCandidates {
+		if candidate.NextAction != "capture_candidate" {
+			t.Fatalf("expected capture_candidate next action, got %#v", candidate)
+		}
+		if candidate.CaptureMode != "proposal_required" {
+			t.Fatalf("expected proposal_required capture mode, got %#v", candidate)
+		}
+		if candidate.Authority != "candidate_only" {
+			t.Fatalf("expected candidate_only authority, got %#v", candidate)
+		}
+	}
+}
+
+func TestDiscoverStrongCoverageOmitsGapCandidates(t *testing.T) {
+	store := buildDiscoveryTestStore(t)
+	defer store.Close()
+	service := New(store)
+
+	result, err := service.Discover(DiscoverRequest{
+		Project: "mall-api",
+		Phase:   "implementation",
+		Task:    "add refresh token endpoint",
+		Query:   "refresh token",
+		Files:   []string{"internal/auth/session.go"},
+		Limit:   5,
+	})
+	if err != nil {
+		t.Fatalf("Discover returned error: %v", err)
+	}
+	if result.Coverage.Status != "strong" {
+		t.Fatalf("expected strong coverage, got %#v", result.Coverage)
+	}
+	if len(result.GapCandidates) != 0 {
+		t.Fatalf("strong coverage should not produce gap candidates: %#v", result.GapCandidates)
+	}
+}
+
 func TestMapActionPolicyForbidsLoadCitationAndClaims(t *testing.T) {
 	store := buildDiscoveryTestStore(t)
 	defer store.Close()
@@ -386,6 +466,28 @@ func assertActionPolicy(t *testing.T, got ActionPolicy, want ActionPolicy) {
 	}
 	if got.Reason == "" {
 		t.Fatalf("expected action policy reason: %#v", got)
+	}
+}
+
+func assertGapCandidateKinds(t *testing.T, got []GapCandidate, want []string) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("expected gap candidate kinds %v, got %#v", want, got)
+	}
+	seen := map[string]bool{}
+	for _, candidate := range got {
+		seen[candidate.Kind] = true
+		if candidate.SuggestedTitle == "" {
+			t.Fatalf("expected suggested title for %#v", candidate)
+		}
+		if candidate.Reason == "" {
+			t.Fatalf("expected reason for %#v", candidate)
+		}
+	}
+	for _, kind := range want {
+		if !seen[kind] {
+			t.Fatalf("expected gap candidate kind %q in %#v", kind, got)
+		}
 	}
 }
 

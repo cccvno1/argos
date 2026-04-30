@@ -57,14 +57,16 @@ type ContextResponse struct {
 }
 
 type DiscoveryResponse struct {
-	Project      string                      `json:"project"`
-	Phase        string                      `json:"phase"`
-	Query        string                      `json:"query"`
-	Capabilities index.DiscoveryCapabilities `json:"capabilities"`
-	Coverage     Coverage                    `json:"coverage"`
-	ActionPolicy ActionPolicy                `json:"action_policy"`
-	Items        []DiscoveryItem             `json:"items"`
-	NextCalls    []RecommendedCall           `json:"next_calls"`
+	Project       string                      `json:"project"`
+	Phase         string                      `json:"phase"`
+	Query         string                      `json:"query"`
+	Capabilities  index.DiscoveryCapabilities `json:"capabilities"`
+	Coverage      Coverage                    `json:"coverage"`
+	ActionPolicy  ActionPolicy                `json:"action_policy"`
+	Recall        RecallState                 `json:"recall"`
+	GapCandidates []GapCandidate              `json:"gap_candidates,omitempty"`
+	Items         []DiscoveryItem             `json:"items"`
+	NextCalls     []RecommendedCall           `json:"next_calls"`
 }
 
 type MapResponse struct {
@@ -88,6 +90,27 @@ type ActionPolicy struct {
 	Cite      string `json:"cite"`
 	Claim     string `json:"claim"`
 	Reason    string `json:"reason"`
+}
+
+type RecallState struct {
+	Semantic SemanticRecallState `json:"semantic"`
+}
+
+type SemanticRecallState struct {
+	Status   string `json:"status"`
+	Provider string `json:"provider,omitempty"`
+	Model    string `json:"model,omitempty"`
+	Reason   string `json:"reason,omitempty"`
+}
+
+type GapCandidate struct {
+	Kind           string `json:"kind"`
+	SuggestedTitle string `json:"suggested_title"`
+	Reason         string `json:"reason"`
+	Source         string `json:"source"`
+	NextAction     string `json:"next_action"`
+	CaptureMode    string `json:"capture_mode"`
+	Authority      string `json:"authority"`
 }
 
 type Inventory struct {
@@ -344,14 +367,16 @@ func (s *Service) Discover(req DiscoverRequest) (DiscoveryResponse, error) {
 	nextCalls := discoveryNextCalls(results, coverage, req.Phase)
 
 	return DiscoveryResponse{
-		Project:      req.Project,
-		Phase:        req.Phase,
-		Query:        intent,
-		Capabilities: caps,
-		Coverage:     coverage,
-		ActionPolicy: discoveryActionPolicy(coverage),
-		Items:        results,
-		NextCalls:    nextCalls,
+		Project:       req.Project,
+		Phase:         req.Phase,
+		Query:         intent,
+		Capabilities:  caps,
+		Coverage:      coverage,
+		ActionPolicy:  discoveryActionPolicy(coverage),
+		Recall:        defaultRecallState(),
+		GapCandidates: gapCandidatesForCoverage(coverage),
+		Items:         results,
+		NextCalls:     nextCalls,
 	}, nil
 }
 
@@ -874,6 +899,47 @@ func missingKnowledgeHints(intent string) []string {
 		return nil
 	}
 	return []string{intent + " standard", intent + " decision", intent + " lesson"}
+}
+
+func defaultRecallState() RecallState {
+	return RecallState{
+		Semantic: SemanticRecallState{
+			Status: "disabled",
+			Reason: "semantic provider is not configured",
+		},
+	}
+}
+
+func gapCandidatesForCoverage(coverage Coverage) []GapCandidate {
+	if coverage.Status == "strong" || len(coverage.MissingKnowledgeHints) == 0 {
+		return nil
+	}
+	kinds := []string{"standard", "decision", "lesson"}
+	candidates := make([]GapCandidate, 0, len(coverage.MissingKnowledgeHints))
+	for i, hint := range coverage.MissingKnowledgeHints {
+		kind := "reference"
+		if i < len(kinds) {
+			kind = kinds[i]
+		}
+		candidates = append(candidates, GapCandidate{
+			Kind:           kind,
+			SuggestedTitle: titleFromGapHint(hint, kind),
+			Reason:         "No official Argos " + kind + " knowledge matched: " + hint,
+			Source:         "missing_knowledge_hint",
+			NextAction:     "capture_candidate",
+			CaptureMode:    "proposal_required",
+			Authority:      "candidate_only",
+		})
+	}
+	return candidates
+}
+
+func titleFromGapHint(hint string, kind string) string {
+	hint = strings.TrimSpace(hint)
+	if hint == "" {
+		return "Missing " + kind + " knowledge"
+	}
+	return strings.TrimSpace(strings.TrimSuffix(hint, " "+kind)) + " " + kind
 }
 
 func mapGroupKey(item knowledge.Item) string {
