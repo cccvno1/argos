@@ -1,0 +1,316 @@
+{
+  "cases": [
+    {
+      "id": "map_inventory_normal",
+      "operation": "map",
+      "input": {"project": "mall-api"},
+      "expected": {
+        "inventory_types_min": {"rule": 2, "package": 1},
+        "include_domains": ["backend", "security"],
+        "include_tags": ["auth", "refresh-token"],
+        "include_ids": ["package:backend.auth-refresh.v1"],
+        "no_bodies": true
+      }
+    },
+    {
+      "id": "map_inventory_empty",
+      "operation": "map-empty",
+      "input": {"project": "unknown-api"},
+      "expected": {"groups_empty": true, "no_bodies": true}
+    },
+    {
+      "id": "map_hides_deprecated_by_default",
+      "operation": "map",
+      "input": {"project": "mall-api"},
+      "expected": {
+        "exclude_ids": ["rule:backend.deprecated-auth.v1"],
+        "include_deprecated_id_when_requested": "rule:backend.deprecated-auth.v1",
+        "no_bodies": true
+      }
+    },
+    {
+      "id": "map_global_knowledge_visible",
+      "operation": "map",
+      "input": {"project": "mall-api"},
+      "expected": {
+        "include_ids": ["reference:backend.global-refresh.v1"],
+        "exclude_ids": ["rule:warehouse.auth.v1"],
+        "no_bodies": true
+      }
+    },
+    {
+      "id": "strong_auth_refresh_full_signal",
+      "operation": "discover",
+      "input": {
+        "project": "mall-api",
+        "phase": "implementation",
+        "task": "add refresh token endpoint",
+        "query": "refresh token session renewal",
+        "files": ["internal/auth/session.go"],
+        "limit": 5
+      },
+      "expected": {
+        "coverage": "strong",
+        "top_id": "rule:backend.auth-refresh.v1",
+        "include_ids": ["rule:backend.auth-refresh.v1", "decision:backend.session-renewal.v1"],
+        "exclude_ids": ["rule:backend.deprecated-auth.v1"],
+        "require_next_call_tools": ["get_knowledge_item"],
+        "no_bodies": true
+      }
+    },
+    {
+      "id": "strong_auth_refresh_query_only",
+      "operation": "discover",
+      "input": {
+        "project": "mall-api",
+        "phase": "planning",
+        "query": "refresh token session renewal",
+        "limit": 5
+      },
+      "expected": {
+        "coverage": "strong",
+        "include_ids": ["rule:backend.auth-refresh.v1"],
+        "exclude_ids": ["reference:backend.cache-policy.v1"],
+        "no_bodies": true
+      }
+    },
+    {
+      "id": "strong_auth_refresh_task_only",
+      "operation": "discover",
+      "input": {
+        "project": "mall-api",
+        "phase": "implementation",
+        "task": "add refresh token endpoint",
+        "limit": 5
+      },
+      "expected": {
+        "coverage": "strong",
+        "include_ids": ["rule:backend.auth-refresh.v1"],
+        "exclude_ids": ["reference:backend.cache-policy.v1"],
+        "no_bodies": true
+      }
+    },
+    {
+      "id": "strong_file_scope_beats_generic",
+      "operation": "discover",
+      "input": {
+        "project": "mall-api",
+        "phase": "implementation",
+        "task": "add backend auth handler",
+        "query": "backend auth handler",
+        "files": ["internal/auth/handler.go"],
+        "limit": 5
+      },
+      "expected": {
+        "coverage": "strong",
+        "top_id": "rule:backend.auth-refresh.v1",
+        "include_ids": ["rule:backend.generic.v1"],
+        "why_contains": ["file scope matched"],
+        "no_bodies": true
+      }
+    },
+    {
+      "id": "partial_domain_without_task_detail",
+      "operation": "discover",
+      "input": {
+        "project": "mall-api",
+        "phase": "implementation",
+        "task": "tune cache ttl for product list",
+        "query": "cache ttl product list",
+        "files": ["internal/catalog/products.go"],
+        "limit": 5
+      },
+      "expected": {
+        "coverage": "partial",
+        "include_ids": ["reference:backend.cache-policy.v1"],
+        "require_missing_hints": true,
+        "no_bodies": true
+      }
+    },
+    {
+      "id": "partial_lesson_without_rule",
+      "operation": "discover",
+      "input": {
+        "project": "mall-api",
+        "phase": "debugging",
+        "task": "debug session renewal test failure",
+        "query": "session renewal tests fail logs",
+        "limit": 5
+      },
+      "expected": {
+        "coverage": "partial",
+        "include_ids": ["lesson:backend.auth-debug.v1"],
+        "require_missing_hints": true,
+        "no_bodies": true
+      }
+    },
+    {
+      "id": "partial_package_entrypoint_without_detail",
+      "operation": "discover",
+      "input": {
+        "project": "mall-api",
+        "phase": "planning",
+        "task": "understand auth refresh package",
+        "query": "auth refresh package examples",
+        "types": ["package"],
+        "limit": 5
+      },
+      "expected": {
+        "coverage": "partial",
+        "include_ids": ["package:backend.auth-refresh.v1"],
+        "exclude_ids": ["references/example.md"],
+        "no_bodies": true
+      }
+    },
+    {
+      "id": "weak_single_generic_term",
+      "operation": "discover",
+      "input": {
+        "project": "mall-api",
+        "phase": "implementation",
+        "task": "add warehouse barcode scanner",
+        "query": "barcode scanner token",
+        "limit": 5
+      },
+      "expected": {
+        "coverage": "weak",
+        "forbid_next_call_tools": ["get_knowledge_item", "cite_knowledge"],
+        "no_bodies": true
+      }
+    },
+    {
+      "id": "weak_broad_tag_only",
+      "operation": "discover",
+      "input": {
+        "project": "mall-api",
+        "phase": "implementation",
+        "task": "add warehouse barcode scanner",
+        "query": "backend platform",
+        "tags": ["backend"],
+        "limit": 5
+      },
+      "expected": {
+        "coverage": "weak",
+        "forbid_next_call_tools": ["get_knowledge_item", "cite_knowledge"],
+        "no_bodies": true
+      }
+    },
+    {
+      "id": "none_payment_webhook",
+      "operation": "discover",
+      "input": {
+        "project": "mall-api",
+        "phase": "implementation",
+        "task": "add payment webhook signature verification",
+        "query": "payment webhook signature",
+        "limit": 5
+      },
+      "expected": {
+        "coverage": "none",
+        "items_empty": true,
+        "forbid_next_call_tools": ["get_knowledge_item", "cite_knowledge"],
+        "no_bodies": true
+      }
+    },
+    {
+      "id": "none_project_scope_mismatch",
+      "operation": "discover",
+      "input": {
+        "project": "mall-api",
+        "phase": "implementation",
+        "task": "update warehouse auth flow",
+        "query": "warehouse auth",
+        "limit": 5
+      },
+      "expected": {
+        "coverage": "none",
+        "exclude_ids": ["rule:warehouse.auth.v1"],
+        "forbid_next_call_tools": ["get_knowledge_item", "cite_knowledge"],
+        "no_bodies": true
+      }
+    },
+    {
+      "id": "none_explicit_filter_excludes_match",
+      "operation": "discover",
+      "input": {
+        "project": "mall-api",
+        "phase": "implementation",
+        "task": "add refresh token endpoint",
+        "query": "refresh token",
+        "tags": ["payments"],
+        "limit": 5
+      },
+      "expected": {
+        "coverage": "none",
+        "items_empty": true,
+        "forbid_next_call_tools": ["get_knowledge_item", "cite_knowledge"],
+        "no_bodies": true
+      }
+    },
+    {
+      "id": "progressive_disclosure_and_citation_guard",
+      "operation": "workflow",
+      "input": {
+        "project": "mall-api",
+        "phase": "implementation",
+        "task": "add refresh token endpoint",
+        "query": "refresh token session renewal",
+        "files": ["internal/auth/session.go"],
+        "limit": 5
+      },
+      "expected": {
+        "coverage": "strong",
+        "include_ids": ["rule:backend.auth-refresh.v1"],
+        "load_ids": ["rule:backend.auth-refresh.v1"],
+        "cite_ids": ["rule:backend.auth-refresh.v1"],
+        "no_bodies": true
+      }
+    },
+    {
+      "id": "interface_cli_discover_matches_query",
+      "operation": "cli-discover",
+      "input": {
+        "project": "mall-api",
+        "phase": "implementation",
+        "task": "add refresh token endpoint",
+        "query": "refresh token session renewal",
+        "files": ["internal/auth/session.go"],
+        "limit": 5
+      },
+      "expected": {
+        "coverage": "strong",
+        "include_ids": ["rule:backend.auth-refresh.v1"],
+        "no_bodies": true
+      }
+    },
+    {
+      "id": "interface_cli_map_matches_query",
+      "operation": "cli-map",
+      "input": {"project": "mall-api"},
+      "expected": {
+        "inventory_types_min": {"rule": 2, "package": 1},
+        "include_ids": ["package:backend.auth-refresh.v1"],
+        "no_bodies": true
+      }
+    },
+    {
+      "id": "interface_mcp_strict_schema",
+      "operation": "mcp-schema",
+      "input": {"project": "mall-api"},
+      "expected": {
+        "reject_unknown_arguments": true,
+        "reject_missing_task_and_query": true,
+        "reject_out_of_range_limit": true
+      }
+    },
+    {
+      "id": "adapter_flow_recommendations",
+      "operation": "adapter",
+      "input": {"project": "mall-api"},
+      "expected": {
+        "include_text": ["MCP", "CLI JSON", "generated adapter files", "Markdown source"],
+        "exclude_text": ["query SQLite", "query vector"]
+      }
+    }
+  ]
+}

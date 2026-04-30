@@ -1,0 +1,11 @@
+projects:
+  - id: mall-api
+    name: Mall API
+    path: services/mall-api
+    tech_domains: [backend, security]
+    business_domains: [account]
+  - id: warehouse-api
+    name: Warehouse API
+    path: services/warehouse-api
+    tech_domains: [backend]
+    business_domains: [order]
