@@ -232,6 +232,10 @@ func (f *multiValueFlag) String() string {
 }
 
 func (f *multiValueFlag) Set(value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
 	*f = append(*f, value)
 	return nil
 }

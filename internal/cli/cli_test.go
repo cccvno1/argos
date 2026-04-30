@@ -286,6 +286,40 @@ func TestRunDiscoverReturnsJSONRoutes(t *testing.T) {
 	}
 }
 
+func TestRunDiscoverAcceptsRepeatedFiles(t *testing.T) {
+	root := t.TempDir()
+	writeCLIDiscoveryWorkspace(t, root)
+	chdir(t, root)
+	if code := Run([]string{"index"}, io.Discard, io.Discard); code != 0 {
+		t.Fatalf("index failed with code %d", code)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{"discover", "--json", "--project", "mall-api", "--phase", "implementation", "--task", "add auth middleware", "--query", "auth", "--files", "   ", "--files", " internal/auth/session.go "}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stderr=%q", code, stderr.String())
+	}
+	var result struct {
+		Items []struct {
+			ID              string `json:"id"`
+			ScoreComponents struct {
+				FileScope float64 `json:"file_scope"`
+			} `json:"score_components"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, stdout.String())
+	}
+	if len(result.Items) == 0 || result.Items[0].ID != "rule:backend.auth.v1" {
+		t.Fatalf("expected auth rule from repeated --files flags: %s", stdout.String())
+	}
+	if result.Items[0].ScoreComponents.FileScope != 1 {
+		t.Fatalf("expected trimmed repeated --files to match file scope: %s", stdout.String())
+	}
+}
+
 func TestRunMapReturnsJSONInventory(t *testing.T) {
 	root := t.TempDir()
 	writeCLIDiscoveryWorkspace(t, root)
