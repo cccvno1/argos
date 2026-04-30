@@ -202,13 +202,18 @@ func (s *Service) Context(req ContextRequest) ContextResponse {
 		reason = "operational work should respect active project standards"
 	}
 
+	calls := []RecommendedCall{
+		{Tool: "argos_discover", Reason: "discover task-relevant Argos knowledge without loading full bodies"},
+		{Tool: "argos_standards", Reason: reason},
+	}
+	if req.Phase == "planning" || strings.Contains(strings.ToLower(req.Task), "understand") {
+		calls = append([]RecommendedCall{{Tool: "argos_map", Reason: "inventory available project knowledge before broad work"}}, calls...)
+	}
+
 	return ContextResponse{
-		Project: req.Project,
-		Phase:   req.Phase,
-		RecommendedNextCalls: []RecommendedCall{{
-			Tool:   "argos_standards",
-			Reason: reason,
-		}},
+		Project:              req.Project,
+		Phase:                req.Phase,
+		RecommendedNextCalls: calls,
 	}
 }
 

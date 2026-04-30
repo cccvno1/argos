@@ -41,8 +41,10 @@ func TestRenderedAdaptersIncludeStableKnowledgeContract(t *testing.T) {
 				"Fall back to CLI JSON when MCP is unavailable and commands can be run.",
 				"Fall back to generated adapter files or Markdown source when command execution is unavailable.",
 				"Before substantial project work, call or emulate argos_context.",
+				"Use argos_discover to route current work to relevant Argos knowledge.",
+				"Use argos_map for broad orientation before unfamiliar project work.",
 				"Before implementation or review, call or emulate argos_standards.",
-				"Load full knowledge items only when routed to specific IDs or paths.",
+				"Load full knowledge items only through get_knowledge_item when routed to specific IDs or paths.",
 				"Cite Argos knowledge IDs used in final responses.",
 				"Argos validation does not replace tests, builds, linting, or review.",
 			} {

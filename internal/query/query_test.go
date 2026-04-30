@@ -562,6 +562,8 @@ func TestContextRecommendationsOnlyUseCallableTools(t *testing.T) {
 	service := New(nil)
 	callableTools := map[string]bool{
 		"argos_context":      true,
+		"argos_discover":     true,
+		"argos_map":          true,
 		"argos_standards":    true,
 		"get_knowledge_item": true,
 		"cite_knowledge":     true,
@@ -600,6 +602,23 @@ func TestContextRecommendationsOnlyUseCallableTools(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestContextRecommendsDiscoveryForBroadWork(t *testing.T) {
+	service := New(nil)
+	result := service.Context(ContextRequest{
+		Project: "mall-api",
+		Phase:   "planning",
+		Task:    "understand auth refresh token flow",
+	})
+
+	var tools []string
+	for _, call := range result.RecommendedNextCalls {
+		tools = append(tools, call.Tool)
+	}
+	if !contains(tools, "argos_map") || !contains(tools, "argos_discover") {
+		t.Fatalf("expected map and discover recommendations, got %#v", result.RecommendedNextCalls)
 	}
 }
 
