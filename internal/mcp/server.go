@@ -273,6 +273,50 @@ func (s *Server) callTool(data json.RawMessage) (toolCallResult, *rpcError, erro
 		}
 		result, err := textResult(resp)
 		return result, nil, err
+	case "argos_discover":
+		var req query.DiscoverRequest
+		if err := decodeArgs(params.Arguments, &req); err != nil {
+			return textToolError("invalid arguments for argos_discover: " + err.Error()), nil, nil
+		}
+		if err := requireStringFields(map[string]string{"project": req.Project}, "project"); err != nil {
+			return textToolError("invalid arguments for argos_discover: " + err.Error()), nil, nil
+		}
+		if strings.TrimSpace(req.Task) == "" && strings.TrimSpace(req.Query) == "" {
+			return textToolError("invalid arguments for argos_discover: task or query is required"), nil, nil
+		}
+		limitProvided, err := hasArgument(params.Arguments, "limit")
+		if err != nil {
+			return textToolError("invalid arguments for argos_discover: " + err.Error()), nil, nil
+		}
+		if limitProvided && (req.Limit < 0 || req.Limit > 20) {
+			return textToolError("invalid arguments for argos_discover: limit must be between 0 and 20"), nil, nil
+		}
+		if s.store == nil {
+			return textToolError("index not available: run argos index first"), nil, nil
+		}
+		resp, err := s.service.Discover(req)
+		if err != nil {
+			return textToolError("discover: " + err.Error()), nil, nil
+		}
+		result, err := textResult(resp)
+		return result, nil, err
+	case "argos_map":
+		var req query.MapRequest
+		if err := decodeArgs(params.Arguments, &req); err != nil {
+			return textToolError("invalid arguments for argos_map: " + err.Error()), nil, nil
+		}
+		if err := requireStringFields(map[string]string{"project": req.Project}, "project"); err != nil {
+			return textToolError("invalid arguments for argos_map: " + err.Error()), nil, nil
+		}
+		if s.store == nil {
+			return textToolError("index not available: run argos index first"), nil, nil
+		}
+		resp, err := s.service.Map(req)
+		if err != nil {
+			return textToolError("map: " + err.Error()), nil, nil
+		}
+		result, err := textResult(resp)
+		return result, nil, err
 	case "get_knowledge_item":
 		var req struct {
 			ID string `json:"id"`
@@ -416,6 +460,35 @@ func tools() []tool {
 			}, []string{"project"}),
 		},
 		{
+			Name:        "argos_discover",
+			Description: "Discover relevant knowledge routes for current work.",
+			InputSchema: objectSchema(map[string]any{
+				"project":            stringProperty("Project identifier."),
+				"phase":              stringProperty("Workflow phase."),
+				"task":               stringProperty("Current task description."),
+				"query":              stringProperty("Search query."),
+				"files":              stringArrayProperty("Files relevant to the current task."),
+				"types":              stringArrayProperty("Knowledge item types to include."),
+				"tags":               stringArrayProperty("Tags to include."),
+				"domains":            stringArrayProperty("Domains to include."),
+				"status":             stringArrayProperty("Statuses to include."),
+				"include_inbox":      booleanProperty("Include inbox knowledge items."),
+				"include_deprecated": booleanProperty("Include deprecated knowledge items."),
+				"limit":              integerProperty("Maximum number of discovery items to return.", 0, 20),
+			}, []string{"project"}),
+		},
+		{
+			Name:        "argos_map",
+			Description: "Map available knowledge inventory for a project.",
+			InputSchema: objectSchema(map[string]any{
+				"project":            stringProperty("Project identifier."),
+				"domain":             stringProperty("Domain filter."),
+				"types":              stringArrayProperty("Knowledge item types to include."),
+				"include_inbox":      booleanProperty("Include inbox knowledge items."),
+				"include_deprecated": booleanProperty("Include deprecated knowledge items."),
+			}, []string{"project"}),
+		},
+		{
 			Name:        "get_knowledge_item",
 			Description: "Fetch a knowledge item by id.",
 			InputSchema: objectSchema(map[string]any{
@@ -467,6 +540,13 @@ func integerProperty(description string, minimum, maximum int) map[string]any {
 		"description": description,
 		"minimum":     minimum,
 		"maximum":     maximum,
+	}
+}
+
+func booleanProperty(description string) map[string]any {
+	return map[string]any{
+		"type":        "boolean",
+		"description": description,
 	}
 }
 

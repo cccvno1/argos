@@ -45,7 +45,7 @@ func TestServerHandlesToolsList(t *testing.T) {
 	}
 	decodeResult(t, resp, &result)
 
-	for _, name := range []string{"argos_context", "argos_standards", "get_knowledge_item", "cite_knowledge"} {
+	for _, name := range []string{"argos_context", "argos_standards", "argos_discover", "argos_map", "get_knowledge_item", "cite_knowledge"} {
 		tool := findTool(result.Tools, name)
 		if tool == nil {
 			t.Fatalf("expected %s tool in response: %s", name, out.String())
@@ -87,6 +87,15 @@ func TestToolsListIncludesConcreteSchemasForImplementedTools(t *testing.T) {
 	assertToolSchemaRequired(t, result.Tools, "argos_standards", []string{"project"})
 	assertToolSchemaPropertyBounds(t, result.Tools, "argos_standards", "limit", 1, 5)
 	assertToolSchemaDisallowsAdditionalProperties(t, result.Tools, "argos_standards")
+
+	assertToolSchemaHasProperties(t, result.Tools, "argos_discover", []string{"project", "phase", "task", "query", "files", "types", "tags", "domains", "status", "include_inbox", "include_deprecated", "limit"})
+	assertToolSchemaRequired(t, result.Tools, "argos_discover", []string{"project"})
+	assertToolSchemaPropertyBounds(t, result.Tools, "argos_discover", "limit", 0, 20)
+	assertToolSchemaDisallowsAdditionalProperties(t, result.Tools, "argos_discover")
+
+	assertToolSchemaHasProperties(t, result.Tools, "argos_map", []string{"project", "domain", "types", "include_inbox", "include_deprecated"})
+	assertToolSchemaRequired(t, result.Tools, "argos_map", []string{"project"})
+	assertToolSchemaDisallowsAdditionalProperties(t, result.Tools, "argos_map")
 
 	assertToolSchemaHasProperties(t, result.Tools, "get_knowledge_item", []string{"id"})
 	assertToolSchemaRequired(t, result.Tools, "get_knowledge_item", []string{"id"})
@@ -280,6 +289,66 @@ func TestToolCallArgosStandardsExplicitLimitOutOfRangeReturnsToolError(t *testin
 
 		assertToolErrorContains(t, out.Bytes(), "invalid arguments for argos_standards: limit must be between 1 and 5")
 	}
+}
+
+func TestToolCallArgosDiscoverReturnsRoutes(t *testing.T) {
+	store := buildMCPTestStore(t)
+	defer store.Close()
+	server := NewServerWithStore(store)
+
+	var out bytes.Buffer
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_discover","arguments":{"project":"mall-api","phase":"implementation","task":"add refresh token endpoint","query":"auth middleware refresh token","files":["internal/auth/session.go"],"limit":5}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	result := resultMap(t, decodeRPCResponse(t, out.Bytes()))
+	if result["isError"] == true {
+		t.Fatalf("expected success result: %#v", result)
+	}
+	text := firstContentText(t, result)
+	if !strings.Contains(text, `"coverage"`) || !strings.Contains(text, `"items"`) {
+		t.Fatalf("expected coverage and items in discover response: %s", text)
+	}
+	if strings.Contains(text, `"body"`) {
+		t.Fatalf("discover should not return full body: %s", text)
+	}
+}
+
+func TestToolCallArgosMapReturnsInventory(t *testing.T) {
+	store := buildMCPTestStore(t)
+	defer store.Close()
+	server := NewServerWithStore(store)
+
+	var out bytes.Buffer
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_map","arguments":{"project":"mall-api","domain":"backend"}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	result := resultMap(t, decodeRPCResponse(t, out.Bytes()))
+	if result["isError"] == true {
+		t.Fatalf("expected success result: %#v", result)
+	}
+	text := firstContentText(t, result)
+	if !strings.Contains(text, `"inventory"`) {
+		t.Fatalf("expected inventory in map response: %s", text)
+	}
+	if strings.Contains(text, `"body"`) {
+		t.Fatalf("map should not return full body: %s", text)
+	}
+}
+
+func TestToolCallArgosDiscoverWithoutIndexReturnsToolError(t *testing.T) {
+	server := NewServer(query.New(nil))
+	var out bytes.Buffer
+
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_discover","arguments":{"project":"mall-api","task":"add refresh token endpoint"}}}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+
+	assertToolErrorContains(t, out.Bytes(), "index not available: run argos index first")
 }
 
 func TestToolCallGetKnowledgeItemReturnsFullBody(t *testing.T) {
