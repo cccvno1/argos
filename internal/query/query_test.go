@@ -271,6 +271,124 @@ func TestDiscoverReportsNoneCoverageForUnmatchedTask(t *testing.T) {
 	}
 }
 
+func TestDiscoverActionPolicyFollowsCoverage(t *testing.T) {
+	tests := []struct {
+		name string
+		req  DiscoverRequest
+		want ActionPolicy
+	}{
+		{
+			name: "strong",
+			req: DiscoverRequest{
+				Project: "mall-api",
+				Phase:   "implementation",
+				Task:    "add refresh token endpoint",
+				Query:   "refresh token",
+				Files:   []string{"internal/auth/session.go"},
+				Limit:   5,
+			},
+			want: ActionPolicy{
+				Authority: "strong",
+				Load:      "recommended",
+				Cite:      "after_loaded_and_used",
+				Claim:     "allowed",
+			},
+		},
+		{
+			name: "partial",
+			req: DiscoverRequest{
+				Project: "mall-api",
+				Phase:   "debugging",
+				Task:    "debug session renewal test failure",
+				Query:   "session renewal tests fail logs",
+				Limit:   5,
+			},
+			want: ActionPolicy{
+				Authority: "partial",
+				Load:      "allowed",
+				Cite:      "after_loaded_and_used",
+				Claim:     "must_mention_gap",
+			},
+		},
+		{
+			name: "weak",
+			req: DiscoverRequest{
+				Project: "mall-api",
+				Phase:   "implementation",
+				Task:    "add warehouse barcode scanner",
+				Query:   "barcode scanner token",
+				Limit:   5,
+			},
+			want: ActionPolicy{
+				Authority: "weak",
+				Load:      "forbidden",
+				Cite:      "forbidden",
+				Claim:     "forbidden",
+			},
+		},
+		{
+			name: "none",
+			req: DiscoverRequest{
+				Project: "mall-api",
+				Phase:   "implementation",
+				Task:    "add payment webhook signature verification",
+				Query:   "payment webhook signature",
+				Limit:   5,
+			},
+			want: ActionPolicy{
+				Authority: "none",
+				Load:      "forbidden",
+				Cite:      "forbidden",
+				Claim:     "forbidden",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := buildDiscoveryTestStore(t)
+			defer store.Close()
+			service := New(store)
+
+			result, err := service.Discover(tt.req)
+			if err != nil {
+				t.Fatalf("Discover returned error: %v", err)
+			}
+			assertActionPolicy(t, result.ActionPolicy, tt.want)
+			if result.ActionPolicy.Authority != result.Coverage.Status {
+				t.Fatalf("expected policy authority to mirror coverage status, got policy=%#v coverage=%#v", result.ActionPolicy, result.Coverage)
+			}
+		})
+	}
+}
+
+func TestMapActionPolicyForbidsLoadCitationAndClaims(t *testing.T) {
+	store := buildDiscoveryTestStore(t)
+	defer store.Close()
+	service := New(store)
+
+	result, err := service.Map(MapRequest{Project: "mall-api"})
+	if err != nil {
+		t.Fatalf("Map returned error: %v", err)
+	}
+	assertActionPolicy(t, result.ActionPolicy, ActionPolicy{
+		Authority: "inventory",
+		Load:      "forbidden",
+		Cite:      "forbidden",
+		Claim:     "forbidden",
+	})
+}
+
+func assertActionPolicy(t *testing.T, got ActionPolicy, want ActionPolicy) {
+	t.Helper()
+	if got.Authority != want.Authority || got.Load != want.Load || got.Cite != want.Cite || got.Claim != want.Claim {
+		t.Fatalf("expected action policy %#v, got %#v", want, got)
+	}
+	if got.Reason == "" {
+		t.Fatalf("expected action policy reason: %#v", got)
+	}
+}
+
 func TestDiscoverFiltersTypesTagsAndDeprecated(t *testing.T) {
 	store := buildDiscoveryTestStore(t)
 	defer store.Close()

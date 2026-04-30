@@ -62,14 +62,16 @@ type DiscoveryResponse struct {
 	Query        string                      `json:"query"`
 	Capabilities index.DiscoveryCapabilities `json:"capabilities"`
 	Coverage     Coverage                    `json:"coverage"`
+	ActionPolicy ActionPolicy                `json:"action_policy"`
 	Items        []DiscoveryItem             `json:"items"`
 	NextCalls    []RecommendedCall           `json:"next_calls"`
 }
 
 type MapResponse struct {
-	Project   string     `json:"project"`
-	Inventory Inventory  `json:"inventory"`
-	Groups    []MapGroup `json:"groups"`
+	Project      string       `json:"project"`
+	ActionPolicy ActionPolicy `json:"action_policy"`
+	Inventory    Inventory    `json:"inventory"`
+	Groups       []MapGroup   `json:"groups"`
 }
 
 type Coverage struct {
@@ -78,6 +80,14 @@ type Coverage struct {
 	Reason                string   `json:"reason"`
 	Recommendation        string   `json:"recommendation"`
 	MissingKnowledgeHints []string `json:"missing_knowledge_hints,omitempty"`
+}
+
+type ActionPolicy struct {
+	Authority string `json:"authority"`
+	Load      string `json:"load"`
+	Cite      string `json:"cite"`
+	Claim     string `json:"claim"`
+	Reason    string `json:"reason"`
 }
 
 type Inventory struct {
@@ -339,6 +349,7 @@ func (s *Service) Discover(req DiscoverRequest) (DiscoveryResponse, error) {
 		Query:        intent,
 		Capabilities: caps,
 		Coverage:     coverage,
+		ActionPolicy: discoveryActionPolicy(coverage),
 		Items:        results,
 		NextCalls:    nextCalls,
 	}, nil
@@ -386,7 +397,7 @@ func (s *Service) Map(req MapRequest) (MapResponse, error) {
 	}
 	sort.Slice(groups, func(i, j int) bool { return groups[i].Key < groups[j].Key })
 
-	return MapResponse{Project: req.Project, Inventory: inventory, Groups: groups}, nil
+	return MapResponse{Project: req.Project, ActionPolicy: mapActionPolicy(), Inventory: inventory, Groups: groups}, nil
 }
 
 func (s *Service) GetKnowledgeItem(id string) (KnowledgeItemResult, error) {
@@ -790,6 +801,53 @@ func discoveryCoverage(items []DiscoveryItem, intent string, req DiscoverRequest
 
 func packageOnlyRequest(req DiscoverRequest) bool {
 	return len(req.Types) == 1 && req.Types[0] == "package"
+}
+
+func discoveryActionPolicy(coverage Coverage) ActionPolicy {
+	switch coverage.Status {
+	case "strong":
+		return ActionPolicy{
+			Authority: "strong",
+			Load:      "recommended",
+			Cite:      "after_loaded_and_used",
+			Claim:     "allowed",
+			Reason:    "Strong Argos coverage; load selected items before applying and cite only loaded knowledge actually used.",
+		}
+	case "partial":
+		return ActionPolicy{
+			Authority: "partial",
+			Load:      "allowed",
+			Cite:      "after_loaded_and_used",
+			Claim:     "must_mention_gap",
+			Reason:    "Partial Argos coverage; load only relevant items and mention coverage gaps when applying them.",
+		}
+	case "weak":
+		return ActionPolicy{
+			Authority: "weak",
+			Load:      "forbidden",
+			Cite:      "forbidden",
+			Claim:     "forbidden",
+			Reason:    "Weak Argos coverage; inspect summaries only and do not make Argos-backed claims.",
+		}
+	default:
+		return ActionPolicy{
+			Authority: "none",
+			Load:      "forbidden",
+			Cite:      "forbidden",
+			Claim:     "forbidden",
+			Reason:    "No Argos coverage; use missing knowledge hints as gaps only and do not cite Argos knowledge.",
+		}
+	}
+}
+
+func mapActionPolicy() ActionPolicy {
+	return ActionPolicy{
+		Authority: "inventory",
+		Load:      "forbidden",
+		Cite:      "forbidden",
+		Claim:     "forbidden",
+		Reason:    "Map inventory is for orientation only; do not load, cite, or make task claims from inventory alone.",
+	}
 }
 
 func discoveryNextCalls(items []DiscoveryItem, coverage Coverage, phase string) []RecommendedCall {
