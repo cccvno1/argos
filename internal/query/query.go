@@ -29,10 +29,70 @@ type ContextRequest struct {
 	Files   []string `json:"files"`
 }
 
+type DiscoverRequest struct {
+	Project           string   `json:"project"`
+	Phase             string   `json:"phase"`
+	Task              string   `json:"task"`
+	Query             string   `json:"query"`
+	Files             []string `json:"files"`
+	Types             []string `json:"types"`
+	Tags              []string `json:"tags"`
+	Domains           []string `json:"domains"`
+	Status            []string `json:"status"`
+	IncludeInbox      bool     `json:"include_inbox"`
+	IncludeDeprecated bool     `json:"include_deprecated"`
+	Limit             int      `json:"limit"`
+}
+
+type MapRequest struct {
+	Project           string   `json:"project"`
+	Domain            string   `json:"domain"`
+	Types             []string `json:"types"`
+	IncludeInbox      bool     `json:"include_inbox"`
+	IncludeDeprecated bool     `json:"include_deprecated"`
+}
+
 type ContextResponse struct {
 	Project              string            `json:"project"`
 	Phase                string            `json:"phase"`
 	RecommendedNextCalls []RecommendedCall `json:"recommended_next_calls"`
+}
+
+type DiscoveryResponse struct {
+	Project      string                      `json:"project"`
+	Phase        string                      `json:"phase"`
+	Query        string                      `json:"query"`
+	Capabilities index.DiscoveryCapabilities `json:"capabilities"`
+	Coverage     Coverage                    `json:"coverage"`
+	Items        []DiscoveryItem             `json:"items"`
+	NextCalls    []RecommendedCall           `json:"next_calls"`
+}
+
+type MapResponse struct {
+	Project   string     `json:"project"`
+	Inventory Inventory  `json:"inventory"`
+	Groups    []MapGroup `json:"groups"`
+}
+
+type Coverage struct {
+	Status                string   `json:"status"`
+	Confidence            float64  `json:"confidence"`
+	Reason                string   `json:"reason"`
+	Recommendation        string   `json:"recommendation"`
+	MissingKnowledgeHints []string `json:"missing_knowledge_hints,omitempty"`
+}
+
+type Inventory struct {
+	Types    map[string]int  `json:"types"`
+	Domains  []string        `json:"domains"`
+	Tags     []string        `json:"tags"`
+	Packages []DiscoveryItem `json:"packages"`
+}
+
+type MapGroup struct {
+	Key   string          `json:"key"`
+	Title string          `json:"title"`
+	Items []DiscoveryItem `json:"items"`
 }
 
 type Response struct {
@@ -73,9 +133,44 @@ type Citation struct {
 	Status string `json:"status"`
 }
 
+type DiscoveryItem struct {
+	ID                string          `json:"id"`
+	Type              string          `json:"type"`
+	Title             string          `json:"title"`
+	Summary           string          `json:"summary"`
+	Status            string          `json:"status"`
+	Priority          string          `json:"priority"`
+	Path              string          `json:"path"`
+	Score             float64         `json:"score"`
+	ScoreComponents   ScoreComponents `json:"score_components"`
+	WhyMatched        []string        `json:"why_matched"`
+	MatchedSections   []string        `json:"matched_sections"`
+	Disclosure        Disclosure      `json:"disclosure"`
+	RecommendedAction string          `json:"recommended_action"`
+	Body              string          `json:"-"`
+}
+
+type ScoreComponents struct {
+	Project   float64 `json:"project"`
+	FileScope float64 `json:"file_scope"`
+	TypePhase float64 `json:"type_phase"`
+	Priority  float64 `json:"priority"`
+	Status    float64 `json:"status"`
+	TagDomain float64 `json:"tag_domain"`
+	Lexical   float64 `json:"lexical"`
+	Semantic  float64 `json:"semantic"`
+}
+
+type Disclosure struct {
+	Level             string `json:"level"`
+	FullBodyAvailable bool   `json:"full_body_available"`
+	LoadTool          string `json:"load_tool"`
+}
+
 type RecommendedCall struct {
-	Tool   string `json:"tool"`
-	Reason string `json:"reason"`
+	Tool   string   `json:"tool"`
+	Reason string   `json:"reason"`
+	IDs    []string `json:"ids,omitempty"`
 }
 
 type match struct {
@@ -176,6 +271,115 @@ func (s *Service) Standards(req StandardsRequest) (Response, error) {
 	return response, nil
 }
 
+func (s *Service) Discover(req DiscoverRequest) (DiscoveryResponse, error) {
+	caps, err := s.store.DiscoveryCapabilities()
+	if err != nil {
+		return DiscoveryResponse{}, err
+	}
+	items, err := s.store.ListItems()
+	if err != nil {
+		return DiscoveryResponse{}, err
+	}
+
+	limit := req.Limit
+	if limit <= 0 {
+		limit = 8
+	}
+	if limit > 20 {
+		limit = 20
+	}
+
+	intent := strings.TrimSpace(strings.Join([]string{req.Task, req.Query}, " "))
+	textMatches, err := s.store.SearchText(intent, 50)
+	if err != nil {
+		return DiscoveryResponse{}, err
+	}
+	lexical := lexicalScores(textMatches)
+	sections := matchedSections(textMatches)
+
+	var results []DiscoveryItem
+	for _, item := range items {
+		if !discoverCandidateAllowed(item, req) {
+			continue
+		}
+		result := discoveryItem(item, req, lexical[item.ID], sections[item.ID])
+		if !hasDiscoverySignal(result.ScoreComponents, req) || result.Score <= 0.25 {
+			continue
+		}
+		results = append(results, result)
+	}
+	sort.Slice(results, func(i, j int) bool {
+		if results[i].Score != results[j].Score {
+			return results[i].Score > results[j].Score
+		}
+		if priorityRank(results[i].Priority) != priorityRank(results[j].Priority) {
+			return priorityRank(results[i].Priority) < priorityRank(results[j].Priority)
+		}
+		return results[i].ID < results[j].ID
+	})
+	if len(results) > limit {
+		results = results[:limit]
+	}
+
+	coverage := discoveryCoverage(results, intent)
+	nextCalls := discoveryNextCalls(results, coverage, req.Phase)
+
+	return DiscoveryResponse{
+		Project:      req.Project,
+		Phase:        req.Phase,
+		Query:        intent,
+		Capabilities: caps,
+		Coverage:     coverage,
+		Items:        results,
+		NextCalls:    nextCalls,
+	}, nil
+}
+
+func (s *Service) Map(req MapRequest) (MapResponse, error) {
+	items, err := s.store.ListItems()
+	if err != nil {
+		return MapResponse{}, err
+	}
+	inventory := Inventory{
+		Types: map[string]int{},
+	}
+	grouped := map[string][]DiscoveryItem{}
+	domainSet := map[string]bool{}
+	tagSet := map[string]bool{}
+
+	for _, item := range items {
+		if !mapCandidateAllowed(item, req) {
+			continue
+		}
+		inventory.Types[item.Type]++
+		for _, domain := range append(append([]string{}, item.TechDomains...), item.BusinessDomains...) {
+			domainSet[domain] = true
+		}
+		for _, tag := range item.Tags {
+			tagSet[tag] = true
+		}
+		route := discoveryItemFromKnowledge(item)
+		if item.Type == "package" {
+			inventory.Packages = append(inventory.Packages, route)
+		}
+		key := mapGroupKey(item)
+		grouped[key] = append(grouped[key], route)
+	}
+
+	inventory.Domains = sortedKeys(domainSet)
+	inventory.Tags = sortedKeys(tagSet)
+	sort.Slice(inventory.Packages, func(i, j int) bool { return inventory.Packages[i].ID < inventory.Packages[j].ID })
+
+	var groups []MapGroup
+	for key, groupItems := range grouped {
+		sort.Slice(groupItems, func(i, j int) bool { return groupItems[i].ID < groupItems[j].ID })
+		groups = append(groups, MapGroup{Key: key, Title: titleFromKey(key), Items: groupItems})
+	}
+	sort.Slice(groups, func(i, j int) bool { return groups[i].Key < groups[j].Key })
+
+	return MapResponse{Project: req.Project, Inventory: inventory, Groups: groups}, nil
+}
+
 func (s *Service) GetKnowledgeItem(id string) (KnowledgeItemResult, error) {
 	item, err := s.store.GetItem(id)
 	if err != nil {
@@ -268,6 +472,362 @@ func firstSentence(body string) string {
 		return line
 	}
 	return ""
+}
+
+func discoveryItem(item knowledge.Item, req DiscoverRequest, lexical float64, sections []string) DiscoveryItem {
+	components := ScoreComponents{
+		Project:   boolScore(contains(item.Projects, req.Project)),
+		FileScope: fileScopeScore(item, req.Files),
+		TypePhase: typePhaseScore(item.Type, req.Phase),
+		Priority:  priorityScore(item.Priority),
+		Status:    statusScore(item.Status),
+		TagDomain: tagDomainScore(item, req.Tags, req.Domains),
+		Lexical:   lexical,
+		Semantic:  0,
+	}
+	score := weightedScore(components)
+	result := discoveryItemFromKnowledge(item)
+	result.Score = score
+	result.ScoreComponents = components
+	result.WhyMatched = whyMatched(item, req, components)
+	result.MatchedSections = sections
+	result.RecommendedAction = recommendedAction(item, score, req.Phase)
+	return result
+}
+
+func discoveryItemFromKnowledge(item knowledge.Item) DiscoveryItem {
+	return DiscoveryItem{
+		ID:       item.ID,
+		Type:     item.Type,
+		Title:    item.Title,
+		Summary:  firstSentence(item.Body),
+		Status:   item.Status,
+		Priority: item.Priority,
+		Path:     item.Path,
+		Disclosure: Disclosure{
+			Level:             "summary",
+			FullBodyAvailable: true,
+			LoadTool:          "get_knowledge_item",
+		},
+		RecommendedAction: "skim_summary_only",
+	}
+}
+
+func weightedScore(c ScoreComponents) float64 {
+	total := c.Project*0.18 + c.FileScope*0.18 + c.TypePhase*0.14 + c.Priority*0.12 + c.Status*0.08 + c.TagDomain*0.12 + c.Lexical*0.18
+	if total > 1 {
+		return 1
+	}
+	return total
+}
+
+func boolScore(ok bool) float64 {
+	if ok {
+		return 1
+	}
+	return 0
+}
+
+func discoverCandidateAllowed(item knowledge.Item, req DiscoverRequest) bool {
+	if item.Status == "deprecated" && !req.IncludeDeprecated {
+		return false
+	}
+	if item.Status == "inbox" && !req.IncludeInbox {
+		return false
+	}
+	if req.Project != "" && !contains(item.Projects, req.Project) {
+		return false
+	}
+	if len(req.Types) > 0 && !contains(req.Types, item.Type) {
+		return false
+	}
+	if len(req.Status) > 0 && !contains(req.Status, item.Status) {
+		return false
+	}
+	for _, tag := range req.Tags {
+		if !contains(item.Tags, tag) {
+			return false
+		}
+	}
+	for _, domain := range req.Domains {
+		if !contains(item.TechDomains, domain) && !contains(item.BusinessDomains, domain) {
+			return false
+		}
+	}
+	return true
+}
+
+func mapCandidateAllowed(item knowledge.Item, req MapRequest) bool {
+	if item.Status == "deprecated" && !req.IncludeDeprecated {
+		return false
+	}
+	if item.Status == "inbox" && !req.IncludeInbox {
+		return false
+	}
+	if req.Project != "" && !contains(item.Projects, req.Project) {
+		return false
+	}
+	if req.Domain != "" && !contains(item.TechDomains, req.Domain) && !contains(item.BusinessDomains, req.Domain) {
+		return false
+	}
+	if len(req.Types) > 0 && !contains(req.Types, item.Type) {
+		return false
+	}
+	return true
+}
+
+func fileScopeScore(item knowledge.Item, files []string) float64 {
+	if len(item.AppliesTo.Files) == 0 {
+		return 0.4
+	}
+	for _, file := range files {
+		for _, pattern := range item.AppliesTo.Files {
+			matched, err := doublestar.PathMatch(pattern, file)
+			if err == nil && matched {
+				return 1
+			}
+		}
+	}
+	return 0
+}
+
+func typePhaseScore(itemType string, phase string) float64 {
+	preferences := map[string][]string{
+		"planning":       {"decision", "guide", "package", "reference"},
+		"implementation": {"rule", "package", "runbook", "decision"},
+		"review":         {"rule", "decision", "lesson"},
+		"debugging":      {"lesson", "runbook", "decision"},
+		"operations":     {"runbook", "decision", "rule"},
+		"deployment":     {"runbook", "decision", "rule"},
+	}
+	for i, preferred := range preferences[phase] {
+		if preferred == itemType {
+			return 1 - float64(i)*0.15
+		}
+	}
+	if phase == "" {
+		return 0.5
+	}
+	return 0.2
+}
+
+func priorityScore(priority string) float64 {
+	switch priority {
+	case "must":
+		return 1
+	case "should":
+		return 0.75
+	case "may":
+		return 0.45
+	default:
+		return 0.25
+	}
+}
+
+func statusScore(status string) float64 {
+	switch status {
+	case "active":
+		return 1
+	case "draft":
+		return 0.65
+	default:
+		return 0
+	}
+}
+
+func tagDomainScore(item knowledge.Item, tags []string, domains []string) float64 {
+	if len(tags) == 0 && len(domains) == 0 {
+		return 0.3
+	}
+	matches := 0
+	total := len(tags) + len(domains)
+	for _, tag := range tags {
+		if contains(item.Tags, tag) {
+			matches++
+		}
+	}
+	for _, domain := range domains {
+		if contains(item.TechDomains, domain) || contains(item.BusinessDomains, domain) {
+			matches++
+		}
+	}
+	if total == 0 {
+		return 0
+	}
+	return float64(matches) / float64(total)
+}
+
+func lexicalScores(matches []index.TextMatch) map[string]float64 {
+	scores := map[string]float64{}
+	for _, match := range matches {
+		if match.Score > scores[match.ItemID] {
+			scores[match.ItemID] = match.Score
+		}
+	}
+	return scores
+}
+
+func matchedSections(matches []index.TextMatch) map[string][]string {
+	seen := map[string]map[string]bool{}
+	for _, match := range matches {
+		if match.Section == "" {
+			continue
+		}
+		if seen[match.ItemID] == nil {
+			seen[match.ItemID] = map[string]bool{}
+		}
+		seen[match.ItemID][match.Section] = true
+	}
+	result := map[string][]string{}
+	for id, sections := range seen {
+		result[id] = sortedKeys(sections)
+	}
+	return result
+}
+
+func whyMatched(item knowledge.Item, req DiscoverRequest, c ScoreComponents) []string {
+	var reasons []string
+	if c.Project > 0 {
+		reasons = append(reasons, fmt.Sprintf("project %s matched", req.Project))
+	}
+	if c.FileScope >= 1 {
+		reasons = append(reasons, "file scope matched applies_to.files")
+	}
+	if c.TypePhase >= 0.7 {
+		reasons = append(reasons, fmt.Sprintf("%s phase prefers %s knowledge", req.Phase, item.Type))
+	}
+	if c.TagDomain > 0.3 {
+		reasons = append(reasons, "requested tags or domains matched")
+	}
+	if c.Lexical > 0 {
+		reasons = append(reasons, "task or query text matched indexed knowledge")
+	}
+	if len(reasons) == 0 {
+		reasons = append(reasons, "general project knowledge matched")
+	}
+	return reasons
+}
+
+func recommendedAction(item knowledge.Item, score float64, phase string) string {
+	if score < 0.45 {
+		return "skim_summary_only"
+	}
+	switch phase {
+	case "implementation":
+		if item.Priority == "must" || item.Type == "package" {
+			return "load_full_before_implementation"
+		}
+	case "review":
+		if item.Priority == "must" || item.Type == "decision" {
+			return "load_full_before_review"
+		}
+	case "debugging":
+		if item.Type == "lesson" || item.Type == "runbook" {
+			return "load_full_before_debugging"
+		}
+	case "planning":
+		if item.Type == "decision" || item.Type == "package" {
+			return "load_full_before_planning"
+		}
+	}
+	return "cite_if_used"
+}
+
+func discoveryCoverage(items []DiscoveryItem, intent string) Coverage {
+	if len(items) == 0 {
+		return Coverage{
+			Status:                "none",
+			Confidence:            0,
+			Reason:                "No active Argos knowledge matched this request strongly.",
+			Recommendation:        "Proceed without Argos-specific claims and do not cite Argos knowledge for this task.",
+			MissingKnowledgeHints: missingKnowledgeHints(intent),
+		}
+	}
+	top := items[0].Score
+	switch {
+	case top >= 0.75:
+		return Coverage{Status: "strong", Confidence: top, Reason: "Found active project knowledge matching this request.", Recommendation: "Load high-priority matched knowledge before work."}
+	case top >= 0.5:
+		return Coverage{Status: "partial", Confidence: top, Reason: "Found related Argos knowledge, but task-specific coverage has gaps.", Recommendation: "Load only high-confidence IDs and mention gaps when relevant.", MissingKnowledgeHints: missingKnowledgeHints(intent)}
+	default:
+		return Coverage{Status: "weak", Confidence: top, Reason: "Only broad or low-confidence Argos knowledge matched.", Recommendation: "Skim summaries or inspect the map; do not treat results as authoritative.", MissingKnowledgeHints: missingKnowledgeHints(intent)}
+	}
+}
+
+func discoveryNextCalls(items []DiscoveryItem, coverage Coverage, phase string) []RecommendedCall {
+	if coverage.Status == "none" || coverage.Status == "weak" {
+		return []RecommendedCall{{Tool: "argos_map", Reason: "Inspect available project knowledge if the task scope changes."}}
+	}
+	var ids []string
+	for _, item := range items {
+		if strings.HasPrefix(item.RecommendedAction, "load_full") {
+			ids = append(ids, item.ID)
+		}
+	}
+	var calls []RecommendedCall
+	if len(ids) > 0 {
+		calls = append(calls, RecommendedCall{Tool: "get_knowledge_item", Reason: "Load selected routed knowledge before applying it.", IDs: ids})
+	}
+	calls = append(calls, RecommendedCall{Tool: "cite_knowledge", Reason: "Cite Argos knowledge IDs actually used in the final response."})
+	return calls
+}
+
+func missingKnowledgeHints(intent string) []string {
+	intent = strings.TrimSpace(intent)
+	if intent == "" {
+		return nil
+	}
+	return []string{intent + " standard", intent + " decision", intent + " lesson"}
+}
+
+func mapGroupKey(item knowledge.Item) string {
+	if len(item.TechDomains) > 0 {
+		if len(item.Tags) > 0 {
+			return item.TechDomains[0] + "/" + item.Tags[0]
+		}
+		return item.TechDomains[0]
+	}
+	if len(item.BusinessDomains) > 0 {
+		return item.BusinessDomains[0]
+	}
+	return item.Type
+}
+
+func sortedKeys(values map[string]bool) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func hasDiscoverySignal(c ScoreComponents, req DiscoverRequest) bool {
+	if c.Lexical > 0 || c.FileScope >= 1 {
+		return true
+	}
+	if (len(req.Tags) > 0 || len(req.Domains) > 0) && c.TagDomain > 0 {
+		return true
+	}
+	if len(req.Types) > 0 && c.TypePhase >= 0.7 {
+		return true
+	}
+	return false
+}
+
+func titleFromKey(key string) string {
+	words := strings.Fields(strings.ReplaceAll(key, "/", " "))
+	for i, word := range words {
+		words[i] = titleWord(word)
+	}
+	return strings.Join(words, " ")
+}
+
+func titleWord(word string) string {
+	if word == "" {
+		return ""
+	}
+	return strings.ToUpper(word[:1]) + word[1:]
 }
 
 func contains(values []string, target string) bool {

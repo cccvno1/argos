@@ -203,6 +203,123 @@ func TestStandardsPrefersFileScopedMatchBeforeApplyingLimit(t *testing.T) {
 	}
 }
 
+func TestDiscoverReturnsStrongMatchedRoutesWithoutFullBodies(t *testing.T) {
+	store := buildDiscoveryTestStore(t)
+	defer store.Close()
+	service := New(store)
+
+	result, err := service.Discover(DiscoverRequest{
+		Project: "mall-api",
+		Phase:   "implementation",
+		Task:    "add refresh token endpoint",
+		Query:   "refresh token",
+		Files:   []string{"internal/auth/session.go"},
+		Limit:   5,
+	})
+	if err != nil {
+		t.Fatalf("Discover returned error: %v", err)
+	}
+	if result.Coverage.Status != "strong" {
+		t.Fatalf("expected strong coverage, got %#v", result.Coverage)
+	}
+	if len(result.Items) == 0 {
+		t.Fatal("expected discovery items")
+	}
+	first := result.Items[0]
+	if first.ID != "rule:backend.auth.v1" {
+		t.Fatalf("expected auth rule first, got %#v", result.Items)
+	}
+	if first.Body != "" {
+		t.Fatalf("discover must not return full body: %#v", first)
+	}
+	if first.Disclosure.LoadTool != "get_knowledge_item" || first.Disclosure.Level != "summary" {
+		t.Fatalf("unexpected disclosure: %#v", first.Disclosure)
+	}
+	if len(first.WhyMatched) == 0 {
+		t.Fatalf("expected why_matched reasons")
+	}
+	if len(result.NextCalls) == 0 || result.NextCalls[0].Tool != "get_knowledge_item" {
+		t.Fatalf("expected get_knowledge_item next call: %#v", result.NextCalls)
+	}
+}
+
+func TestDiscoverReportsNoneCoverageForUnmatchedTask(t *testing.T) {
+	store := buildDiscoveryTestStore(t)
+	defer store.Close()
+	service := New(store)
+
+	result, err := service.Discover(DiscoverRequest{
+		Project: "mall-api",
+		Phase:   "implementation",
+		Task:    "add warehouse barcode scanner",
+		Query:   "barcode scanner warehouse",
+		Limit:   5,
+	})
+	if err != nil {
+		t.Fatalf("Discover returned error: %v", err)
+	}
+	if result.Coverage.Status != "none" {
+		t.Fatalf("expected none coverage, got %#v", result.Coverage)
+	}
+	if len(result.Items) != 0 {
+		t.Fatalf("expected no items, got %#v", result.Items)
+	}
+	for _, call := range result.NextCalls {
+		if call.Tool == "cite_knowledge" {
+			t.Fatalf("did not expect citation recommendation for no match: %#v", result.NextCalls)
+		}
+	}
+}
+
+func TestDiscoverFiltersTypesTagsAndDeprecated(t *testing.T) {
+	store := buildDiscoveryTestStore(t)
+	defer store.Close()
+	service := New(store)
+
+	result, err := service.Discover(DiscoverRequest{
+		Project: "mall-api",
+		Query:   "auth",
+		Types:   []string{"lesson"},
+		Tags:    []string{"auth"},
+		Limit:   10,
+	})
+	if err != nil {
+		t.Fatalf("Discover returned error: %v", err)
+	}
+	if len(result.Items) != 1 || result.Items[0].ID != "lesson:backend.auth-debug.v1" {
+		t.Fatalf("expected auth lesson only, got %#v", result.Items)
+	}
+	for _, item := range result.Items {
+		if item.Status == "deprecated" {
+			t.Fatalf("deprecated item should be excluded by default: %#v", item)
+		}
+	}
+}
+
+func TestMapReturnsInventoryWithoutFullBodies(t *testing.T) {
+	store := buildDiscoveryTestStore(t)
+	defer store.Close()
+	service := New(store)
+
+	result, err := service.Map(MapRequest{Project: "mall-api", Domain: "backend"})
+	if err != nil {
+		t.Fatalf("Map returned error: %v", err)
+	}
+	if result.Inventory.Types["rule"] == 0 || result.Inventory.Types["package"] == 0 {
+		t.Fatalf("expected rule and package counts: %#v", result.Inventory.Types)
+	}
+	if len(result.Inventory.Packages) != 1 {
+		t.Fatalf("expected package inventory, got %#v", result.Inventory.Packages)
+	}
+	for _, group := range result.Groups {
+		for _, item := range group.Items {
+			if item.Body != "" {
+				t.Fatalf("map must not return full body: %#v", item)
+			}
+		}
+	}
+}
+
 func TestContextRecommendsNextCalls(t *testing.T) {
 	service := New(nil)
 	result := service.Context(ContextRequest{
@@ -336,6 +453,79 @@ func buildQueryTestStore(t *testing.T) *index.Store {
 	store, err := index.Open(dbPath)
 	if err != nil {
 		t.Fatal(err)
+	}
+	return store
+}
+
+func buildDiscoveryTestStore(t *testing.T) *index.Store {
+	t.Helper()
+
+	dbPath := filepath.Join(t.TempDir(), "argos/index.db")
+	items := []knowledge.Item{
+		{
+			Path:            "knowledge/items/backend/auth.md",
+			ID:              "rule:backend.auth.v1",
+			Title:           "Refresh token auth rule",
+			Type:            "rule",
+			TechDomains:     []string{"backend", "security"},
+			BusinessDomains: []string{"account"},
+			Projects:        []string{"mall-api"},
+			Status:          "active",
+			Priority:        "must",
+			AppliesTo:       knowledge.Scope{Files: []string{"internal/auth/**"}},
+			UpdatedAt:       "2026-04-29",
+			Tags:            []string{"auth", "refresh-token"},
+			Body:            "Refresh token endpoints must rotate tokens and require auth middleware.",
+		},
+		{
+			Path:            "knowledge/items/backend/auth-debug.md",
+			ID:              "lesson:backend.auth-debug.v1",
+			Title:           "Auth debugging lesson",
+			Type:            "lesson",
+			TechDomains:     []string{"backend"},
+			BusinessDomains: []string{"account"},
+			Projects:        []string{"mall-api"},
+			Status:          "active",
+			Priority:        "should",
+			UpdatedAt:       "2026-04-29",
+			Tags:            []string{"auth"},
+			Body:            "When auth tests fail, inspect session renewal logs first.",
+		},
+		{
+			Path:            "knowledge/packages/backend/auth-refresh/KNOWLEDGE.md",
+			ID:              "package:backend.auth-refresh.v1",
+			Title:           "Auth refresh package",
+			Type:            "package",
+			TechDomains:     []string{"backend", "security"},
+			BusinessDomains: []string{"account"},
+			Projects:        []string{"mall-api"},
+			Status:          "active",
+			Priority:        "should",
+			UpdatedAt:       "2026-04-29",
+			Tags:            []string{"auth", "refresh-token"},
+			Body:            "## Purpose\nRefresh token implementation guidance.\n\n## When To Use\nUse for refresh token endpoints.\n\n## Start Here\nLoad rules first.\n\n## Load On Demand\nOpen examples only when needed.\n",
+		},
+		{
+			Path:            "knowledge/items/backend/old.md",
+			ID:              "rule:backend.old-auth.v1",
+			Title:           "Old auth rule",
+			Type:            "rule",
+			TechDomains:     []string{"backend"},
+			BusinessDomains: []string{"account"},
+			Projects:        []string{"mall-api"},
+			Status:          "deprecated",
+			Priority:        "must",
+			UpdatedAt:       "2026-04-29",
+			Tags:            []string{"auth"},
+			Body:            "Deprecated auth guidance.",
+		},
+	}
+	if err := index.Rebuild(dbPath, items); err != nil {
+		t.Fatalf("Rebuild returned error: %v", err)
+	}
+	store, err := index.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open returned error: %v", err)
 	}
 	return store
 }
