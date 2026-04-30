@@ -296,6 +296,227 @@ func TestDiscoverFiltersTypesTagsAndDeprecated(t *testing.T) {
 	}
 }
 
+func TestDiscoverWeakSingleTermGenericLexicalMatchDoesNotProduceStrongCoverageOrLoadCalls(t *testing.T) {
+	store := buildDiscoveryStore(t, []knowledge.Item{{
+		Path:            "knowledge/items/backend/generic-token.md",
+		ID:              "rule:backend.generic-token.v1",
+		Title:           "Generic token rule",
+		Type:            "rule",
+		TechDomains:     []string{"backend"},
+		BusinessDomains: []string{"account"},
+		Projects:        []string{"mall-api"},
+		Status:          "active",
+		Priority:        "must",
+		UpdatedAt:       "2026-04-29",
+		Body:            "Token guidance applies to platform work.",
+	}})
+	defer store.Close()
+	service := New(store)
+
+	result, err := service.Discover(DiscoverRequest{
+		Project: "mall-api",
+		Phase:   "implementation",
+		Task:    "add warehouse barcode scanner",
+		Query:   "barcode scanner token",
+		Limit:   5,
+	})
+	if err != nil {
+		t.Fatalf("Discover returned error: %v", err)
+	}
+	if result.Coverage.Status == "strong" {
+		t.Fatalf("single weak generic term must not produce strong coverage: %#v", result.Coverage)
+	}
+	for _, call := range result.NextCalls {
+		if call.Tool == "get_knowledge_item" {
+			t.Fatalf("weak generic lexical match must not recommend loading full bodies: %#v", result.NextCalls)
+		}
+	}
+}
+
+func TestDiscoverTypeAndPhaseFiltersAloneDoNotReturnUnrelatedKnowledge(t *testing.T) {
+	store := buildDiscoveryStore(t, []knowledge.Item{{
+		Path:            "knowledge/items/backend/auth.md",
+		ID:              "rule:backend.auth.v1",
+		Title:           "Auth rule",
+		Type:            "rule",
+		TechDomains:     []string{"backend"},
+		BusinessDomains: []string{"account"},
+		Projects:        []string{"mall-api"},
+		Status:          "active",
+		Priority:        "must",
+		UpdatedAt:       "2026-04-29",
+		Body:            "Require explicit auth middleware.",
+	}})
+	defer store.Close()
+	service := New(store)
+
+	result, err := service.Discover(DiscoverRequest{
+		Project: "mall-api",
+		Phase:   "implementation",
+		Task:    "add warehouse barcode scanner",
+		Query:   "barcode scanner warehouse",
+		Types:   []string{"rule"},
+		Limit:   5,
+	})
+	if err != nil {
+		t.Fatalf("Discover returned error: %v", err)
+	}
+	if len(result.Items) != 0 {
+		t.Fatalf("expected type/phase filters alone not to prove relevance, got %#v", result.Items)
+	}
+	if result.Coverage.Status != "none" {
+		t.Fatalf("expected none coverage, got %#v", result.Coverage)
+	}
+}
+
+func TestDiscoverWeakAndNoneNextCallsOnlyUseImplementedTools(t *testing.T) {
+	implementedTools := map[string]bool{
+		"get_knowledge_item": true,
+		"cite_knowledge":     true,
+	}
+
+	for _, tc := range []struct {
+		name  string
+		items []knowledge.Item
+		req   DiscoverRequest
+	}{
+		{
+			name: "none",
+			items: []knowledge.Item{{
+				Path:            "knowledge/items/backend/auth.md",
+				ID:              "rule:backend.auth.v1",
+				Title:           "Auth rule",
+				Type:            "rule",
+				TechDomains:     []string{"backend"},
+				BusinessDomains: []string{"account"},
+				Projects:        []string{"mall-api"},
+				Status:          "active",
+				Priority:        "must",
+				UpdatedAt:       "2026-04-29",
+				Body:            "Require explicit auth middleware.",
+			}},
+			req: DiscoverRequest{
+				Project: "mall-api",
+				Phase:   "implementation",
+				Task:    "add warehouse barcode scanner",
+				Query:   "barcode scanner warehouse",
+				Limit:   5,
+			},
+		},
+		{
+			name: "weak",
+			items: []knowledge.Item{{
+				Path:            "knowledge/items/backend/generic-token.md",
+				ID:              "rule:backend.generic-token.v1",
+				Title:           "Generic token rule",
+				Type:            "rule",
+				TechDomains:     []string{"backend"},
+				BusinessDomains: []string{"account"},
+				Projects:        []string{"mall-api"},
+				Status:          "active",
+				Priority:        "must",
+				UpdatedAt:       "2026-04-29",
+				Body:            "Token guidance applies to platform work.",
+			}},
+			req: DiscoverRequest{
+				Project: "mall-api",
+				Phase:   "implementation",
+				Task:    "add warehouse barcode scanner",
+				Query:   "barcode scanner token",
+				Limit:   5,
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			store := buildDiscoveryStore(t, tc.items)
+			defer store.Close()
+			service := New(store)
+
+			result, err := service.Discover(tc.req)
+			if err != nil {
+				t.Fatalf("Discover returned error: %v", err)
+			}
+			if result.Coverage.Status != tc.name {
+				t.Fatalf("expected %s coverage, got %#v", tc.name, result.Coverage)
+			}
+			for _, call := range result.NextCalls {
+				if !implementedTools[call.Tool] {
+					t.Fatalf("expected implemented tool only, got %#v", result.NextCalls)
+				}
+			}
+		})
+	}
+}
+
+func TestDiscoverAndMapTreatEmptyProjectsAsGlobalKnowledge(t *testing.T) {
+	store := buildDiscoveryStore(t, []knowledge.Item{{
+		Path:            "knowledge/items/backend/global-refresh.md",
+		ID:              "rule:backend.global-refresh.v1",
+		Title:           "Global refresh token rule",
+		Type:            "rule",
+		TechDomains:     []string{"backend"},
+		BusinessDomains: []string{"account"},
+		Status:          "active",
+		Priority:        "must",
+		UpdatedAt:       "2026-04-29",
+		Tags:            []string{"refresh-token"},
+		Body:            "Refresh token endpoints must rotate tokens.",
+	}})
+	defer store.Close()
+	service := New(store)
+
+	discovered, err := service.Discover(DiscoverRequest{
+		Project: "mall-api",
+		Phase:   "implementation",
+		Query:   "refresh token",
+		Limit:   5,
+	})
+	if err != nil {
+		t.Fatalf("Discover returned error: %v", err)
+	}
+	if len(discovered.Items) != 1 || discovered.Items[0].ID != "rule:backend.global-refresh.v1" {
+		t.Fatalf("expected global discovery item, got %#v", discovered.Items)
+	}
+
+	mapped, err := service.Map(MapRequest{Project: "mall-api", Domain: "backend"})
+	if err != nil {
+		t.Fatalf("Map returned error: %v", err)
+	}
+	if mapped.Inventory.Types["rule"] != 1 {
+		t.Fatalf("expected global map item, got %#v", mapped.Inventory)
+	}
+}
+
+func TestDiscoverReturnsErrorForInvalidFileScopeGlob(t *testing.T) {
+	store := buildDiscoveryStore(t, []knowledge.Item{{
+		Path:            "knowledge/items/backend/bad-glob.md",
+		ID:              "rule:backend.bad-glob.v1",
+		Title:           "Bad glob rule",
+		Type:            "rule",
+		TechDomains:     []string{"backend"},
+		BusinessDomains: []string{"account"},
+		Projects:        []string{"mall-api"},
+		Status:          "active",
+		Priority:        "must",
+		AppliesTo:       knowledge.Scope{Files: []string{"["}},
+		UpdatedAt:       "2026-04-29",
+		Body:            "Refresh token guidance.",
+	}})
+	defer store.Close()
+	service := New(store)
+
+	_, err := service.Discover(DiscoverRequest{
+		Project: "mall-api",
+		Phase:   "implementation",
+		Query:   "refresh token",
+		Files:   []string{"internal/auth/session.go"},
+		Limit:   5,
+	})
+	if err == nil {
+		t.Fatal("expected invalid glob error")
+	}
+}
+
 func TestMapReturnsInventoryWithoutFullBodies(t *testing.T) {
 	store := buildDiscoveryTestStore(t)
 	defer store.Close()
@@ -460,7 +681,6 @@ func buildQueryTestStore(t *testing.T) *index.Store {
 func buildDiscoveryTestStore(t *testing.T) *index.Store {
 	t.Helper()
 
-	dbPath := filepath.Join(t.TempDir(), "argos/index.db")
 	items := []knowledge.Item{
 		{
 			Path:            "knowledge/items/backend/auth.md",
@@ -520,6 +740,13 @@ func buildDiscoveryTestStore(t *testing.T) *index.Store {
 			Body:            "Deprecated auth guidance.",
 		},
 	}
+	return buildDiscoveryStore(t, items)
+}
+
+func buildDiscoveryStore(t *testing.T, items []knowledge.Item) *index.Store {
+	t.Helper()
+
+	dbPath := filepath.Join(t.TempDir(), "argos/index.db")
 	if err := index.Rebuild(dbPath, items); err != nil {
 		t.Fatalf("Rebuild returned error: %v", err)
 	}

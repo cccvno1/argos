@@ -302,7 +302,10 @@ func (s *Service) Discover(req DiscoverRequest) (DiscoveryResponse, error) {
 		if !discoverCandidateAllowed(item, req) {
 			continue
 		}
-		result := discoveryItem(item, req, lexical[item.ID], sections[item.ID])
+		result, err := discoveryItem(item, req, lexical[item.ID], sections[item.ID], intent)
+		if err != nil {
+			return DiscoveryResponse{}, err
+		}
 		if !hasDiscoverySignal(result.ScoreComponents, req) || result.Score <= 0.25 {
 			continue
 		}
@@ -474,10 +477,15 @@ func firstSentence(body string) string {
 	return ""
 }
 
-func discoveryItem(item knowledge.Item, req DiscoverRequest, lexical float64, sections []string) DiscoveryItem {
+func discoveryItem(item knowledge.Item, req DiscoverRequest, lexical float64, sections []string, intent string) (DiscoveryItem, error) {
+	fileScope, err := fileScopeScore(item, req.Files)
+	if err != nil {
+		return DiscoveryItem{}, fmt.Errorf("%s: match file scope: %w", item.ID, err)
+	}
+	lexical = minFloat(lexical, lexicalTermScore(item, intent))
 	components := ScoreComponents{
-		Project:   boolScore(contains(item.Projects, req.Project)),
-		FileScope: fileScopeScore(item, req.Files),
+		Project:   projectScore(item, req.Project),
+		FileScope: fileScope,
 		TypePhase: typePhaseScore(item.Type, req.Phase),
 		Priority:  priorityScore(item.Priority),
 		Status:    statusScore(item.Status),
@@ -491,8 +499,8 @@ func discoveryItem(item knowledge.Item, req DiscoverRequest, lexical float64, se
 	result.ScoreComponents = components
 	result.WhyMatched = whyMatched(item, req, components)
 	result.MatchedSections = sections
-	result.RecommendedAction = recommendedAction(item, score, req.Phase)
-	return result
+	result.RecommendedAction = recommendedAction(item, score, req.Phase, relevanceScore(components, req))
+	return result, nil
 }
 
 func discoveryItemFromKnowledge(item knowledge.Item) DiscoveryItem {
@@ -528,6 +536,13 @@ func boolScore(ok bool) float64 {
 	return 0
 }
 
+func projectScore(item knowledge.Item, project string) float64 {
+	if projectMatches(item, project) {
+		return 1
+	}
+	return 0
+}
+
 func discoverCandidateAllowed(item knowledge.Item, req DiscoverRequest) bool {
 	if item.Status == "deprecated" && !req.IncludeDeprecated {
 		return false
@@ -535,7 +550,7 @@ func discoverCandidateAllowed(item knowledge.Item, req DiscoverRequest) bool {
 	if item.Status == "inbox" && !req.IncludeInbox {
 		return false
 	}
-	if req.Project != "" && !contains(item.Projects, req.Project) {
+	if !projectMatches(item, req.Project) {
 		return false
 	}
 	if len(req.Types) > 0 && !contains(req.Types, item.Type) {
@@ -564,7 +579,7 @@ func mapCandidateAllowed(item knowledge.Item, req MapRequest) bool {
 	if item.Status == "inbox" && !req.IncludeInbox {
 		return false
 	}
-	if req.Project != "" && !contains(item.Projects, req.Project) {
+	if !projectMatches(item, req.Project) {
 		return false
 	}
 	if req.Domain != "" && !contains(item.TechDomains, req.Domain) && !contains(item.BusinessDomains, req.Domain) {
@@ -576,19 +591,22 @@ func mapCandidateAllowed(item knowledge.Item, req MapRequest) bool {
 	return true
 }
 
-func fileScopeScore(item knowledge.Item, files []string) float64 {
+func fileScopeScore(item knowledge.Item, files []string) (float64, error) {
 	if len(item.AppliesTo.Files) == 0 {
-		return 0.4
+		return 0.4, nil
 	}
 	for _, file := range files {
 		for _, pattern := range item.AppliesTo.Files {
 			matched, err := doublestar.PathMatch(pattern, file)
-			if err == nil && matched {
-				return 1
+			if err != nil {
+				return 0, fmt.Errorf("%q: %w", pattern, err)
+			}
+			if matched {
+				return 1, nil
 			}
 		}
 	}
-	return 0
+	return 0, nil
 }
 
 func typePhaseScore(itemType string, phase string) float64 {
@@ -708,8 +726,8 @@ func whyMatched(item knowledge.Item, req DiscoverRequest, c ScoreComponents) []s
 	return reasons
 }
 
-func recommendedAction(item knowledge.Item, score float64, phase string) string {
-	if score < 0.45 {
+func recommendedAction(item knowledge.Item, score float64, phase string, relevance float64) string {
+	if score < 0.45 || relevance < 0.5 {
 		return "skim_summary_only"
 	}
 	switch phase {
@@ -743,7 +761,11 @@ func discoveryCoverage(items []DiscoveryItem, intent string) Coverage {
 			MissingKnowledgeHints: missingKnowledgeHints(intent),
 		}
 	}
-	top := items[0].Score
+	topItem := items[0]
+	top := topItem.Score
+	if topItem.ScoreComponents.Lexical > 0 && topItem.ScoreComponents.Lexical < 0.5 && topItem.ScoreComponents.FileScope < 1 && topItem.ScoreComponents.TagDomain <= 0.3 {
+		return Coverage{Status: "weak", Confidence: top, Reason: "Only broad or low-confidence Argos knowledge matched.", Recommendation: "Skim summaries or inspect the map; do not treat results as authoritative.", MissingKnowledgeHints: missingKnowledgeHints(intent)}
+	}
 	switch {
 	case top >= 0.75:
 		return Coverage{Status: "strong", Confidence: top, Reason: "Found active project knowledge matching this request.", Recommendation: "Load high-priority matched knowledge before work."}
@@ -756,7 +778,7 @@ func discoveryCoverage(items []DiscoveryItem, intent string) Coverage {
 
 func discoveryNextCalls(items []DiscoveryItem, coverage Coverage, phase string) []RecommendedCall {
 	if coverage.Status == "none" || coverage.Status == "weak" {
-		return []RecommendedCall{{Tool: "argos_map", Reason: "Inspect available project knowledge if the task scope changes."}}
+		return nil
 	}
 	var ids []string
 	for _, item := range items {
@@ -809,10 +831,75 @@ func hasDiscoverySignal(c ScoreComponents, req DiscoverRequest) bool {
 	if (len(req.Tags) > 0 || len(req.Domains) > 0) && c.TagDomain > 0 {
 		return true
 	}
-	if len(req.Types) > 0 && c.TypePhase >= 0.7 {
-		return true
-	}
 	return false
+}
+
+func relevanceScore(c ScoreComponents, req DiscoverRequest) float64 {
+	score := maxFloat(c.Lexical, c.FileScope)
+	if len(req.Tags) > 0 || len(req.Domains) > 0 {
+		score = maxFloat(score, c.TagDomain)
+	}
+	return score
+}
+
+func lexicalTermScore(item knowledge.Item, intent string) float64 {
+	terms := uniqueTerms(intent)
+	if len(terms) == 0 {
+		return 0
+	}
+	text := searchableItemText(item)
+	matches := 0
+	for _, term := range terms {
+		if strings.Contains(text, term) {
+			matches++
+		}
+	}
+	return float64(matches) / float64(len(terms))
+}
+
+func searchableItemText(item knowledge.Item) string {
+	parts := []string{
+		item.ID,
+		item.Title,
+		item.Body,
+		strings.Join(item.Tags, " "),
+		strings.Join(item.TechDomains, " "),
+		strings.Join(item.BusinessDomains, " "),
+	}
+	return strings.ToLower(strings.Join(parts, " "))
+}
+
+func uniqueTerms(text string) []string {
+	seen := map[string]bool{}
+	var terms []string
+	for _, term := range strings.FieldsFunc(strings.ToLower(text), func(r rune) bool {
+		return (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '_'
+	}) {
+		if term == "" || seen[term] {
+			continue
+		}
+		seen[term] = true
+		terms = append(terms, term)
+	}
+	return terms
+}
+
+func projectMatches(item knowledge.Item, project string) bool {
+	return project == "" || len(item.Projects) == 0 || contains(item.Projects, project)
+}
+
+func minFloat(a, b float64) float64 {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func maxFloat(a, b float64) float64 {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func titleFromKey(key string) string {
