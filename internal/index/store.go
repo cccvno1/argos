@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode"
 
 	"argos/internal/knowledge"
 
@@ -15,6 +16,30 @@ import (
 
 type Store struct {
 	db *sql.DB
+}
+
+type DiscoveryCapabilities struct {
+	Metadata       string `json:"metadata"`
+	FTS            string `json:"fts"`
+	Semantic       string `json:"semantic"`
+	SemanticReason string `json:"semantic_reason,omitempty"`
+}
+
+type TextMatch struct {
+	ItemID  string
+	Section string
+	Score   float64
+}
+
+type Chunk struct {
+	ChunkID       string
+	ItemID        string
+	Path          string
+	Section       string
+	HeadingPath   string
+	Ordinal       int
+	Text          string
+	TokenEstimate int
 }
 
 type execer interface {
@@ -85,15 +110,23 @@ func (s *Store) CheckSchema() error {
 	if err := s.db.Ping(); err != nil {
 		return fmt.Errorf("ping index database: %w", err)
 	}
-	if _, err := s.db.Exec(`SELECT 1 FROM knowledge_items LIMIT 0`); err != nil {
-		return fmt.Errorf("check index schema: %w", err)
+	for _, stmt := range []string{
+		`SELECT 1 FROM knowledge_items LIMIT 0`,
+		`SELECT 1 FROM knowledge_fts LIMIT 0`,
+		`SELECT 1 FROM knowledge_chunks LIMIT 0`,
+		`SELECT 1 FROM knowledge_vectors LIMIT 0`,
+		`SELECT 1 FROM index_metadata LIMIT 0`,
+	} {
+		if _, err := s.db.Exec(stmt); err != nil {
+			return fmt.Errorf("check index schema: %w", err)
+		}
 	}
 	return nil
 }
 
 func (s *Store) createSchema(db execer) error {
-	_, err := db.Exec(`
-CREATE TABLE knowledge_items (
+	statements := []string{
+		`CREATE TABLE knowledge_items (
 	id TEXT PRIMARY KEY,
 	path TEXT NOT NULL,
 	title TEXT NOT NULL,
@@ -104,12 +137,51 @@ CREATE TABLE knowledge_items (
 	status TEXT NOT NULL,
 	priority TEXT NOT NULL,
 	scope TEXT NOT NULL,
+	tags TEXT NOT NULL,
 	updated_at TEXT NOT NULL,
 	summary TEXT NOT NULL,
 	body TEXT NOT NULL
-)`)
-	if err != nil {
-		return fmt.Errorf("create index schema: %w", err)
+)`,
+		`CREATE VIRTUAL TABLE knowledge_fts USING fts5(
+	item_id UNINDEXED,
+	section UNINDEXED,
+	title,
+	summary,
+	body,
+	tags,
+	domains
+)`,
+		`CREATE TABLE knowledge_chunks (
+	chunk_id TEXT PRIMARY KEY,
+	item_id TEXT NOT NULL,
+	path TEXT NOT NULL,
+	section TEXT NOT NULL,
+	heading_path TEXT NOT NULL,
+	ordinal INTEGER NOT NULL,
+	text TEXT NOT NULL,
+	token_estimate INTEGER NOT NULL
+)`,
+		`CREATE TABLE knowledge_vectors (
+	chunk_id TEXT NOT NULL,
+	provider TEXT NOT NULL,
+	model TEXT NOT NULL,
+	dimensions INTEGER NOT NULL,
+	embedding BLOB NOT NULL,
+	PRIMARY KEY (chunk_id, provider, model)
+)`,
+		`CREATE TABLE index_metadata (
+	key TEXT PRIMARY KEY,
+	value TEXT NOT NULL
+)`,
+		`INSERT INTO index_metadata (key, value) VALUES
+	('schema_version', '2'),
+	('semantic_enabled', 'false'),
+	('semantic_reason', 'semantic provider is not configured')`,
+	}
+	for _, stmt := range statements {
+		if _, err := db.Exec(stmt); err != nil {
+			return fmt.Errorf("create index schema: %w", err)
+		}
 	}
 	return nil
 }
@@ -135,12 +207,16 @@ func (s *Store) insertItem(db execer, item knowledge.Item) error {
 	if err != nil {
 		return fmt.Errorf("%s: serialize scope: %w", item.ID, err)
 	}
+	tags, err := marshalJSON(item.Tags)
+	if err != nil {
+		return fmt.Errorf("%s: serialize tags: %w", item.ID, err)
+	}
 
 	_, err = db.Exec(`
 INSERT INTO knowledge_items (
 	id, path, title, type, tech_domains, business_domains, projects,
-	status, priority, scope, updated_at, summary, body
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	status, priority, scope, tags, updated_at, summary, body
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		item.ID,
 		item.Path,
 		item.Title,
@@ -151,12 +227,58 @@ INSERT INTO knowledge_items (
 		item.Status,
 		item.Priority,
 		scope,
+		tags,
 		item.UpdatedAt,
 		summary(item.Body),
 		item.Body,
 	)
 	if err != nil {
 		return fmt.Errorf("%s: insert knowledge item: %w", item.ID, err)
+	}
+
+	domainText := strings.Join(append(append([]string{}, item.TechDomains...), item.BusinessDomains...), " ")
+	if _, err := db.Exec(`
+INSERT INTO knowledge_fts (item_id, section, title, summary, body, tags, domains)
+VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		item.ID,
+		"",
+		item.Title,
+		summary(item.Body),
+		item.Body,
+		strings.Join(item.Tags, " "),
+		domainText,
+	); err != nil {
+		return fmt.Errorf("%s: insert item fts: %w", item.ID, err)
+	}
+
+	for _, chunk := range chunksForItem(item) {
+		if _, err := db.Exec(`
+INSERT INTO knowledge_chunks (chunk_id, item_id, path, section, heading_path, ordinal, text, token_estimate)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			chunk.ChunkID,
+			chunk.ItemID,
+			chunk.Path,
+			chunk.Section,
+			chunk.HeadingPath,
+			chunk.Ordinal,
+			chunk.Text,
+			chunk.TokenEstimate,
+		); err != nil {
+			return fmt.Errorf("%s: insert chunk: %w", item.ID, err)
+		}
+		if _, err := db.Exec(`
+INSERT INTO knowledge_fts (item_id, section, title, summary, body, tags, domains)
+VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			item.ID,
+			chunk.Section,
+			item.Title,
+			summary(chunk.Text),
+			chunk.Text,
+			strings.Join(item.Tags, " "),
+			domainText,
+		); err != nil {
+			return fmt.Errorf("%s: insert chunk fts: %w", item.ID, err)
+		}
 	}
 	return nil
 }
@@ -199,11 +321,12 @@ func (s *Store) GetItem(id string) (knowledge.Item, error) {
 	var businessDomains string
 	var projects string
 	var scope string
+	var tags string
 	var unusedSummary string
 
 	err := s.db.QueryRow(`
 SELECT id, path, title, type, tech_domains, business_domains, projects,
-	status, priority, scope, updated_at, summary, body
+	status, priority, scope, tags, updated_at, summary, body
 FROM knowledge_items
 WHERE id = ?`, id).Scan(
 		&item.ID,
@@ -216,6 +339,7 @@ WHERE id = ?`, id).Scan(
 		&item.Status,
 		&item.Priority,
 		&scope,
+		&tags,
 		&item.UpdatedAt,
 		&unusedSummary,
 		&item.Body,
@@ -235,6 +359,9 @@ WHERE id = ?`, id).Scan(
 	if err := unmarshalJSON(scope, &item.AppliesTo); err != nil {
 		return knowledge.Item{}, fmt.Errorf("%s: deserialize scope: %w", id, err)
 	}
+	if err := unmarshalJSON(tags, &item.Tags); err != nil {
+		return knowledge.Item{}, fmt.Errorf("%s: deserialize tags: %w", id, err)
+	}
 
 	return item, nil
 }
@@ -242,7 +369,7 @@ WHERE id = ?`, id).Scan(
 func (s *Store) ListItems() ([]knowledge.Item, error) {
 	rows, err := s.db.Query(`
 SELECT id, path, title, type, tech_domains, business_domains, projects,
-	status, priority, scope, updated_at, summary, body
+	status, priority, scope, tags, updated_at, summary, body
 FROM knowledge_items
 ORDER BY CASE priority
 	WHEN 'must' THEN 0
@@ -262,6 +389,7 @@ END, id`)
 		var businessDomains string
 		var projects string
 		var scope string
+		var tags string
 		var unusedSummary string
 
 		if err := rows.Scan(
@@ -275,6 +403,7 @@ END, id`)
 			&item.Status,
 			&item.Priority,
 			&scope,
+			&tags,
 			&item.UpdatedAt,
 			&unusedSummary,
 			&item.Body,
@@ -293,6 +422,9 @@ END, id`)
 		if err := unmarshalJSON(scope, &item.AppliesTo); err != nil {
 			return nil, fmt.Errorf("%s: deserialize scope: %w", item.ID, err)
 		}
+		if err := unmarshalJSON(tags, &item.Tags); err != nil {
+			return nil, fmt.Errorf("%s: deserialize tags: %w", item.ID, err)
+		}
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {
@@ -300,6 +432,78 @@ END, id`)
 	}
 
 	return items, nil
+}
+
+func (s *Store) SearchText(query string, limit int) ([]TextMatch, error) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return nil, nil
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+	rows, err := s.db.Query(`
+SELECT item_id, section, bm25(knowledge_fts) AS rank
+FROM knowledge_fts
+WHERE knowledge_fts MATCH ?
+ORDER BY rank
+LIMIT ?`, ftsQuery(query), limit)
+	if err != nil {
+		return nil, fmt.Errorf("search text: %w", err)
+	}
+	defer rows.Close()
+
+	var matches []TextMatch
+	for rows.Next() {
+		var match TextMatch
+		var rank float64
+		if err := rows.Scan(&match.ItemID, &match.Section, &rank); err != nil {
+			return nil, fmt.Errorf("scan text match: %w", err)
+		}
+		match.Score = 1 / (1 + maxFloat(rank, 0))
+		matches = append(matches, match)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate text matches: %w", err)
+	}
+	return matches, nil
+}
+
+func (s *Store) ListChunks(itemID string) ([]Chunk, error) {
+	rows, err := s.db.Query(`
+SELECT chunk_id, item_id, path, section, heading_path, ordinal, text, token_estimate
+FROM knowledge_chunks
+WHERE item_id = ?
+ORDER BY ordinal`, itemID)
+	if err != nil {
+		return nil, fmt.Errorf("list chunks for %s: %w", itemID, err)
+	}
+	defer rows.Close()
+
+	var chunks []Chunk
+	for rows.Next() {
+		var chunk Chunk
+		if err := rows.Scan(&chunk.ChunkID, &chunk.ItemID, &chunk.Path, &chunk.Section, &chunk.HeadingPath, &chunk.Ordinal, &chunk.Text, &chunk.TokenEstimate); err != nil {
+			return nil, fmt.Errorf("scan chunk: %w", err)
+		}
+		chunks = append(chunks, chunk)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate chunks: %w", err)
+	}
+	return chunks, nil
+}
+
+func (s *Store) DiscoveryCapabilities() (DiscoveryCapabilities, error) {
+	if err := s.CheckSchema(); err != nil {
+		return DiscoveryCapabilities{}, err
+	}
+	return DiscoveryCapabilities{
+		Metadata:       "enabled",
+		FTS:            "enabled",
+		Semantic:       "disabled",
+		SemanticReason: "semantic provider is not configured",
+	}, nil
 }
 
 func marshalJSON(value any) (string, error) {
@@ -314,6 +518,71 @@ func unmarshalJSON(data string, value any) error {
 	return json.Unmarshal([]byte(data), value)
 }
 
+func chunksForItem(item knowledge.Item) []Chunk {
+	sections := markdownSections(item.Body)
+	if len(sections) == 0 {
+		return []Chunk{{
+			ChunkID:       item.ID + "#body",
+			ItemID:        item.ID,
+			Path:          item.Path,
+			Section:       "",
+			HeadingPath:   "",
+			Ordinal:       0,
+			Text:          strings.TrimSpace(item.Body),
+			TokenEstimate: estimateTokens(item.Body),
+		}}
+	}
+	chunks := make([]Chunk, 0, len(sections))
+	for i, section := range sections {
+		chunks = append(chunks, Chunk{
+			ChunkID:       fmt.Sprintf("%s#%d", item.ID, i),
+			ItemID:        item.ID,
+			Path:          item.Path,
+			Section:       section.heading,
+			HeadingPath:   section.heading,
+			Ordinal:       i,
+			Text:          strings.TrimSpace(section.text),
+			TokenEstimate: estimateTokens(section.text),
+		})
+	}
+	return chunks
+}
+
+type markdownSection struct {
+	heading string
+	text    string
+}
+
+func markdownSections(body string) []markdownSection {
+	var sections []markdownSection
+	var current *markdownSection
+	for _, line := range strings.Split(strings.ReplaceAll(body, "\r\n", "\n"), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "## ") {
+			if current != nil {
+				sections = append(sections, *current)
+			}
+			current = &markdownSection{heading: strings.TrimSpace(strings.TrimPrefix(trimmed, "## "))}
+			continue
+		}
+		if current != nil {
+			current.text += line + "\n"
+		}
+	}
+	if current != nil {
+		sections = append(sections, *current)
+	}
+	return sections
+}
+
+func estimateTokens(text string) int {
+	fields := strings.Fields(text)
+	if len(fields) == 0 {
+		return 0
+	}
+	return len(fields)
+}
+
 func summary(body string) string {
 	for _, line := range strings.Split(body, "\n") {
 		line = strings.TrimSpace(line)
@@ -323,4 +592,24 @@ func summary(body string) string {
 		return line
 	}
 	return ""
+}
+
+func ftsQuery(query string) string {
+	var terms []string
+	for _, term := range strings.FieldsFunc(query, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_'
+	}) {
+		clean := strings.TrimSpace(term)
+		if clean != "" {
+			terms = append(terms, clean+"*")
+		}
+	}
+	return strings.Join(terms, " OR ")
+}
+
+func maxFloat(a, b float64) float64 {
+	if a > b {
+		return a
+	}
+	return b
 }
