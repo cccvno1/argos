@@ -27,6 +27,22 @@ golden expectations into the runner context.
 You are validating one Argos Discovery case in a fresh context.
 
 Workspace: `<fixture workspace path>`
+Argos binary: `<argos binary path>`
+
+Tool names such as `argos_find_knowledge` are the MCP names. If MCP is not
+available, use the CLI equivalents below from the fixture workspace:
+
+```bash
+<argos binary path> context --json --project <project> --phase <phase> --task "<task>"
+<argos binary path> knowledge list --json --project <project> [--domain <domain>] [--types <type>] [--include-deprecated]
+<argos binary path> knowledge find --json --project <project> [--phase <phase>] [--task "<task>"] [--query "<query>"] [--files <path>] [--types <type>] [--tags <tag>] [--domains <domain>] [--status <status>] [--include-deprecated] [--limit <n>]
+<argos binary path> knowledge read --json <id>
+<argos binary path> knowledge cite --json <id>...
+```
+
+Repeat flags such as `--files`, `--types`, `--tags`, `--domains`, and
+`--status` once per value. Do not call the MCP-style names directly as CLI
+subcommands.
 
 Allowed flow:
 
