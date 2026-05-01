@@ -46,14 +46,15 @@ func TestServerHandlesToolsList(t *testing.T) {
 	}
 	decodeResult(t, resp, &result)
 
-	for _, name := range []string{"argos_context", "argos_standards", "argos_discover", "argos_map", "get_knowledge_item", "cite_knowledge"} {
-		tool := findTool(result.Tools, name)
-		if tool == nil {
-			t.Fatalf("expected %s tool in response: %s", name, out.String())
-		}
-		if tool.InputSchema == nil {
-			t.Fatalf("expected %s tool to include inputSchema: %s", name, out.String())
-		}
+	for _, name := range []string{
+		"argos_context",
+		"argos_standards",
+		"argos_find_knowledge",
+		"argos_list_knowledge",
+		"argos_read_knowledge",
+		"argos_cite_knowledge",
+	} {
+		assertToolListed(t, result.Tools, name)
 	}
 	for _, name := range []string{"argos_requirements", "argos_risks", "argos_operations"} {
 		if tool := findTool(result.Tools, name); tool != nil {
@@ -89,25 +90,25 @@ func TestToolsListIncludesConcreteSchemasForImplementedTools(t *testing.T) {
 	assertToolSchemaPropertyBounds(t, result.Tools, "argos_standards", "limit", 1, 5)
 	assertToolSchemaDisallowsAdditionalProperties(t, result.Tools, "argos_standards")
 
-	assertToolSchemaHasProperties(t, result.Tools, "argos_discover", []string{"project", "phase", "task", "query", "files", "types", "tags", "domains", "status", "include_deprecated", "limit"})
-	assertToolSchemaLacksProperty(t, result.Tools, "argos_discover", "include_inbox")
-	assertToolSchemaRequired(t, result.Tools, "argos_discover", []string{"project"})
-	assertToolSchemaAnyOfRequiresOneOf(t, result.Tools, "argos_discover", []string{"task", "query"})
-	assertToolSchemaPropertyBounds(t, result.Tools, "argos_discover", "limit", 1, 20)
-	assertToolSchemaDisallowsAdditionalProperties(t, result.Tools, "argos_discover")
+	assertToolSchemaHasProperties(t, result.Tools, "argos_find_knowledge", []string{"project", "phase", "task", "query", "files", "types", "tags", "domains", "status", "include_deprecated", "limit"})
+	assertToolSchemaLacksProperty(t, result.Tools, "argos_find_knowledge", "include_inbox")
+	assertToolSchemaRequired(t, result.Tools, "argos_find_knowledge", []string{"project"})
+	assertToolSchemaAnyOfRequiresOneOf(t, result.Tools, "argos_find_knowledge", []string{"task", "query"})
+	assertToolSchemaPropertyBounds(t, result.Tools, "argos_find_knowledge", "limit", 1, 20)
+	assertToolSchemaDisallowsAdditionalProperties(t, result.Tools, "argos_find_knowledge")
 
-	assertToolSchemaHasProperties(t, result.Tools, "argos_map", []string{"project", "domain", "types", "include_deprecated"})
-	assertToolSchemaLacksProperty(t, result.Tools, "argos_map", "include_inbox")
-	assertToolSchemaRequired(t, result.Tools, "argos_map", []string{"project"})
-	assertToolSchemaDisallowsAdditionalProperties(t, result.Tools, "argos_map")
+	assertToolSchemaHasProperties(t, result.Tools, "argos_list_knowledge", []string{"project", "domain", "types", "include_deprecated"})
+	assertToolSchemaLacksProperty(t, result.Tools, "argos_list_knowledge", "include_inbox")
+	assertToolSchemaRequired(t, result.Tools, "argos_list_knowledge", []string{"project"})
+	assertToolSchemaDisallowsAdditionalProperties(t, result.Tools, "argos_list_knowledge")
 
-	assertToolSchemaHasProperties(t, result.Tools, "get_knowledge_item", []string{"id"})
-	assertToolSchemaRequired(t, result.Tools, "get_knowledge_item", []string{"id"})
-	assertToolSchemaDisallowsAdditionalProperties(t, result.Tools, "get_knowledge_item")
+	assertToolSchemaHasProperties(t, result.Tools, "argos_read_knowledge", []string{"id"})
+	assertToolSchemaRequired(t, result.Tools, "argos_read_knowledge", []string{"id"})
+	assertToolSchemaDisallowsAdditionalProperties(t, result.Tools, "argos_read_knowledge")
 
-	assertToolSchemaHasProperties(t, result.Tools, "cite_knowledge", []string{"ids"})
-	assertToolSchemaRequired(t, result.Tools, "cite_knowledge", []string{"ids"})
-	assertToolSchemaDisallowsAdditionalProperties(t, result.Tools, "cite_knowledge")
+	assertToolSchemaHasProperties(t, result.Tools, "argos_cite_knowledge", []string{"ids"})
+	assertToolSchemaRequired(t, result.Tools, "argos_cite_knowledge", []string{"ids"})
+	assertToolSchemaDisallowsAdditionalProperties(t, result.Tools, "argos_cite_knowledge")
 }
 
 func TestToolCallUnknownToolReturnsInvalidParams(t *testing.T) {
@@ -120,6 +121,33 @@ func TestToolCallUnknownToolReturnsInvalidParams(t *testing.T) {
 	}
 
 	assertError(t, decodeRPCResponse(t, out.Bytes()), "1", -32602)
+}
+
+func TestRenamedMCPToolsRejectOldNames(t *testing.T) {
+	_, store := discoverytest.BuildIndexedWorkspace(t)
+	defer store.Close()
+	server := NewServerWithStore(store)
+
+	oldNames := []string{
+		strings.Join([]string{"argos", "discover"}, "_"),
+		strings.Join([]string{"argos", "map"}, "_"),
+		strings.Join([]string{"get", "knowledge", "item"}, "_"),
+		strings.Join([]string{"cite", "knowledge"}, "_"),
+	}
+	for _, oldName := range oldNames {
+		t.Run(oldName, func(t *testing.T) {
+			var out bytes.Buffer
+			line := []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"` + oldName + `","arguments":{"project":"mall-api","query":"auth","id":"rule:backend.auth.v1","ids":["rule:backend.auth.v1"]}}}`)
+			if err := server.HandleLine(line, &out); err != nil {
+				t.Fatalf("handle line: %v", err)
+			}
+			resp := decodeRPCResponse(t, out.Bytes())
+			assertError(t, resp, "1", -32602)
+			if !strings.Contains(resp.Error.Message, "unknown tool") {
+				t.Fatalf("expected unknown tool error, got %#v", resp.Error)
+			}
+		})
+	}
 }
 
 func TestToolCallMalformedParamsReturnsInvalidParams(t *testing.T) {
@@ -295,13 +323,13 @@ func TestToolCallArgosStandardsExplicitLimitOutOfRangeReturnsToolError(t *testin
 	}
 }
 
-func TestToolCallArgosDiscoverReturnsRoutes(t *testing.T) {
+func TestToolCallArgosFindKnowledgeReturnsRoutes(t *testing.T) {
 	store := buildMCPTestStore(t)
 	defer store.Close()
 	server := NewServerWithStore(store)
 
 	var out bytes.Buffer
-	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_discover","arguments":{"project":"mall-api","phase":"implementation","task":"add refresh token endpoint","query":"auth middleware refresh token","files":["internal/auth/session.go"],"limit":5}}}`), &out)
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_find_knowledge","arguments":{"project":"mall-api","phase":"implementation","task":"add refresh token endpoint","query":"auth middleware refresh token","files":["internal/auth/session.go"],"limit":5}}}`), &out)
 	if err != nil {
 		t.Fatalf("HandleLine returned error: %v", err)
 	}
@@ -311,27 +339,27 @@ func TestToolCallArgosDiscoverReturnsRoutes(t *testing.T) {
 		t.Fatalf("expected success result: %#v", result)
 	}
 	text := firstContentText(t, result)
-	if !strings.Contains(text, `"coverage"`) || !strings.Contains(text, `"items"`) {
-		t.Fatalf("expected coverage and items in discover response: %s", text)
+	if !strings.Contains(text, `"support"`) || !strings.Contains(text, `"items"`) {
+		t.Fatalf("expected support and items in find knowledge response: %s", text)
 	}
-	if !strings.Contains(text, `"action_policy"`) || !strings.Contains(text, `"authority": "strong"`) {
-		t.Fatalf("expected action policy in discover response: %s", text)
+	if !strings.Contains(text, `"usage"`) || !strings.Contains(text, `"claim"`) {
+		t.Fatalf("expected usage guidance in find knowledge response: %s", text)
 	}
-	if !strings.Contains(text, `"recall"`) || !strings.Contains(text, `"semantic"`) {
-		t.Fatalf("expected recall state in discover response: %s", text)
+	if !strings.Contains(text, `"search_status"`) || !strings.Contains(text, `"semantic"`) {
+		t.Fatalf("expected search status in find knowledge response: %s", text)
 	}
 	if strings.Contains(text, `"body"`) {
-		t.Fatalf("discover should not return full body: %s", text)
+		t.Fatalf("find knowledge should not return full body: %s", text)
 	}
 }
 
-func TestToolCallArgosDiscoverNoneReturnsCoverageGaps(t *testing.T) {
+func TestToolCallArgosFindKnowledgeNoneReturnsMissingNeeds(t *testing.T) {
 	_, store := discoverytest.BuildIndexedWorkspace(t)
 	defer store.Close()
 	server := NewServerWithStore(store)
 
 	var out bytes.Buffer
-	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_discover","arguments":{"project":"mall-api","phase":"implementation","task":"add payment webhook signature verification","query":"payment webhook signature","limit":5}}}`), &out)
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_find_knowledge","arguments":{"project":"mall-api","phase":"implementation","task":"add payment webhook signature verification","query":"payment webhook signature","limit":5}}}`), &out)
 	if err != nil {
 		t.Fatalf("HandleLine returned error: %v", err)
 	}
@@ -342,35 +370,35 @@ func TestToolCallArgosDiscoverNoneReturnsCoverageGaps(t *testing.T) {
 	}
 	text := firstContentText(t, result)
 
-	var decoded query.DiscoveryResponse
+	var decoded query.FindKnowledgeResponse
 	if err := json.Unmarshal([]byte(text), &decoded); err != nil {
-		t.Fatalf("decode discover response: %v; text=%s", err, text)
+		t.Fatalf("decode find knowledge response: %v; text=%s", err, text)
 	}
-	if decoded.Coverage.Status != "none" {
-		t.Fatalf("expected none coverage, got %q", decoded.Coverage.Status)
+	if decoded.Support.Level != "none" {
+		t.Fatalf("expected none support, got %q", decoded.Support.Level)
 	}
-	if len(decoded.CoverageGaps) == 0 {
-		t.Fatalf("expected coverage gaps, got none: %#v", decoded)
+	if len(decoded.MissingNeeds) == 0 {
+		t.Fatalf("expected missing needs, got none: %#v", decoded)
 	}
-	hasUnmatchedIntent := false
-	for _, gap := range decoded.CoverageGaps {
-		if gap.Source == "unmatched_intent" {
-			hasUnmatchedIntent = true
+	hasNotFound := false
+	for _, need := range decoded.MissingNeeds {
+		if need.Source == "not_found" {
+			hasNotFound = true
 		}
-		if gap.ArgosBacked {
-			t.Fatalf("expected coverage gap to be argos_backed=false, got %#v", gap)
+		if need.ArgosBacked {
+			t.Fatalf("expected missing need to be argos_backed=false, got %#v", need)
 		}
 	}
-	if !hasUnmatchedIntent {
-		t.Fatalf("expected unmatched_intent coverage gap, got %#v", decoded.CoverageGaps)
+	if !hasNotFound {
+		t.Fatalf("expected not_found missing need, got %#v", decoded.MissingNeeds)
 	}
 	for _, item := range decoded.Items {
 		if item.Body != "" {
-			t.Fatalf("discover should not return full body: %#v", item)
+			t.Fatalf("find knowledge should not return full body: %#v", item)
 		}
 	}
 	if strings.Contains(text, legacyDiscoveryJSONKey("gap", "candidates")) {
-		t.Fatalf("discover should not return legacy gap candidates: %s", text)
+		t.Fatalf("find knowledge should not return legacy gap candidates: %s", text)
 	}
 }
 
@@ -379,13 +407,13 @@ func legacyDiscoveryJSONKey(parts ...string) string {
 	return strings.Join(parts, "_")
 }
 
-func TestToolCallArgosMapReturnsInventory(t *testing.T) {
+func TestToolCallArgosListKnowledgeReturnsInventory(t *testing.T) {
 	store := buildMCPTestStore(t)
 	defer store.Close()
 	server := NewServerWithStore(store)
 
 	var out bytes.Buffer
-	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_map","arguments":{"project":"mall-api","domain":"backend"}}}`), &out)
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_list_knowledge","arguments":{"project":"mall-api","domain":"backend"}}}`), &out)
 	if err != nil {
 		t.Fatalf("HandleLine returned error: %v", err)
 	}
@@ -396,21 +424,21 @@ func TestToolCallArgosMapReturnsInventory(t *testing.T) {
 	}
 	text := firstContentText(t, result)
 	if !strings.Contains(text, `"inventory"`) {
-		t.Fatalf("expected inventory in map response: %s", text)
+		t.Fatalf("expected inventory in list knowledge response: %s", text)
 	}
-	if !strings.Contains(text, `"action_policy"`) || !strings.Contains(text, `"authority": "inventory"`) {
-		t.Fatalf("expected inventory action policy in map response: %s", text)
+	if !strings.Contains(text, `"usage"`) || !strings.Contains(text, `"claim"`) {
+		t.Fatalf("expected usage guidance in list knowledge response: %s", text)
 	}
 	if strings.Contains(text, `"body"`) {
-		t.Fatalf("map should not return full body: %s", text)
+		t.Fatalf("list knowledge should not return full body: %s", text)
 	}
 }
 
-func TestToolCallArgosDiscoverWithoutIndexReturnsToolError(t *testing.T) {
+func TestToolCallArgosFindKnowledgeWithoutIndexReturnsToolError(t *testing.T) {
 	server := NewServer(query.New(nil))
 	var out bytes.Buffer
 
-	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_discover","arguments":{"project":"mall-api","task":"add refresh token endpoint"}}}`), &out)
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_find_knowledge","arguments":{"project":"mall-api","task":"add refresh token endpoint"}}}`), &out)
 	if err != nil {
 		t.Fatalf("HandleLine returned error: %v", err)
 	}
@@ -418,56 +446,56 @@ func TestToolCallArgosDiscoverWithoutIndexReturnsToolError(t *testing.T) {
 	assertToolErrorContains(t, out.Bytes(), "index not available: run argos index first")
 }
 
-func TestToolCallArgosDiscoverMissingTaskAndQueryReturnsToolError(t *testing.T) {
+func TestToolCallArgosFindKnowledgeMissingTaskAndQueryReturnsToolError(t *testing.T) {
 	store := buildMCPTestStore(t)
 	defer store.Close()
 	server := NewServerWithStore(store)
 
 	var out bytes.Buffer
-	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_discover","arguments":{"project":"mall-api"}}}`), &out)
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_find_knowledge","arguments":{"project":"mall-api"}}}`), &out)
 	if err != nil {
 		t.Fatalf("HandleLine returned error: %v", err)
 	}
 
-	assertToolErrorContains(t, out.Bytes(), "invalid arguments for argos_discover: task or query is required")
+	assertToolErrorContains(t, out.Bytes(), "invalid arguments for argos_find_knowledge: task or query is required")
 }
 
-func TestToolCallArgosDiscoverExplicitLimitOutOfRangeReturnsToolError(t *testing.T) {
+func TestToolCallArgosFindKnowledgeExplicitLimitOutOfRangeReturnsToolError(t *testing.T) {
 	store := buildMCPTestStore(t)
 	defer store.Close()
 	server := NewServerWithStore(store)
 
 	for _, limit := range []int{0, 21} {
 		var out bytes.Buffer
-		line := []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_discover","arguments":{"project":"mall-api","task":"add refresh token endpoint","limit":` + strconv.Itoa(limit) + `}}}`)
+		line := []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_find_knowledge","arguments":{"project":"mall-api","task":"add refresh token endpoint","limit":` + strconv.Itoa(limit) + `}}}`)
 		err := server.HandleLine(line, &out)
 		if err != nil {
 			t.Fatalf("HandleLine returned error for limit %d: %v", limit, err)
 		}
 
-		assertToolErrorContains(t, out.Bytes(), "invalid arguments for argos_discover: limit must be between 1 and 20")
+		assertToolErrorContains(t, out.Bytes(), "invalid arguments for argos_find_knowledge: limit must be between 1 and 20")
 	}
 }
 
-func TestToolCallArgosDiscoverRejectsIncludeInboxArgument(t *testing.T) {
+func TestToolCallArgosFindKnowledgeRejectsIncludeInboxArgument(t *testing.T) {
 	store := buildMCPTestStore(t)
 	defer store.Close()
 	server := NewServerWithStore(store)
 
 	var out bytes.Buffer
-	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_discover","arguments":{"project":"mall-api","query":"auth","include_inbox":true}}}`), &out)
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_find_knowledge","arguments":{"project":"mall-api","query":"auth","include_inbox":true}}}`), &out)
 	if err != nil {
 		t.Fatalf("HandleLine returned error: %v", err)
 	}
 
-	assertToolErrorContains(t, out.Bytes(), "invalid arguments for argos_discover")
+	assertToolErrorContains(t, out.Bytes(), "invalid arguments for argos_find_knowledge")
 }
 
-func TestToolCallArgosMapWithoutIndexReturnsToolError(t *testing.T) {
+func TestToolCallArgosListKnowledgeWithoutIndexReturnsToolError(t *testing.T) {
 	server := NewServer(query.New(nil))
 	var out bytes.Buffer
 
-	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_map","arguments":{"project":"mall-api"}}}`), &out)
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_list_knowledge","arguments":{"project":"mall-api"}}}`), &out)
 	if err != nil {
 		t.Fatalf("HandleLine returned error: %v", err)
 	}
@@ -475,21 +503,21 @@ func TestToolCallArgosMapWithoutIndexReturnsToolError(t *testing.T) {
 	assertToolErrorContains(t, out.Bytes(), "index not available: run argos index first")
 }
 
-func TestToolCallArgosMapRejectsIncludeInboxArgument(t *testing.T) {
+func TestToolCallArgosListKnowledgeRejectsIncludeInboxArgument(t *testing.T) {
 	store := buildMCPTestStore(t)
 	defer store.Close()
 	server := NewServerWithStore(store)
 
 	var out bytes.Buffer
-	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_map","arguments":{"project":"mall-api","include_inbox":true}}}`), &out)
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_list_knowledge","arguments":{"project":"mall-api","include_inbox":true}}}`), &out)
 	if err != nil {
 		t.Fatalf("HandleLine returned error: %v", err)
 	}
 
-	assertToolErrorContains(t, out.Bytes(), "invalid arguments for argos_map")
+	assertToolErrorContains(t, out.Bytes(), "invalid arguments for argos_list_knowledge")
 }
 
-func TestGoldenMCPDiscoveryStrictSchema(t *testing.T) {
+func TestGoldenMCPFindKnowledgeStrictSchema(t *testing.T) {
 	_, store := discoverytest.BuildIndexedWorkspace(t)
 	defer store.Close()
 	server := NewServerWithStore(store)
@@ -500,23 +528,23 @@ func TestGoldenMCPDiscoveryStrictSchema(t *testing.T) {
 		want string
 	}{
 		{
-			name: "discover unknown argument",
-			line: `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_discover","arguments":{"project":"mall-api","query":"auth","include_inbox":true}}}`,
+			name: "find knowledge unknown argument",
+			line: `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_find_knowledge","arguments":{"project":"mall-api","query":"auth","include_inbox":true}}}`,
 			want: "unknown field",
 		},
 		{
-			name: "discover missing task and query",
-			line: `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_discover","arguments":{"project":"mall-api"}}}`,
+			name: "find knowledge missing task and query",
+			line: `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_find_knowledge","arguments":{"project":"mall-api"}}}`,
 			want: "task or query is required",
 		},
 		{
-			name: "discover bad limit",
-			line: `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_discover","arguments":{"project":"mall-api","query":"auth","limit":99}}}`,
+			name: "find knowledge bad limit",
+			line: `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_find_knowledge","arguments":{"project":"mall-api","query":"auth","limit":99}}}`,
 			want: "limit must be between 1 and 20",
 		},
 		{
-			name: "map unknown argument",
-			line: `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_map","arguments":{"project":"mall-api","include_inbox":true}}}`,
+			name: "list knowledge unknown argument",
+			line: `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_list_knowledge","arguments":{"project":"mall-api","include_inbox":true}}}`,
 			want: "unknown field",
 		},
 	} {
@@ -533,13 +561,13 @@ func TestGoldenMCPDiscoveryStrictSchema(t *testing.T) {
 	}
 }
 
-func TestToolCallGetKnowledgeItemReturnsFullBody(t *testing.T) {
+func TestToolCallArgosReadKnowledgeReturnsFullBody(t *testing.T) {
 	store := buildMCPTestStore(t)
 	defer store.Close()
 	server := NewServerWithStore(store)
 
 	var out bytes.Buffer
-	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_knowledge_item","arguments":{"id":"rule:backend.auth.v1"}}}`), &out)
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_read_knowledge","arguments":{"id":"rule:backend.auth.v1"}}}`), &out)
 	if err != nil {
 		t.Fatalf("HandleLine returned error: %v", err)
 	}
@@ -557,13 +585,13 @@ func TestToolCallGetKnowledgeItemReturnsFullBody(t *testing.T) {
 	}
 }
 
-func TestToolCallGetKnowledgeItemReturnsPackageEntrypoint(t *testing.T) {
+func TestToolCallArgosReadKnowledgeReturnsPackageEntrypoint(t *testing.T) {
 	store := buildMCPTestStore(t)
 	defer store.Close()
 	server := NewServerWithStore(store)
 
 	var out bytes.Buffer
-	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_knowledge_item","arguments":{"id":"package:backend.redis.best-practices.v1"}}}`), &out)
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_read_knowledge","arguments":{"id":"package:backend.redis.best-practices.v1"}}}`), &out)
 	if err != nil {
 		t.Fatalf("HandleLine returned error: %v", err)
 	}
@@ -578,27 +606,27 @@ func TestToolCallGetKnowledgeItemReturnsPackageEntrypoint(t *testing.T) {
 	}
 }
 
-func TestToolCallGetKnowledgeItemMissingRequiredArgsReturnsToolError(t *testing.T) {
+func TestToolCallArgosReadKnowledgeMissingRequiredArgsReturnsToolError(t *testing.T) {
 	store := buildMCPTestStore(t)
 	defer store.Close()
 	server := NewServerWithStore(store)
 
 	var out bytes.Buffer
-	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_knowledge_item","arguments":{}}}`), &out)
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_read_knowledge","arguments":{}}}`), &out)
 	if err != nil {
 		t.Fatalf("HandleLine returned error: %v", err)
 	}
 
-	assertToolErrorContains(t, out.Bytes(), "invalid arguments for get_knowledge_item: id is required")
+	assertToolErrorContains(t, out.Bytes(), "invalid arguments for argos_read_knowledge: id is required")
 }
 
-func TestToolCallCiteKnowledgeReturnsCitationsAndMissing(t *testing.T) {
+func TestToolCallArgosCiteKnowledgeReturnsCitationsAndMissing(t *testing.T) {
 	store := buildMCPTestStore(t)
 	defer store.Close()
 	server := NewServerWithStore(store)
 
 	var out bytes.Buffer
-	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"cite_knowledge","arguments":{"ids":["rule:backend.auth.v1","missing.v1"]}}}`), &out)
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_cite_knowledge","arguments":{"ids":["rule:backend.auth.v1","missing.v1"]}}}`), &out)
 	if err != nil {
 		t.Fatalf("HandleLine returned error: %v", err)
 	}
@@ -619,39 +647,39 @@ func TestToolCallCiteKnowledgeReturnsCitationsAndMissing(t *testing.T) {
 	}
 }
 
-func TestToolCallCiteKnowledgeMissingRequiredArgsReturnsToolError(t *testing.T) {
+func TestToolCallArgosCiteKnowledgeMissingRequiredArgsReturnsToolError(t *testing.T) {
 	store := buildMCPTestStore(t)
 	defer store.Close()
 	server := NewServerWithStore(store)
 
 	var out bytes.Buffer
-	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"cite_knowledge","arguments":{}}}`), &out)
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_cite_knowledge","arguments":{}}}`), &out)
 	if err != nil {
 		t.Fatalf("HandleLine returned error: %v", err)
 	}
 
-	assertToolErrorContains(t, out.Bytes(), "invalid arguments for cite_knowledge: ids is required")
+	assertToolErrorContains(t, out.Bytes(), "invalid arguments for argos_cite_knowledge: ids is required")
 }
 
-func TestToolCallCiteKnowledgeEmptyIDsReturnsToolError(t *testing.T) {
+func TestToolCallArgosCiteKnowledgeEmptyIDsReturnsToolError(t *testing.T) {
 	store := buildMCPTestStore(t)
 	defer store.Close()
 	server := NewServerWithStore(store)
 
 	var out bytes.Buffer
-	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"cite_knowledge","arguments":{"ids":[]}}}`), &out)
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_cite_knowledge","arguments":{"ids":[]}}}`), &out)
 	if err != nil {
 		t.Fatalf("HandleLine returned error: %v", err)
 	}
 
-	assertToolErrorContains(t, out.Bytes(), "invalid arguments for cite_knowledge: ids is required")
+	assertToolErrorContains(t, out.Bytes(), "invalid arguments for argos_cite_knowledge: ids is required")
 }
 
-func TestToolCallGetKnowledgeItemWithoutIndexReturnsToolError(t *testing.T) {
+func TestToolCallArgosReadKnowledgeWithoutIndexReturnsToolError(t *testing.T) {
 	server := NewServer(query.New(nil))
 	var out bytes.Buffer
 
-	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_knowledge_item","arguments":{"id":"rule:backend.auth.v1"}}}`), &out)
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_read_knowledge","arguments":{"id":"rule:backend.auth.v1"}}}`), &out)
 	if err != nil {
 		t.Fatalf("HandleLine returned error: %v", err)
 	}
@@ -661,11 +689,11 @@ func TestToolCallGetKnowledgeItemWithoutIndexReturnsToolError(t *testing.T) {
 	}
 }
 
-func TestToolCallCiteKnowledgeWithoutIndexReturnsToolError(t *testing.T) {
+func TestToolCallArgosCiteKnowledgeWithoutIndexReturnsToolError(t *testing.T) {
 	server := NewServer(query.New(nil))
 	var out bytes.Buffer
 
-	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"cite_knowledge","arguments":{"ids":["rule:backend.auth.v1"]}}}`), &out)
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_cite_knowledge","arguments":{"ids":["rule:backend.auth.v1"]}}}`), &out)
 	if err != nil {
 		t.Fatalf("HandleLine returned error: %v", err)
 	}
@@ -1027,6 +1055,21 @@ func findTool(tools []struct {
 		}
 	}
 	return nil
+}
+
+func assertToolListed(t *testing.T, tools []struct {
+	Name        string         `json:"name"`
+	InputSchema map[string]any `json:"inputSchema"`
+}, name string) {
+	t.Helper()
+
+	tool := findTool(tools, name)
+	if tool == nil {
+		t.Fatalf("expected %s tool in response", name)
+	}
+	if tool.InputSchema == nil {
+		t.Fatalf("expected %s tool to include inputSchema", name)
+	}
 }
 
 func assertToolSchemaHasProperty(t *testing.T, tools []struct {

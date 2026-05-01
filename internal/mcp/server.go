@@ -273,79 +273,79 @@ func (s *Server) callTool(data json.RawMessage) (toolCallResult, *rpcError, erro
 		}
 		result, err := textResult(resp)
 		return result, nil, err
-	case "argos_discover":
-		var req query.DiscoverRequest
+	case "argos_find_knowledge":
+		var req query.FindKnowledgeRequest
 		if err := decodeArgs(params.Arguments, &req); err != nil {
-			return textToolError("invalid arguments for argos_discover: " + err.Error()), nil, nil
+			return textToolError("invalid arguments for argos_find_knowledge: " + err.Error()), nil, nil
 		}
 		if err := requireStringFields(map[string]string{"project": req.Project}, "project"); err != nil {
-			return textToolError("invalid arguments for argos_discover: " + err.Error()), nil, nil
+			return textToolError("invalid arguments for argos_find_knowledge: " + err.Error()), nil, nil
 		}
 		if strings.TrimSpace(req.Task) == "" && strings.TrimSpace(req.Query) == "" {
-			return textToolError("invalid arguments for argos_discover: task or query is required"), nil, nil
+			return textToolError("invalid arguments for argos_find_knowledge: task or query is required"), nil, nil
 		}
 		limitProvided, err := hasArgument(params.Arguments, "limit")
 		if err != nil {
-			return textToolError("invalid arguments for argos_discover: " + err.Error()), nil, nil
+			return textToolError("invalid arguments for argos_find_knowledge: " + err.Error()), nil, nil
 		}
 		if limitProvided && (req.Limit < 1 || req.Limit > 20) {
-			return textToolError("invalid arguments for argos_discover: limit must be between 1 and 20"), nil, nil
+			return textToolError("invalid arguments for argos_find_knowledge: limit must be between 1 and 20"), nil, nil
 		}
 		if s.store == nil {
 			return textToolError("index not available: run argos index first"), nil, nil
 		}
-		resp, err := s.service.Discover(req)
+		resp, err := s.service.FindKnowledge(req)
 		if err != nil {
-			return textToolError("discover: " + err.Error()), nil, nil
+			return textToolError("find knowledge: " + err.Error()), nil, nil
 		}
 		result, err := textResult(resp)
 		return result, nil, err
-	case "argos_map":
-		var req query.MapRequest
+	case "argos_list_knowledge":
+		var req query.ListKnowledgeRequest
 		if err := decodeArgs(params.Arguments, &req); err != nil {
-			return textToolError("invalid arguments for argos_map: " + err.Error()), nil, nil
+			return textToolError("invalid arguments for argos_list_knowledge: " + err.Error()), nil, nil
 		}
 		if err := requireStringFields(map[string]string{"project": req.Project}, "project"); err != nil {
-			return textToolError("invalid arguments for argos_map: " + err.Error()), nil, nil
+			return textToolError("invalid arguments for argos_list_knowledge: " + err.Error()), nil, nil
 		}
 		if s.store == nil {
 			return textToolError("index not available: run argos index first"), nil, nil
 		}
-		resp, err := s.service.Map(req)
+		resp, err := s.service.ListKnowledge(req)
 		if err != nil {
-			return textToolError("map: " + err.Error()), nil, nil
+			return textToolError("list knowledge: " + err.Error()), nil, nil
 		}
 		result, err := textResult(resp)
 		return result, nil, err
-	case "get_knowledge_item":
+	case "argos_read_knowledge":
 		var req struct {
 			ID string `json:"id"`
 		}
 		if err := decodeArgs(params.Arguments, &req); err != nil {
-			return textToolError("invalid arguments for get_knowledge_item: " + err.Error()), nil, nil
+			return textToolError("invalid arguments for argos_read_knowledge: " + err.Error()), nil, nil
 		}
 		req.ID = strings.TrimSpace(req.ID)
 		if req.ID == "" {
-			return textToolError("invalid arguments for get_knowledge_item: id is required"), nil, nil
+			return textToolError("invalid arguments for argos_read_knowledge: id is required"), nil, nil
 		}
 		if s.store == nil {
 			return textToolError("index not available: run argos index first"), nil, nil
 		}
-		item, err := s.service.GetKnowledgeItem(req.ID)
+		item, err := s.service.ReadKnowledge(req.ID)
 		if err != nil {
-			return textToolError("get knowledge item: " + err.Error()), nil, nil
+			return textToolError("read knowledge: " + err.Error()), nil, nil
 		}
 		result, err := textResult(item)
 		return result, nil, err
-	case "cite_knowledge":
+	case "argos_cite_knowledge":
 		var req struct {
 			IDs []string `json:"ids"`
 		}
 		if err := decodeArgs(params.Arguments, &req); err != nil {
-			return textToolError("invalid arguments for cite_knowledge: " + err.Error()), nil, nil
+			return textToolError("invalid arguments for argos_cite_knowledge: " + err.Error()), nil, nil
 		}
 		if len(req.IDs) == 0 {
-			return textToolError("invalid arguments for cite_knowledge: ids is required"), nil, nil
+			return textToolError("invalid arguments for argos_cite_knowledge: ids is required"), nil, nil
 		}
 		if s.store == nil {
 			return textToolError("index not available: run argos index first"), nil, nil
@@ -460,13 +460,13 @@ func tools() []tool {
 			}, []string{"project"}),
 		},
 		{
-			Name:        "argos_discover",
-			Description: "Discover relevant knowledge routes for current work.",
-			InputSchema: discoverInputSchema(),
+			Name:        "argos_find_knowledge",
+			Description: "Find relevant knowledge for current work.",
+			InputSchema: findKnowledgeInputSchema(),
 		},
 		{
-			Name:        "argos_map",
-			Description: "Map available knowledge inventory for a project.",
+			Name:        "argos_list_knowledge",
+			Description: "List available knowledge inventory for a project.",
 			InputSchema: objectSchema(map[string]any{
 				"project":            stringProperty("Project identifier."),
 				"domain":             stringProperty("Domain filter."),
@@ -475,14 +475,14 @@ func tools() []tool {
 			}, []string{"project"}),
 		},
 		{
-			Name:        "get_knowledge_item",
-			Description: "Fetch a knowledge item by id.",
+			Name:        "argos_read_knowledge",
+			Description: "Read a knowledge item by id.",
 			InputSchema: objectSchema(map[string]any{
 				"id": stringProperty("Knowledge item id."),
 			}, []string{"id"}),
 		},
 		{
-			Name:        "cite_knowledge",
+			Name:        "argos_cite_knowledge",
 			Description: "Create citations for knowledge items.",
 			InputSchema: objectSchema(map[string]any{
 				"ids": stringArrayProperty("Knowledge item ids to cite."),
@@ -503,7 +503,7 @@ func objectSchema(properties map[string]any, required []string) map[string]any {
 	return schema
 }
 
-func discoverInputSchema() map[string]any {
+func findKnowledgeInputSchema() map[string]any {
 	schema := objectSchema(map[string]any{
 		"project":            stringProperty("Project identifier."),
 		"phase":              stringProperty("Workflow phase."),
@@ -515,7 +515,7 @@ func discoverInputSchema() map[string]any {
 		"domains":            stringArrayProperty("Domains to include."),
 		"status":             stringArrayProperty("Statuses to include."),
 		"include_deprecated": booleanProperty("Include deprecated knowledge items."),
-		"limit":              integerProperty("Maximum number of discovery items to return.", 1, 20),
+		"limit":              integerProperty("Maximum number of knowledge results to return.", 1, 20),
 	}, []string{"project"})
 	schema["anyOf"] = []map[string]any{
 		{"required": []string{"task"}},
