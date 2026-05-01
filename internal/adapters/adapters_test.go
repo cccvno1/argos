@@ -41,23 +41,37 @@ func TestRenderedAdaptersIncludeStableKnowledgeContract(t *testing.T) {
 				"Fall back to CLI JSON when MCP is unavailable and commands can be run.",
 				"Fall back to generated adapter files or Markdown source when command execution is unavailable.",
 				"Before substantial project work, call argos_context when available; otherwise follow equivalent adapter or Markdown guidance.",
-				"Use argos_discover to route current work to relevant shared knowledge.",
-				"Use argos_map for broad orientation before unfamiliar project work.",
+				"Use argos_list_knowledge when available; otherwise use equivalent CLI JSON or adapter guidance for broad orientation before unfamiliar project work.",
+				"Use argos_find_knowledge when available; otherwise use equivalent CLI JSON or adapter guidance to find shared knowledge for current work.",
 				"Before implementation or review, call argos_standards when available; otherwise follow equivalent adapter or Markdown guidance.",
-				"Load full knowledge items only through get_knowledge_item when routed to specific IDs or paths.",
-				"Cite Argos knowledge IDs used in final responses only after loading and applying them.",
-				"Do not cite IDs returned only by argos_map or argos_discover.",
-				"Cite only knowledge IDs whose full item was loaded with get_knowledge_item and actually applied.",
-				"Follow action_policy.load before loading full knowledge items.",
-				"Follow action_policy.cite before calling cite_knowledge.",
-				"When coverage_gaps are present, separate Argos-backed claims from general reasoning.",
-				"Do not cite coverage_gaps; they are coverage boundaries, not knowledge items.",
-				"Do not start upload, capture, or inbox creation from Discovery alone.",
-				"Semantic recall never overrides action_policy.",
+				"Follow next_steps returned by Argos.",
+				"Read full knowledge items only through argos_read_knowledge when available; otherwise use equivalent CLI JSON or adapter guidance when routed to specific IDs or paths.",
+				"Cite Argos knowledge IDs used in final responses only after reading and applying them.",
+				"Do not cite IDs returned only by argos_list_knowledge or argos_find_knowledge.",
+				"Cite only knowledge IDs whose full item was read with argos_read_knowledge or equivalent CLI JSON and actually applied.",
+				"Follow usage.read before reading full knowledge items.",
+				"Follow usage.cite before calling argos_cite_knowledge or equivalent CLI JSON citation.",
+				"When missing_needs are present, separate Argos-backed claims from general reasoning.",
+				"Do not cite missing_needs; they are unsupported needs, not knowledge items.",
+				"Do not start upload, capture, or inbox creation from find results alone.",
+				"Semantic search status never overrides usage guidance.",
 				"Argos validation does not replace tests, builds, linting, or review.",
 			} {
 				if !strings.Contains(tt.body, expected) {
 					t.Fatalf("expected %q in %s adapter:\n%s", expected, tt.name, tt.body)
+				}
+			}
+			retired := []string{
+				retiredAdapterTerm("argos", "map"),
+				retiredAdapterTerm("argos", "discover"),
+				retiredAdapterTerm("get", "knowledge", "item"),
+				retiredAdapterTerm("coverage", "gaps"),
+				retiredAdapterTerm("action", "policy"),
+				"Semantic " + retiredAdapterTerm("re"+"call"),
+			}
+			for _, forbidden := range retired {
+				if strings.Contains(tt.body, forbidden) {
+					t.Fatalf("did not expect retired term %q in %s adapter:\n%s", forbidden, tt.name, tt.body)
 				}
 			}
 			for _, forbidden := range legacyDiscoveryTerms() {
@@ -180,5 +194,9 @@ func legacyDiscoveryTerms() []string {
 
 func legacyDiscoveryTerm(parts ...string) string {
 	// Build retired discovery terms from parts so repo-wide legacy-term scans stay focused on active surfaces.
+	return strings.Join(parts, "_")
+}
+
+func retiredAdapterTerm(parts ...string) string {
 	return strings.Join(parts, "_")
 }

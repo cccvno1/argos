@@ -16,34 +16,33 @@ Workspace: `<fixture workspace path>`
 ## Tool Transcript Summary
 
 - `argos_context`:
-- `argos_map`:
-- `argos_discover`:
-- `get_knowledge_item`:
-- `cite_knowledge`:
+- `argos_list_knowledge`:
+- `argos_find_knowledge`:
+- `argos_read_knowledge`:
+- `argos_cite_knowledge`:
 
 ## Observed Results
 
-- Actual coverage:
-- Action policy:
-- Recall:
+- Actual support:
+- Usage guidance:
+- Search status:
 - Discovered IDs:
-- Loaded IDs:
+- Read IDs:
 - Cited IDs:
-- Missing knowledge hints:
-- Coverage gaps:
+- Missing needs:
 - Argos-backed vs general reasoning:
-- Next calls:
+- Next steps:
 
 ## Guards
 
-- Progressive disclosure: `pass|fail`
+- progressive reading: `pass|fail`
 - Weak/none no-overclaim: `pass|fail|not-applicable`
 - Citation accountability: `pass|fail|not-applicable`
-- Cited IDs subset of loaded-and-used IDs: `pass|fail|not-applicable`
-- Coverage gaps not cited: `pass|fail|not-applicable`
+- Cited IDs subset of read-and-used IDs: `pass|fail|not-applicable`
+- Missing needs not cited: `pass|fail|not-applicable`
 - Attribution boundary: `pass|fail|not-applicable`
 - No Discovery-triggered upload/capture: `pass|fail|not-applicable`
-- Action policy followed: `pass|fail`
+- Usage guidance followed: `pass|fail`
 - Context contamination: `pass|fail`
 
 ## Result

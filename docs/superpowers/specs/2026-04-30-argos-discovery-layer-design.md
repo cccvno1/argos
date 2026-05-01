@@ -12,14 +12,14 @@ Discovery should help an AI coding agent answer four questions:
 
 1. What knowledge exists in this project knowledge base?
 2. Which knowledge corresponds to the current task, phase, and files?
-3. How should the agent retrieve the selected knowledge without overloading
+3. How should the agent retrieve the selected knowledge without overfull reading
    context?
 4. When the knowledge base has no strong match, how should the agent avoid
    overclaiming, oversearching, or inventing Argos-backed guidance?
 
 The design follows the adapter contract already established for generated
 instruction files: host workflows remain in control, Argos provides governed
-knowledge retrieval, full Markdown bodies are loaded progressively, and final
+knowledge retrieval, full Markdown bodies are read progressively, and final
 answers cite the Argos knowledge IDs that informed them.
 
 ## Design Principles
@@ -40,28 +40,28 @@ The default discovery path uses local SQLite data:
 - explicit match explanations
 
 Semantic search is an optional enhancement. If semantic search is unavailable,
-misconfigured, or stale, `argos_discover` and `argos_map` still return useful
+misconfigured, or stale, `argos_find_knowledge` and `argos_list_knowledge` still return useful
 results from the core SQLite path.
 
-### Progressive Disclosure
+### Progressive Reading
 
-Discovery returns routes, summaries, explanations, and next calls. It does not
+Discovery returns routes, summaries, explanations, and next steps. It does not
 return full Markdown bodies.
 
-Full knowledge bodies are loaded only through explicit second-stage tools such
-as `get_knowledge_item`. Final citations are produced through `cite_knowledge`.
+Full knowledge bodies are read only through explicit second-stage tools such
+as `argos_read_knowledge`. Final citations are produced through `argos_cite_knowledge`.
 
 The normal agent flow is:
 
 ```text
 argos_context
-  -> argos_map
-  -> argos_discover
-  -> get_knowledge_item
-  -> cite_knowledge
+  -> argos_list_knowledge
+  -> argos_find_knowledge
+  -> argos_read_knowledge
+  -> argos_cite_knowledge
 ```
 
-Agents should load only the IDs recommended by discovery or explicitly needed
+Agents should read only the IDs recommended by discovery or explicitly needed
 for the user's task.
 
 ### Governed Retrieval
@@ -74,7 +74,7 @@ Argos is responsible for:
 - excluding deprecated knowledge unless requested
 - respecting project and file scope
 - grouping package section matches back to package entrypoints
-- reporting weak or missing coverage
+- reporting weak or missing support
 - recommending only implemented tools
 - returning citation-ready knowledge IDs
 
@@ -84,12 +84,12 @@ No match is a valid discovery result, not a failure.
 
 Discovery must distinguish:
 
-- `strong`: relevant knowledge exists and should be loaded before work
+- `strong`: relevant knowledge exists and should be read before work
 - `partial`: some useful knowledge exists, but there are clear gaps
 - `weak`: only broad or low-confidence knowledge exists
 - `none`: no useful Argos knowledge was found for this request
 
-Weak or empty results must not be inflated into authoritative guidance. Agents
+Weak or empty results must not be inflated into Argos-backed guidance. Agents
 must not cite or claim Argos-backed guidance unless Argos returned knowledge IDs
 that were actually used.
 
@@ -98,7 +98,7 @@ that were actually used.
 Discovery is a harness around agent knowledge use:
 
 ```text
-Inventory -> Routing -> Retrieval Planning -> Controlled Loading -> Citation
+Inventory -> Routing -> Read Planning -> Controlled Reading -> Citation
 ```
 
 ### `argos_context`: Workflow Gate
@@ -107,13 +107,13 @@ Inventory -> Routing -> Retrieval Planning -> Controlled Loading -> Citation
 the knowledge base directly. It recommends the next Argos calls for the current
 project, phase, task, and files.
 
-For broad or unfamiliar project work, it should recommend `argos_map` or
-`argos_discover`. For implementation and review, it should continue to
+For broad or unfamiliar project work, it should recommend `argos_list_knowledge` or
+`argos_find_knowledge`. For implementation and review, it should continue to
 recommend standards-oriented retrieval.
 
-### `argos_map`: Inventory Gate
+### `argos_list_knowledge`: Inventory Gate
 
-`argos_map` answers what the knowledge base contains.
+`argos_list_knowledge` answers what the knowledge base contains.
 
 It returns a lightweight inventory by project, domain, type, and package:
 
@@ -127,9 +127,9 @@ It does not return full Markdown bodies.
 
 This prevents agents from blindly guessing what to search for.
 
-### `argos_discover`: Routing Gate
+### `argos_find_knowledge`: Routing Gate
 
-`argos_discover` maps the current task to relevant knowledge.
+`argos_find_knowledge` maps the current task to relevant knowledge.
 
 It accepts project, phase, task, files, query text, and optional filters. It
 returns ranked knowledge routes with:
@@ -145,23 +145,23 @@ returns ranked knowledge routes with:
 - `score_components`
 - `why_matched`
 - `matched_sections`
-- `disclosure`
-- `recommended_action`
+- `read_status`
+- `recommended_step`
 
-It also returns `coverage` and `next_calls` so agents know whether to load,
-skim, inspect the map, proceed without Argos-specific knowledge, or cite later.
+It also returns `support` and `next_steps` so agents know whether to read,
+skim, inspect the list, proceed without Argos-specific knowledge, or cite later.
 
-### `get_knowledge_item`: Disclosure Gate
+### `argos_read_knowledge`: Reading Gate
 
-`get_knowledge_item` remains the explicit full-body loading tool.
+`argos_read_knowledge` remains the explicit full-body reading tool.
 
-Agents should call it only for selected IDs returned by `argos_discover`,
-`argos_map`, or a direct user need. It returns the full Markdown body and
+Agents should call it only for selected IDs returned by `argos_find_knowledge`,
+`argos_list_knowledge`, or a direct user need. It returns the full Markdown body and
 metadata for one indexed knowledge item.
 
-### `cite_knowledge`: Accountability Gate
+### `argos_cite_knowledge`: Accountability Gate
 
-`cite_knowledge` remains the final citation tool.
+`argos_cite_knowledge` remains the final citation tool.
 
 Agents should call it for knowledge IDs actually used in the final answer.
 Discovery results alone do not justify citation if the agent did not apply that
@@ -172,8 +172,8 @@ knowledge.
 Discovery adds two agent-facing tools:
 
 ```text
-argos_discover
-argos_map
+argos_find_knowledge
+argos_list_knowledge
 ```
 
 Existing tools remain:
@@ -181,17 +181,17 @@ Existing tools remain:
 ```text
 argos_context
 argos_standards
-get_knowledge_item
-cite_knowledge
+argos_read_knowledge
+argos_cite_knowledge
 ```
 
 `argos_standards` stays as a rule-only shortcut. The broader discovery entrypoint
-is `argos_discover`.
+is `argos_find_knowledge`.
 
-All `next_calls` returned by any discovery response must reference implemented
+All `next_steps` returned by any discovery response must reference implemented
 tools only.
 
-## `argos_discover`
+## `argos_find_knowledge`
 
 ### Request
 
@@ -213,7 +213,7 @@ tools only.
 
 `project` should be required for normal project work. At least one of `task` or
 `query` should be present. `phase`, `files`, and filters refine ranking and
-coverage.
+support.
 
 Default behavior:
 
@@ -237,11 +237,11 @@ Default behavior:
     "semantic": "disabled",
     "semantic_reason": "semantic provider is not configured"
   },
-  "coverage": {
-    "status": "strong",
+  "support": {
+    "level": "strong",
     "confidence": 0.86,
     "reason": "Found active project knowledge matching auth files and refresh token terms.",
-    "recommendation": "Load high-priority matched knowledge before implementation."
+    "recommendation": "Read high-priority matched knowledge before implementation."
   },
   "items": [
     {
@@ -269,43 +269,43 @@ Default behavior:
         "query matched auth and token terms"
       ],
       "matched_sections": [],
-      "disclosure": {
+      "read_status": {
         "level": "summary",
         "full_body_available": true,
-        "load_tool": "get_knowledge_item"
+        "read_tool": "argos_read_knowledge"
       },
-      "recommended_action": "load_full_before_implementation"
+      "recommended_step": "read_full_before_implementation"
     }
   ],
-  "next_calls": [
+  "next_steps": [
     {
-      "tool": "get_knowledge_item",
+      "tool": "argos_read_knowledge",
       "ids": ["rule:backend.auth.v1"],
-      "reason": "Load high-priority matched knowledge before implementation."
+      "reason": "Read high-priority matched knowledge before implementation."
     },
     {
-      "tool": "cite_knowledge",
+      "tool": "argos_cite_knowledge",
       "reason": "Cite Argos knowledge IDs actually used in the final response."
     }
   ]
 }
 ```
 
-### Coverage Semantics
+### Support Semantics
 
-`coverage.status` guides agent behavior:
+`support.level` guides agent behavior:
 
-- `strong`: load recommended high-priority IDs before work
-- `partial`: load only high-confidence IDs and mention gaps when relevant
-- `weak`: skim summaries or inspect the map; do not treat results as authority
+- `strong`: read recommended high-priority IDs before work
+- `partial`: read only high-confidence IDs and mention gaps when relevant
+- `weak`: skim summaries or inspect the list; do not treat results as Argos-backed guidance
 - `none`: proceed without Argos-specific claims and do not cite Argos knowledge
 
 Weak or empty discovery should include missing knowledge hints when useful:
 
 ```json
 {
-  "coverage": {
-    "status": "partial",
+  "support": {
+    "level": "partial",
     "confidence": 0.48,
     "reason": "Found general backend rules, but no refresh-token-specific knowledge.",
     "missing_knowledge_hints": [
@@ -318,7 +318,7 @@ Weak or empty discovery should include missing knowledge hints when useful:
 }
 ```
 
-## `argos_map`
+## `argos_list_knowledge`
 
 ### Request
 
@@ -353,10 +353,10 @@ Weak or empty discovery should include missing knowledge hints when useful:
         "title": "Refresh token implementation",
         "summary": "Implementation guidance for refresh token flows.",
         "entrypoint": "knowledge/packages/backend/auth-refresh-token/KNOWLEDGE.md",
-        "disclosure": {
+        "read_status": {
           "level": "summary",
           "full_body_available": true,
-          "load_tool": "get_knowledge_item"
+          "read_tool": "argos_read_knowledge"
         }
       }
     ]
@@ -374,10 +374,10 @@ Weak or empty discovery should include missing knowledge hints when useful:
           "status": "active",
           "priority": "must",
           "path": "knowledge/items/backend/auth.md",
-          "disclosure": {
+          "read_status": {
             "level": "summary",
             "full_body_available": true,
-            "load_tool": "get_knowledge_item"
+            "read_tool": "argos_read_knowledge"
           }
         }
       ]
@@ -386,16 +386,16 @@ Weak or empty discovery should include missing knowledge hints when useful:
 }
 ```
 
-`argos_map` is for inventory and orientation. It should not try to replace
-`argos_discover` for task-specific ranking.
+`argos_list_knowledge` is for inventory and orientation. It should not try to replace
+`argos_find_knowledge` for task-specific ranking.
 
 ## CLI Surface
 
 CLI JSON fallbacks mirror the MCP tools:
 
 ```bash
-argos discover --json --project mall-api --phase implementation --task "add refresh token endpoint" --files internal/auth/session.go
-argos map --json --project mall-api --domain backend
+argos knowledge find --json --project mall-api --phase implementation --task "add refresh token endpoint" --files internal/auth/session.go
+argos knowledge list --json --project mall-api --domain backend
 ```
 
 Non-JSON output may be added later for humans, but JSON is the first-class
@@ -446,7 +446,7 @@ should contribute to `lexical` score components and `why_matched` reasons.
 
 ### `knowledge_chunks`
 
-Chunks provide finer recall without changing progressive disclosure:
+Chunks provide finer search without changing progressive reading:
 
 ```text
 chunk_id
@@ -459,7 +459,7 @@ text
 token_estimate
 ```
 
-Chunks are internal recall units. Discovery results group chunk hits back to
+Chunks are internal search units. Discovery results group chunk hits back to
 their knowledge item IDs.
 
 ### `knowledge_vectors`
@@ -496,7 +496,7 @@ enabled, disabled, stale, or degraded.
 
 ## Optional Semantic Layer
 
-Semantic search is opt-in. It enhances recall but is never required for
+Semantic search is opt-in. It enhances search but is never required for
 successful discovery.
 
 The provider contract is:
@@ -527,18 +527,18 @@ Semantic failure rules:
 - stale semantic metadata: semantic disabled or degraded with rebuild guidance
 - vector table missing: semantic disabled, core discovery continues
 
-## Recall And Ranking
+## Search And Ranking
 
 Discovery uses a deterministic hybrid pipeline:
 
 ```text
 1. Normalize request
 2. Apply hard filters
-3. Run recall signals
+3. Run search signals
 4. Fuse scores
 5. Group chunk and package matches
-6. Assign coverage and recommended actions
-7. Return explanations and next calls
+6. Assign support and recommended steps
+7. Return explanations and next steps
 ```
 
 ### Hard Filters
@@ -556,7 +556,7 @@ Inbox discovery is out of scope for Discovery v1 because the local discovery
 index contains official knowledge only; inbox candidates remain path-based
 validation and promotion inputs rather than queryable status-based results.
 
-### Recall Signals
+### Search Signals
 
 Default signals:
 
@@ -606,7 +606,7 @@ The same request against the same index should produce stable ordering.
 
 ## Phase-Aware Routing
 
-`phase` informs type preference and recommended actions:
+`phase` informs type preference and recommended steps:
 
 - `planning`: decision, guide, package, reference
 - `implementation`: rule, package, runbook, decision
@@ -642,36 +642,36 @@ Example:
   "id": "package:backend.redis.best-practices.v1",
   "type": "package",
   "matched_sections": ["When To Use", "Start Here"],
-  "disclosure": {
+  "read_status": {
     "level": "summary",
     "full_body_available": true,
-    "load_tool": "get_knowledge_item"
+    "read_tool": "argos_read_knowledge"
   }
 }
 ```
 
-## Recommended Actions
+## Recommended Steps
 
-Discovery results should use a small action vocabulary:
+Discovery results should use a small step vocabulary:
 
-- `load_full_before_planning`
-- `load_full_before_implementation`
-- `load_full_before_review`
-- `load_full_before_debugging`
+- `read_full_before_planning`
+- `read_full_before_implementation`
+- `read_full_before_review`
+- `read_full_before_debugging`
 - `skim_summary_only`
-- `inspect_map`
-- `cite_if_used`
+- `inspect_list`
+- `cite_after_read_and_used`
 - `ignore_unless_task_expands`
 - `proceed_without_argos_specific_knowledge`
 
 Rules:
 
 - high-confidence `must` rules in implementation or review should recommend
-  full loading
-- high-confidence packages should recommend full loading before implementation
-- lessons in debugging should recommend full loading when confidence is high
+  full reading
+- high-confidence packages should recommend full reading before implementation
+- lessons in debugging should recommend full reading when confidence is high
 - low-confidence general references should recommend summary-only handling
-- weak matches should not recommend full loading
+- weak matches should not recommend full reading
 - no match should recommend proceeding without Argos-specific claims
 
 ## Fallback And Error Handling
@@ -701,7 +701,7 @@ Unknown filters or malformed arguments:
 
 No match:
 
-- return an empty item list and `coverage.status = "none"`
+- return an empty item list and `support.level = "none"`
 - include a recommendation not to cite Argos knowledge for the task
 
 ## Adapter Contract Impact
@@ -711,10 +711,10 @@ Generated adapters should be updated after discovery exists.
 They should recommend:
 
 - `argos_context` before substantial work
-- `argos_discover` for task-specific knowledge routing
-- `argos_map` for broad orientation or unfamiliar project areas
-- `get_knowledge_item` only for selected IDs
-- `cite_knowledge` for knowledge used in final answers
+- `argos_find_knowledge` for task-specific knowledge routing
+- `argos_list_knowledge` for broad orientation or unfamiliar project areas
+- `argos_read_knowledge` only for selected IDs
+- `argos_cite_knowledge` for knowledge used in final answers
 
 Adapters must continue to state that Argos does not replace host workflow,
 safety, user instructions, tests, builds, linting, or review.
@@ -739,19 +739,19 @@ safety, user instructions, tests, builds, linting, or review.
 - explicit filters are honored
 - limit and stable ordering work
 
-### Coverage Tests
+### Support Tests
 
-- strong match returns load recommendations
+- strong match returns read recommendations
 - partial match reports gaps
-- weak match does not recommend full loading
+- weak match does not recommend full reading
 - no match returns no items and no citation recommendation
 
-### Progressive Disclosure Tests
+### Progressive Reading Tests
 
-- `argos_discover` does not return full body text
-- `argos_map` does not return full body text
-- each result contains disclosure metadata
-- high-priority selected IDs appear in `next_calls`
+- `argos_find_knowledge` does not return full body text
+- `argos_list_knowledge` does not return full body text
+- each result contains read_status metadata
+- high-priority selected IDs appear in `next_steps`
 
 ### Package Tests
 
@@ -761,7 +761,7 @@ safety, user instructions, tests, builds, linting, or review.
 
 ### MCP And CLI Tests
 
-- `tools/list` includes `argos_discover` and `argos_map` schemas
+- `tools/list` includes `argos_find_knowledge` and `argos_list_knowledge` schemas
 - MCP argument decoding is strict
 - MCP discovery requires index availability
 - CLI JSON shape matches query service responses
@@ -797,9 +797,9 @@ A practical implementation sequence is:
 
 1. Add index support for tags and FTS.
 2. Add chunk indexing for items and package entrypoints.
-3. Implement `query.Discover` and `query.Map` with SQLite core ranking.
-4. Expose `argos discover --json` and `argos map --json`.
-5. Expose MCP `argos_discover` and `argos_map`.
+3. Implement `query.FindKnowledge` and `query.ListKnowledge` with SQLite core ranking.
+4. Expose `argos knowledge find --json` and `argos knowledge list --json`.
+5. Expose MCP `argos_find_knowledge` and `argos_list_knowledge`.
 6. Update adapters and README.
 7. Add the optional semantic provider contract and degraded-state reporting.
 

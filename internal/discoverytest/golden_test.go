@@ -8,8 +8,8 @@ import (
 
 func TestLoadCasesReadsGoldenCases(t *testing.T) {
 	cases := LoadCases(t)
-	if len(cases) != 21 {
-		t.Fatalf("expected 21 golden cases, got %d", len(cases))
+	if len(cases) != 23 {
+		t.Fatalf("expected 23 golden cases, got %d", len(cases))
 	}
 	if CaseByID(t, cases, "strong_auth_refresh_full_signal").Expected.Support != "strong" {
 		t.Fatalf("expected strong_auth_refresh_full_signal to expect strong coverage")

@@ -10,15 +10,15 @@ judged by behavior, not intuition.
 The harness verifies the full agent knowledge flow:
 
 ```text
-argos_context -> argos_map -> argos_discover -> get_knowledge_item -> cite_knowledge
+argos_context -> argos_list_knowledge -> argos_find_knowledge -> argos_read_knowledge -> argos_cite_knowledge
 ```
 
 It must answer four product questions:
 
 1. Can the agent know what the knowledge base contains?
-2. Can the agent map current work to the right knowledge?
+2. Can the agent connect current work to the right knowledge?
 3. Can the agent retrieve only the knowledge it needs?
-4. When knowledge is missing, does the agent avoid oversearching, overloading,
+4. When knowledge is missing, does the agent avoid oversearching, overfull reading,
    or making Argos-backed claims?
 
 This harness is not a replacement for unit tests. It is a golden workflow layer
@@ -48,18 +48,18 @@ The harness must test Discovery as a governed retrieval workflow.
 
 A passing result means more than "some item was found." It means:
 
-- inventory is visible through `argos_map`
-- routing is justified through `argos_discover`
-- full bodies are loaded only through `get_knowledge_item`
-- weak and none coverage do not recommend citation
+- inventory is visible through `argos_list_knowledge`
+- routing is justified through `argos_find_knowledge`
+- full bodies are read only through `argos_read_knowledge`
+- weak and none support do not recommend citation
 - final citations refer only to knowledge that was actually used
 
 ### Absence And Uncertainty Are Success Cases
 
 The harness must treat weak, partial, and none results as first-class outcomes.
 
-Discovery should not inflate broad lexical matches into authoritative guidance.
-The validation suite should fail if weak or none cases recommend full loading,
+Discovery should not inflate broad lexical matches into Argos-backed guidance.
+The validation suite should fail if weak or none cases recommend full reading,
 recommend citation, or imply Argos-backed knowledge that does not exist.
 
 ### Keep V1 Lightweight
@@ -116,11 +116,11 @@ Each case should include:
 - query
 - files
 - filters
-- expected coverage
+- expected support
 - expected included IDs
 - expected excluded IDs
 - expected next-call behavior
-- progressive disclosure requirements
+- progressive reading requirements
 - citation requirements
 
 Golden cases should be represented as JSON so Go tests can load them without a
@@ -133,12 +133,12 @@ The automated harness runs deterministic checks against the golden corpus.
 
 It should cover:
 
-- `query.Service.Map`
-- `query.Service.Discover`
-- CLI JSON output for `argos map --json`
-- CLI JSON output for `argos discover --json`
+- `query.Service.ListKnowledge`
+- `query.Service.FindKnowledge`
+- CLI JSON output for `argos knowledge list --json`
+- CLI JSON output for `argos knowledge find --json`
 - MCP schema and strict argument behavior where relevant
-- progressive disclosure invariants
+- progressive reading invariants
 - citation guardrails
 
 The automated harness is the regression layer. It should fail on behavioral
@@ -154,7 +154,7 @@ Each dogfood case should run in a fresh, minimal context:
 
 - one case per independent AI session
 - no previous case transcripts
-- no golden expected IDs or expected coverage
+- no golden expected IDs or expected support
 - no full design spec unless the case explicitly validates documentation use
 - no hints about which knowledge should be discovered
 - only the current case input, allowed tools, workspace path, checklist, and
@@ -168,8 +168,8 @@ The harness should separate runner and evaluator roles:
 - the evaluator decides pass, fail, or review-needed
 
 The runner must ground every claim in tool output. A report should fail if it
-mentions, loads, or cites an ID that did not appear in the runner's discovery or
-loading transcript.
+mentions, reads, or cites an ID that did not appear in the runner's discovery or
+full reading transcript.
 
 At least one dogfood case should act as a contamination probe. For example, a
 case may use an unrelated task after auth-refresh cases have been discussed.
@@ -184,11 +184,11 @@ For each selected case, the agent should:
 
 1. read the case input
 2. call `argos_context` when the case models a real workflow entrypoint
-3. call `argos_map` when inventory awareness is part of the case
-4. call `argos_discover` with the case task, query, files, and filters
-5. decide which IDs to load
-6. call `get_knowledge_item` only for selected IDs
-7. call `cite_knowledge` only for IDs actually used
+3. call `argos_list_knowledge` when inventory awareness is part of the case
+4. call `argos_find_knowledge` with the case task, query, files, and filters
+5. decide which IDs to read
+6. call `argos_read_knowledge` only for selected IDs
+7. call `argos_cite_knowledge` only for IDs actually used
 8. produce a structured report
 
 The checklist should be written so a human can ask an AI agent to run it without
@@ -200,16 +200,16 @@ Each dogfood report should use a stable shape:
 
 ```text
 Case: strong_auth_refresh_full_signal
-Expected coverage: strong
-Actual coverage: strong
+Expected support: strong
+Actual support: strong
 Expected IDs: rule:backend.auth.v1, decision:backend.session.v1
 Actual IDs: rule:backend.auth.v1, decision:backend.session.v1
-Loaded IDs: rule:backend.auth.v1
+Read IDs: rule:backend.auth.v1
 Cited IDs: rule:backend.auth.v1
-Progressive disclosure: pass
+progressive reading: pass
 No-overclaim guard: pass
 Result: pass
-Notes: Loaded only the rule because the implementation task did not need the decision body.
+Notes: Read only the rule because the implementation task did not need the decision body.
 ```
 
 Reports should distinguish:
@@ -229,7 +229,7 @@ The first version should cover eight scenario groups.
 
 These cases verify that an agent can know what the knowledge base contains.
 
-Required coverage:
+Required support:
 
 - normal project inventory includes types, domains, tags, and packages
 - empty inventory is explicit and not treated as a tool failure
@@ -243,89 +243,89 @@ Required coverage:
 
 These cases verify that clear tasks route to the right knowledge.
 
-Required coverage:
+Required support:
 
 - task, query, and files all match the same domain
 - query-only discovery can find relevant knowledge
 - task-only discovery can find relevant knowledge
 - file-scoped knowledge ranks above generic knowledge when files match
 - must or should priority ranks above lower priority when relevance is similar
-- matched IDs include the authoritative rule, decision, runbook, or package
+- matched IDs include the required rule, decision, runbook, or package
 
 ### 3. Partial Routing
 
 These cases verify that Discovery can say "some relevant knowledge exists, but
-coverage is incomplete."
+support is incomplete."
 
-Required coverage:
+Required support:
 
 - domain-level knowledge exists but no task-specific rule exists
 - task-related knowledge exists but file scope does not match
 - a lesson exists but no rule or runbook exists
 - a package entrypoint exists but detailed supporting knowledge is absent
 - response includes missing knowledge hints
-- next calls load only high-confidence IDs
+- next steps read only high-confidence IDs
 
 ### 4. Weak Routing
 
-These cases verify that broad matches do not become authoritative guidance.
+These cases verify that broad matches do not become Argos-backed guidance.
 
-Required coverage:
+Required support:
 
 - a single generic term matches, such as `token`
 - phase or type matches but task content does not
 - broad tags match but task intent is unrelated
-- weak coverage does not recommend `get_knowledge_item`
-- weak coverage does not recommend `cite_knowledge`
+- weak support does not recommend `argos_read_knowledge`
+- weak support does not recommend `argos_cite_knowledge`
 
 ### 5. None
 
 These cases verify that missing knowledge is a clean result.
 
-Required coverage:
+Required support:
 
 - no item matches the task
 - explicit filters exclude otherwise relevant knowledge
 - project does not match and no global knowledge exists
 - empty index returns none or an inventory-empty result as appropriate
-- none coverage returns no items
-- none coverage does not recommend citation
+- none support returns no items
+- none support does not recommend citation
 
-### 6. Progressive Disclosure
+### 6. Progressive Reading
 
 These cases verify that Discovery does not overload context.
 
-Required coverage:
+Required support:
 
-- `argos_map` does not return full Markdown bodies
-- `argos_discover` does not return full Markdown bodies
-- discovery results return IDs, summaries, reasons, matched sections, disclosure
-  metadata, and next calls
-- `get_knowledge_item` is the only tool that returns full body text
-- dogfood runs load only the top one to three needed IDs
+- `argos_list_knowledge` does not return full Markdown bodies
+- `argos_find_knowledge` does not return full Markdown bodies
+- discovery results return IDs, summaries, reasons, matched sections, read_status
+  metadata, and next steps
+- `argos_read_knowledge` is the only tool that returns full body text
+- dogfood runs read only the top one to three needed IDs
 
 ### 7. Citation Accountability
 
 These cases verify that final claims are traceable.
 
-Required coverage:
+Required support:
 
-- strong and partial cases cite only IDs that were actually loaded and used
+- strong and partial cases cite only IDs that were actually read and used
 - weak and none cases do not cite Argos knowledge
-- IDs returned by discovery but never loaded do not count as used knowledge
+- IDs returned by discovery but never read do not count as used knowledge
 - invalid or absent knowledge IDs are rejected by citation checks
-- dogfood reports separate "discovered", "loaded", and "cited" IDs
+- dogfood reports separate "discovered", "read", and "cited" IDs
 
 ### 8. Interface Consistency
 
 These cases verify that real entrypoints behave consistently.
 
-Required coverage:
+Required support:
 
-- `argos discover --json` matches query-service behavior
-- `argos map --json` matches query-service behavior
-- MCP `argos_discover` schema rejects unknown fields
-- MCP `argos_map` schema rejects unknown fields
+- `argos knowledge find --json` matches query-service behavior
+- `argos knowledge list --json` matches query-service behavior
+- MCP `argos_find_knowledge` schema rejects unknown fields
+- MCP `argos_list_knowledge` schema rejects unknown fields
 - generated adapters recommend MCP first, CLI JSON second, generated files
   third, and Markdown fallback last
 - missing index errors are explicit
@@ -335,40 +335,40 @@ Required coverage:
 V1 should start with these twenty-one cases. Together they cover the scenario
 matrix while staying small enough to run on every development machine.
 
-### `map_inventory_normal`
+### `list_inventory_normal`
 
 Purpose: verify that a populated project inventory exposes the knowledge shape.
 
 Expected behavior:
 
-- `argos_map` returns nonzero counts for rules and packages
+- `argos_list_knowledge` returns nonzero counts for rules and packages
 - domains include backend and security
 - tags include auth and refresh-token
 - package entrypoints appear in `packages`
 - full bodies are absent
 
-### `map_inventory_empty`
+### `list_inventory_empty`
 
 Purpose: verify that an empty knowledge base is understandable.
 
 Expected behavior:
 
-- `argos_map` returns zero counts
+- `argos_list_knowledge` returns zero counts
 - groups are empty
 - full bodies are absent
 - the result is not confused with a command or schema failure
 
-### `map_hides_deprecated_by_default`
+### `list_hides_deprecated_by_default`
 
 Purpose: verify that stale guidance does not appear unless requested.
 
 Expected behavior:
 
-- default map excludes deprecated items
+- default list excludes deprecated items
 - `include_deprecated` includes the deprecated item
 - deprecated status is visible when included
 
-### `map_global_knowledge_visible`
+### `list_global_knowledge_visible`
 
 Purpose: verify that project work can see global knowledge.
 
@@ -392,10 +392,10 @@ Input shape:
 
 Expected behavior:
 
-- coverage is strong
+- support is strong
 - top results include auth rule and session decision
 - file-scoped auth rule ranks above generic backend knowledge
-- next calls recommend loading high-priority IDs
+- next steps recommend full reading high-priority IDs
 - full bodies are absent from discovery
 
 ### `strong_auth_refresh_query_only`
@@ -404,7 +404,7 @@ Purpose: verify discovery when the agent has search intent but no file context.
 
 Expected behavior:
 
-- coverage is strong
+- support is strong
 - results include refresh-token knowledge
 - file-scoped ranking does not dominate without files
 - no unrelated cache or payment knowledge is returned
@@ -416,7 +416,7 @@ separate query string.
 
 Expected behavior:
 
-- coverage is strong
+- support is strong
 - results include refresh-token knowledge
 - the request does not require files to produce a useful route
 - no unrelated cache or payment knowledge is returned
@@ -434,25 +434,25 @@ Expected behavior:
 
 ### `partial_domain_without_task_detail`
 
-Purpose: verify partial coverage when only domain guidance exists.
+Purpose: verify partial support when only domain guidance exists.
 
 Expected behavior:
 
-- coverage is partial
+- support is partial
 - relevant domain rule or reference appears
 - missing knowledge hints mention absent task-specific guidance
-- next calls do not overrecommend broad unrelated IDs
+- next steps do not overrecommend broad unrelated IDs
 
 ### `partial_lesson_without_rule`
 
-Purpose: verify partial coverage when only experience knowledge exists.
+Purpose: verify partial support when only experience knowledge exists.
 
 Expected behavior:
 
-- coverage is partial
+- support is partial
 - the lesson appears as a relevant route
 - missing knowledge hints mention absent rule or runbook guidance
-- next calls recommend loading the lesson and no absent rule or runbook IDs
+- next steps recommend full reading the lesson and no absent rule or runbook IDs
 
 ### `partial_package_entrypoint_without_detail`
 
@@ -461,7 +461,7 @@ Purpose: verify package-aware partial routing.
 Expected behavior:
 
 - package entrypoint appears as a route
-- coverage is partial if package summary matches but detailed rule is absent
+- support is partial if package summary matches but detailed rule is absent
 - matched sections identify package entrypoint sections
 - package assets are not standalone results
 
@@ -471,21 +471,21 @@ Purpose: verify that one broad lexical overlap is not enough.
 
 Expected behavior:
 
-- coverage is weak
-- no `get_knowledge_item` next call
-- no `cite_knowledge` next call
-- report recommends inspecting the map or proceeding without Argos authority
+- support is weak
+- no `argos_read_knowledge` next step
+- no `argos_cite_knowledge` next step
+- report recommends inspecting the list or proceeding without Argos-backed guidance
 
 ### `weak_broad_tag_only`
 
-Purpose: verify that broad metadata overlap is not treated as task coverage.
+Purpose: verify that broad metadata overlap is not treated as task support.
 
 Expected behavior:
 
-- coverage is weak
-- broad backend or platform tags do not produce authoritative guidance
-- no `get_knowledge_item` next call
-- no `cite_knowledge` next call
+- support is weak
+- broad backend or platform tags do not produce Argos-backed guidance
+- no `argos_read_knowledge` next step
+- no `argos_cite_knowledge` next step
 
 ### `none_payment_webhook`
 
@@ -493,7 +493,7 @@ Purpose: verify absence behavior for a task outside the corpus.
 
 Expected behavior:
 
-- coverage is none
+- support is none
 - items are empty
 - no citation is recommended
 - dogfood report says no Argos-backed guidance exists
@@ -505,7 +505,7 @@ Purpose: verify that project boundaries are respected.
 Expected behavior:
 
 - an item scoped to another project is not returned for `mall-api`
-- coverage is none when no global item matches
+- support is none when no global item matches
 - response does not recommend citation
 
 ### `none_explicit_filter_excludes_match`
@@ -515,38 +515,38 @@ Purpose: verify that explicit user filters are respected.
 Expected behavior:
 
 - an otherwise relevant auth item is excluded by nonmatching tags or domains
-- coverage is none
+- support is none
 - response does not silently ignore filters to recover a match
 
-### `progressive_disclosure_and_citation_guard`
+### `progressive_read_status_and_citation_guard`
 
-Purpose: verify the end-to-end loading and citation protocol.
+Purpose: verify the end-to-end full reading and citation protocol.
 
 Expected behavior:
 
-- map and discover expose no full bodies
-- dogfood flow loads only selected IDs
-- citation uses only loaded and applied IDs
+- list and find expose no full bodies
+- dogfood flow reads only selected IDs
+- citation uses only read and applied IDs
 - weak and none subcases produce no Argos citation
 
-### `interface_cli_discover_matches_query`
+### `interface_cli_find_matches_query`
 
 Purpose: verify that CLI discovery is not a separate behavioral path.
 
 Expected behavior:
 
-- `argos discover --json` returns the same core coverage and item IDs as
-  `query.Service.Discover`
+- `argos knowledge find --json` returns the same core support and item IDs as
+  `query.Service.FindKnowledge`
 - CLI output is valid JSON
 - missing or invalid required arguments produce explicit errors
 
-### `interface_cli_map_matches_query`
+### `interface_cli_list_matches_query`
 
 Purpose: verify that CLI inventory is not a separate behavioral path.
 
 Expected behavior:
 
-- `argos map --json` returns the same core inventory as `query.Service.Map`
+- `argos knowledge list --json` returns the same core inventory as `query.Service.ListKnowledge`
 - CLI output is valid JSON
 - missing project produces an explicit error
 
@@ -556,9 +556,9 @@ Purpose: verify that MCP tools are governed entrypoints.
 
 Expected behavior:
 
-- `argos_discover` rejects unknown arguments
-- `argos_map` rejects unknown arguments
-- `argos_discover` requires task or query
+- `argos_find_knowledge` rejects unknown arguments
+- `argos_list_knowledge` rejects unknown arguments
+- `argos_find_knowledge` requires task or query
 - out-of-range limits are rejected
 
 ### `adapter_flow_recommendations`
@@ -584,12 +584,12 @@ appears.
 A case fails if any of these happen:
 
 - relevant expected IDs are absent in strong cases
-- weak or none cases recommend full loading or citation
-- map or discover returns full Markdown bodies
+- weak or none cases recommend full reading or citation
+- list or find returns full Markdown bodies
 - explicit filters are ignored
 - deprecated knowledge appears by default
 - package internals appear as standalone knowledge items
-- dogfood reports cite knowledge that was not loaded and used
+- dogfood reports cite knowledge that was not read and used
 - CLI, MCP, and query service disagree on core behavior
 
 ### Review Needed
@@ -608,7 +608,7 @@ V1 does not validate:
 - semantic embedding quality
 - remote model behavior
 - inbox candidate discovery
-- package asset loading beyond entrypoint grouping
+- package asset full reading beyond entrypoint grouping
 - human-authored acceptance narratives
 - browser-based workflows
 

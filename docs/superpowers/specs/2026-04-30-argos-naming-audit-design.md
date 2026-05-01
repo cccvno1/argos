@@ -19,8 +19,8 @@ adapters.
 - Prefer common developer words over abstract system-design language.
 - Make the agent workflow obvious from tool names.
 - Keep Argos professional enough for open source users and contributors.
-- Remove terms that imply official truth, mandatory capture, or hidden
-  platform authority.
+- Remove terms that imply official truth, mandatory capture, or hidden platform
+  control.
 - Rename development-stage interfaces in one coherent slice.
 - Keep historical reports and old plans readable, but mark superseded language
   where needed.
@@ -40,9 +40,9 @@ adapters.
 Use short words that developers already know: `list`, `find`, `read`, `cite`,
 `support`, `items`, `next_steps`, and `status`.
 
-Avoid academic or overly architectural words in user-visible surfaces:
-`authority`, `coverage`, `recall`, `disclosure`, `governed`,
-`accountability`, and `provenance`.
+Avoid academic or overly architectural words in user-visible surfaces. Prefer
+the final shared-knowledge vocabulary in this spec over development-stage
+terms for official truth, retrieval internals, and hidden reading gates.
 
 These words may still appear in design history or comments when they are the
 right technical explanation, but they should not be the primary public API.
@@ -58,24 +58,25 @@ list -> find -> read -> cite
 This is easier to learn than:
 
 ```text
-map -> discover -> disclose -> account
+inventory -> route -> read -> cite
 ```
 
 ### Shared Knowledge, Not Official Truth
 
 Argos should say whether uploaded shared knowledge supports a task. It should
-not imply that Argos is the final authority for the project.
+not imply that Argos is the final source of truth for the project.
 
-Use `support` instead of `authority`.
-Use `missing_needs` instead of `coverage_gaps`.
+Use `support` for whether shared knowledge applies.
+Use `missing_needs` for unsupported task needs.
 
-### Progressive Reading, Not Hidden Disclosure
+### Progressive Reading
 
-The constraint remains the same: the agent should not load every full Markdown
+The constraint remains the same: the agent should not read every full Markdown
 body at once. The name should be simpler.
 
 Use `read` for the public action and `read_status` for item-level guidance.
-Avoid `disclosure` in public JSON.
+Use `read_status` only where an item needs to describe full-reading
+availability.
 
 ### Internal Names Can Be Slightly More Technical
 
@@ -90,7 +91,7 @@ engineering-oriented when that improves clarity:
 - internal: `SearchStatus`
 
 The internal names should still avoid terms that conflict with product meaning,
-such as `Authority`.
+such as source-of-truth language.
 
 ## Recommended Tool Names
 
@@ -112,14 +113,14 @@ Meaning:
 - `argos_read_knowledge`: read the full body for one selected knowledge item.
 - `argos_cite_knowledge`: create citations for knowledge actually used.
 
-### Existing Tool Mapping
+### Tool Rename Summary
 
-| Current name | New name | Reason |
+| Previous surface | Final name | Reason |
 | --- | --- | --- |
-| `argos_map` | `argos_list_knowledge` | `list` is more common than `map`; the tool returns inventory. |
-| `argos_discover` | `argos_find_knowledge` | `find` is direct and action-oriented. |
-| `get_knowledge_item` | `argos_read_knowledge` | Adds Argos namespace and describes full-body reading. |
-| `cite_knowledge` | `argos_cite_knowledge` | Adds Argos namespace and keeps the clear verb. |
+| inventory/orientation tool | `argos_list_knowledge` | `list` is common and the tool returns inventory. |
+| task routing tool | `argos_find_knowledge` | `find` is direct and action-oriented. |
+| full knowledge item reader | `argos_read_knowledge` | Adds Argos namespace and describes full-body reading. |
+| citation tool | `argos_cite_knowledge` | Adds Argos namespace and keeps the clear verb. |
 
 `argos_context` and `argos_standards` can remain for now because they are
 workflow shortcuts, not the new shared-knowledge search path. A later audit can
@@ -171,15 +172,17 @@ Use:
 
 | Current field | New field | Reason |
 | --- | --- | --- |
-| `coverage` | `support` | Describes whether shared knowledge supports the task. |
-| `coverage.status` | `support.level` | `level` is easier than `status` for strong/partial/weak/none. |
-| `coverage_gaps` | `missing_needs` | Plainly says which task needs were not supported. |
-| `action_policy` | `usage` | Describes how the agent may use the result. |
-| `authority` | remove or fold into `support.level` | Avoids official-truth language. |
-| `recall` | `search_status` | Explains search capability without retrieval jargon. |
-| `disclosure` | `read_status` | Explains whether full reading is available. |
-| `next_calls` | `next_steps` | More natural for agents and humans. |
-| `recommended_action` | `recommended_step` | Aligns with `next_steps`. |
+| Previous surface | Final field | Reason |
+| --- | --- | --- |
+| task applicability result | `support` | Describes whether shared knowledge supports the task. |
+| task applicability level | `support.level` | `level` is easy to understand for strong/partial/weak/none. |
+| unsupported task needs | `missing_needs` | Plainly says which task needs were not supported. |
+| allowed use guidance | `usage` | Describes how the agent may use the result. |
+| official-truth field | remove or fold into `support.level` | Avoids source-of-truth language. |
+| search capability metadata | `search_status` | Explains search capability without retrieval jargon. |
+| full-reading availability | `read_status` | Explains whether full reading is available. |
+| follow-up actions | `next_steps` | Natural for agents and humans. |
+| per-item recommendation | `recommended_step` | Aligns with `next_steps`. |
 
 ### Support Levels
 
@@ -198,13 +201,13 @@ Use simpler source values:
 
 | Current source | New source | Reason |
 | --- | --- | --- |
-| `unmatched_intent` | `not_found` | Direct and easy to understand. |
+| `not_found` | `not_found` | Direct and easy to understand. |
 | `weak_match` | `weak_match` | Clear enough to keep. |
 | `partial_match` | `partial_match` | Clear enough to keep. |
-| `filter_excluded` | `filtered_out` | More natural phrasing. |
-| `conflicting_shared_knowledge` | `conflict` | Shorter; details can live in `reason`. |
+| `filtered_out` | `filtered_out` | More natural phrasing. |
+| `conflict` | `conflict` | Shorter; details can live in `reason`. |
 | `low_confidence` | `low_confidence` | Clear enough to keep. |
-| `cross_domain_mismatch` | `wrong_scope` | Easier than domain mismatch and covers project, domain, file, and scope. |
+| `wrong_scope` | `wrong_scope` | Easier than domain mismatch and covers project, domain, file, and scope. |
 
 ## Go Type Names
 
@@ -214,14 +217,14 @@ Use clear internal names that mirror the public API without becoming too casual:
 | --- | --- |
 | `DiscoveryResponse` | `FindKnowledgeResponse` |
 | `MapResponse` | `ListKnowledgeResponse` |
-| `Coverage` | `Support` |
-| `CoverageGap` | `MissingNeed` |
-| `ActionPolicy` | `UsageGuidance` |
-| `RecallState` | `SearchStatus` |
-| `SemanticRecallState` | `SemanticSearchStatus` |
+| `Support` | `Support` |
+| `MissingNeed` | `MissingNeed` |
+| `UsageGuidance` | `UsageGuidance` |
+| `SearchStatus` | `SearchStatus` |
+| `SemanticSearchStatus` | `SemanticSearchStatus` |
 | `DiscoveryItem` | `KnowledgeSummary` |
-| `Disclosure` | `ReadStatus` |
-| `RecommendedCall` | `NextStep` |
+| `ReadStatus` | `ReadStatus` |
+| `NextStep` | `NextStep` |
 
 The package name `query` can remain until there is a stronger reason to split
 or rename it. The product language can improve without a large package
@@ -257,10 +260,10 @@ Adapters should describe the workflow in ordinary language:
 
 Avoid:
 
-- "Argos authority"
-- "coverage gap candidate"
-- "recall boundary"
-- "progressive disclosure gate"
+- "Argos Argos-backed guidance"
+- "missing need candidate"
+- "search boundary"
+- "progressive reading gate"
 
 Use:
 
@@ -287,27 +290,14 @@ Recommended implementation order:
 
 ## Active Surface Scan
 
-After migration, these old terms should not appear in active surfaces such as
-`internal`, `testdata`, `docs/superpowers/templates`, active specs, and active
-checklists:
+After migration, retired development-stage names should not appear in active
+surfaces such as `internal`, `testdata`, `docs/superpowers/templates`, active
+specs, and active checklists. The scan should reject the old inventory,
+routing, full-read, unsupported-need, usage, search-metadata, read-status, and
+follow-up-action spellings.
 
-```text
-argos_map
-argos_discover
-get_knowledge_item
-coverage_gaps
-CoverageGap
-action_policy
-ActionPolicy
-authority
-recall
-RecallState
-disclosure
-Disclosure
-```
-
-`cite_knowledge` should be rejected only when it appears as the old standalone
-tool name. The new tool name `argos_cite_knowledge` is valid.
+The standalone old citation tool name should be rejected, while
+`argos_cite_knowledge` remains valid.
 
 Historical implementation plans and reports may keep old terms when they are
 part of the record, but any active guidance should point to the new vocabulary.
@@ -368,5 +358,5 @@ support, missing_needs, usage, search_status, items, next_steps
 ```
 
 The behavior should remain unchanged: Argos helps agents use shared uploaded
-knowledge without overloading context, overclaiming support, or citing knowledge
+knowledge without overfull reading context, overclaiming support, or citing knowledge
 that was not read and used.

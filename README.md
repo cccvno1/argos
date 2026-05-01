@@ -51,10 +51,10 @@ MCP -> CLI JSON -> generated adapter files -> Markdown source
 
 Generated adapters define a minimum contract for tools that read project
 instruction files: preserve host workflow control, prefer MCP, fall back to CLI
-JSON or Markdown source, load full knowledge only when routed, and cite Argos
+JSON or Markdown source, read full knowledge only when routed, and cite Argos
 knowledge IDs that informed final responses.
 
-Before substantial work, an agent should load relevant Argos context and
+Before substantial work, an agent should read relevant Argos context and
 standards. Before final answers that relied on Argos knowledge, it should cite
 the knowledge IDs it used.
 
@@ -66,26 +66,30 @@ avoid Argos-backed claims when no strong match exists.
 
 The default discovery path is local and lightweight: SQLite metadata, file
 scope matching, tags, package entrypoints, and FTS5 full-text search. Embedding
-and vector search are optional future enhancements; `argos discover` works
-without Ollama, model downloads, GPU hardware, or a background service.
+and vector search are optional future enhancements; `argos knowledge find`
+works without Ollama, model downloads, GPU hardware, or a background service.
 
 Use:
 
 ```bash
-argos discover --json --project <project> --phase <phase> --task "<task>" --query "<query>"
-argos map --json --project <project> --domain <domain>
+argos knowledge find --json --project <project> --phase <phase> --task "<task>" --query "<query>"
+argos knowledge list --json --project <project> --domain <domain>
+argos knowledge read --json <id>
+argos knowledge cite --json <id>...
 ```
 
-`argos map` returns inventory and orientation. `argos discover` returns ranked
-routes, `why_matched`, `coverage`, and `next_calls`. Neither command returns
-full Markdown bodies. Load selected full items with `get_knowledge_item` and
-cite used IDs with `cite_knowledge`.
+`argos knowledge list` returns inventory and orientation.
+`argos knowledge find` returns ranked routes, `why_matched`, `support`,
+`usage`, `search_status`, `missing_needs`, and `next_steps`. Find and list do
+not return full Markdown bodies. Read selected full items with
+`argos knowledge read`; cite used IDs with `argos knowledge cite`.
 
-Coverage states:
+Support states:
 
-- `strong`: load recommended high-priority IDs before work.
+- `strong`: read recommended high-priority IDs before work.
 - `partial`: useful knowledge exists, but gaps remain.
-- `weak`: skim summaries or inspect the map; do not treat results as authority.
+- `weak`: skim summaries or inspect the list; do not treat results as
+  Argos-backed guidance.
 - `none`: proceed without Argos-specific claims and do not cite Argos knowledge.
 
 ### Discovery Validation
@@ -99,7 +103,7 @@ go test ./internal/discoverytest ./internal/query ./internal/cli ./internal/mcp 
 ```
 
 The golden corpus and `cases.json` verify inventory, strong/partial/weak/none
-coverage, progressive disclosure, citation guardrails, and entrypoint
+support, progressive reading, citation guardrails, and entrypoint
 consistency.
 
 AI dogfood validation uses:
@@ -108,7 +112,7 @@ AI dogfood validation uses:
 - `docs/superpowers/templates/argos-discovery-dogfood-report.md`
 
 Dogfood runners must use fresh minimal context per case. Do not give runner
-agents expected IDs, expected coverage, prior transcripts, or design history.
+agents expected IDs, expected support, prior transcripts, or design history.
 Evaluate reports separately against `testdata/discovery-golden/cases.json`.
 
 ## Knowledge Authoring
@@ -171,27 +175,25 @@ Run the local MCP server over stdio:
 argos mcp
 ```
 
-The server supports tool discovery with `tools/list` and implements these
-`tools/call` entries:
+The server supports tool discovery with `tools/list`. The shared-knowledge
+`tools/call` entries are:
 
-- `argos_context`: returns workflow context and recommended next calls.
-  Arguments: `project`, `phase`, `task`, `files`.
-- `argos_standards`: returns active standards for project work from the local
-  index. Arguments: `project`, `task_type`, `files`, `limit`.
-- `argos_discover`: returns ranked knowledge routes, coverage, explanations,
-  and next calls without full bodies. Arguments: `project`, `phase`, `task`,
+- `argos_find_knowledge`: returns ranked knowledge routes, support, explanations,
+  and next steps without full bodies. Arguments: `project`, `phase`, `task`,
   `query`, `files`, `types`, `tags`, `domains`, `status`,
   `include_deprecated`, `limit`.
-- `argos_map`: returns project/domain knowledge inventory without full bodies.
+- `argos_list_knowledge`: returns project/domain knowledge inventory without full bodies.
   Arguments: `project`, `domain`, `types`, `include_deprecated`.
-- `get_knowledge_item`: fetches one indexed knowledge item including its full
+- `argos_read_knowledge`: fetches one indexed knowledge item including its full
   body. Arguments: `id`.
-- `cite_knowledge`: returns citation metadata for indexed knowledge items and
+- `argos_cite_knowledge`: returns citation metadata for indexed knowledge items and
   reports missing ids. Arguments: `ids`.
 
+Additional workflow shortcuts include `argos_context` and `argos_standards`.
+
 Run `argos index` before calling index-backed tools:
-`argos_standards`, `argos_discover`, `argos_map`, `get_knowledge_item`, and
-`cite_knowledge`.
+`argos_standards`, `argos_find_knowledge`, `argos_list_knowledge`,
+`argos_read_knowledge`, and `argos_cite_knowledge`.
 
 ## Agent/Internal Commands
 
@@ -208,7 +210,9 @@ argos promote --path <candidate>
 argos index
 argos install-adapters
 argos context --json --project <project>
-argos discover --json --project <project> --task <task>
-argos map --json --project <project>
+argos knowledge find --json --project <project> --task <task>
+argos knowledge list --json --project <project>
+argos knowledge read --json <id>
+argos knowledge cite --json <id>...
 argos mcp
 ```

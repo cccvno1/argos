@@ -12,7 +12,7 @@ tags: [auth, refresh-token, package]
 ---
 ## Purpose
 
-Guide refresh token endpoint work with progressive disclosure.
+Guide refresh token endpoint work with progressive reading.
 
 ## When To Use
 

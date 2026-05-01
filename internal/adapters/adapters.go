@@ -107,20 +107,20 @@ Do not let Argos replace host workflow, safety, or user instructions.
 ## Work Protocol
 
 1. Before substantial project work, call argos_context when available; otherwise follow equivalent adapter or Markdown guidance.
-2. Use argos_map for broad orientation before unfamiliar project work.
-3. Use argos_discover to route current work to relevant shared knowledge.
+2. Use argos_list_knowledge when available; otherwise use equivalent CLI JSON or adapter guidance for broad orientation before unfamiliar project work.
+3. Use argos_find_knowledge when available; otherwise use equivalent CLI JSON or adapter guidance to find shared knowledge for current work.
 4. Before implementation or review, call argos_standards when available; otherwise follow equivalent adapter or Markdown guidance.
-5. Follow recommended calls returned by Argos.
-6. Load full knowledge items only through get_knowledge_item when routed to specific IDs or paths.
-7. Cite Argos knowledge IDs used in final responses only after loading and applying them.
-8. Do not cite IDs returned only by argos_map or argos_discover.
-9. Cite only knowledge IDs whose full item was loaded with get_knowledge_item and actually applied.
-10. Follow action_policy.load before loading full knowledge items.
-11. Follow action_policy.cite before calling cite_knowledge.
-12. When coverage_gaps are present, separate Argos-backed claims from general reasoning.
-13. Do not cite coverage_gaps; they are coverage boundaries, not knowledge items.
-14. Do not start upload, capture, or inbox creation from Discovery alone.
-15. Semantic recall never overrides action_policy.
+5. Follow next_steps returned by Argos.
+6. Read full knowledge items only through argos_read_knowledge when available; otherwise use equivalent CLI JSON or adapter guidance when routed to specific IDs or paths.
+7. Cite Argos knowledge IDs used in final responses only after reading and applying them.
+8. Do not cite IDs returned only by argos_list_knowledge or argos_find_knowledge.
+9. Cite only knowledge IDs whose full item was read with argos_read_knowledge or equivalent CLI JSON and actually applied.
+10. Follow usage.read before reading full knowledge items.
+11. Follow usage.cite before calling argos_cite_knowledge or equivalent CLI JSON citation.
+12. When missing_needs are present, separate Argos-backed claims from general reasoning.
+13. Do not cite missing_needs; they are unsupported needs, not knowledge items.
+14. Do not start upload, capture, or inbox creation from find results alone.
+15. Semantic search status never overrides usage guidance.
 
 ## Boundaries
 
