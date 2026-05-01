@@ -54,25 +54,25 @@ func TestFirstRetiredNameMatchSkipsGuardFileAndReportsNestedPath(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(guardFile), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(guardFile, []byte("action_policy"), 0o644); err != nil {
+	if err := os.WriteFile(guardFile, []byte("usage"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	nestedFile := filepath.Join(root, "internal", "nested", "fixture.go")
 	if err := os.MkdirAll(filepath.Dir(nestedFile), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(nestedFile, []byte("coverage_gaps"), 0o644); err != nil {
+	if err := os.WriteFile(nestedFile, []byte("missing_needs"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	file, term, ok := firstRetiredNameMatch(t, root, "internal", []string{"action_policy", "coverage_gaps"}, guardFile)
+	file, term, ok := firstRetiredNameMatch(t, root, "internal", []string{"usage", "missing_needs"}, guardFile)
 	if !ok {
 		t.Fatal("expected retired-name match")
 	}
 	if file != filepath.ToSlash(filepath.Join("internal", "nested", "fixture.go")) {
 		t.Fatalf("expected nested match path, got %q", file)
 	}
-	if term != "coverage_gaps" {
+	if term != "missing_needs" {
 		t.Fatalf("expected nested retired term, got %q", term)
 	}
 }
@@ -83,11 +83,11 @@ func TestFirstRetiredNameMatchSkipsDirectExcludedFile(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(guardFile), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(guardFile, []byte("action_policy"), 0o644); err != nil {
+	if err := os.WriteFile(guardFile, []byte("usage"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	file, term, ok := firstRetiredNameMatch(t, root, filepath.Join("internal", "query", "query_test.go"), []string{"action_policy"}, guardFile)
+	file, term, ok := firstRetiredNameMatch(t, root, filepath.Join("internal", "query", "query_test.go"), []string{"usage"}, guardFile)
 	if ok {
 		t.Fatalf("expected excluded direct file to have no match, got %s %q", file, term)
 	}
@@ -373,12 +373,12 @@ func TestStandardsPrefersFileScopedMatchBeforeApplyingLimit(t *testing.T) {
 	}
 }
 
-func TestDiscoverReturnsStrongMatchedRoutesWithoutFullBodies(t *testing.T) {
-	store := buildDiscoveryTestStore(t)
+func TestFindKnowledgeReturnsStrongMatchedRoutesWithoutFullBodies(t *testing.T) {
+	store := buildFindKnowledgeTestStore(t)
 	defer store.Close()
 	service := New(store)
 
-	result, err := service.Discover(DiscoverRequest{
+	result, err := service.FindKnowledge(FindKnowledgeRequest{
 		Project: "mall-api",
 		Phase:   "implementation",
 		Task:    "add refresh token endpoint",
@@ -387,38 +387,121 @@ func TestDiscoverReturnsStrongMatchedRoutesWithoutFullBodies(t *testing.T) {
 		Limit:   5,
 	})
 	if err != nil {
-		t.Fatalf("Discover returned error: %v", err)
+		t.Fatalf("FindKnowledge returned error: %v", err)
 	}
-	if result.Coverage.Status != "strong" {
-		t.Fatalf("expected strong coverage, got %#v", result.Coverage)
+	if result.Support.Level != "strong" {
+		t.Fatalf("expected strong coverage, got %#v", result.Support)
 	}
 	if len(result.Items) == 0 {
-		t.Fatal("expected discovery items")
+		t.Fatal("expected knowledge summaries")
 	}
 	first := result.Items[0]
 	if first.ID != "rule:backend.auth.v1" {
 		t.Fatalf("expected auth rule first, got %#v", result.Items)
 	}
 	if first.Body != "" {
-		t.Fatalf("discover must not return full body: %#v", first)
+		t.Fatalf("find must not return full body: %#v", first)
 	}
-	if first.Disclosure.LoadTool != "get_knowledge_item" || first.Disclosure.Level != "summary" {
-		t.Fatalf("unexpected disclosure: %#v", first.Disclosure)
+	if first.ReadStatus.ReadTool != "argos_read_knowledge" || first.ReadStatus.Level != "summary" {
+		t.Fatalf("unexpected disclosure: %#v", first.ReadStatus)
 	}
 	if len(first.WhyMatched) == 0 {
 		t.Fatalf("expected why_matched reasons")
 	}
-	if len(result.NextCalls) == 0 || result.NextCalls[0].Tool != "get_knowledge_item" {
-		t.Fatalf("expected get_knowledge_item next call: %#v", result.NextCalls)
+	if len(result.NextSteps) == 0 || result.NextSteps[0].Tool != "argos_read_knowledge" {
+		t.Fatalf("expected argos_read_knowledge next step: %#v", result.NextSteps)
 	}
 }
 
-func TestDiscoverReportsNoneCoverageForUnmatchedTask(t *testing.T) {
-	store := buildDiscoveryTestStore(t)
+func TestFindKnowledgeResponsePreservesMetadata(t *testing.T) {
+	store := buildFindKnowledgeTestStore(t)
 	defer store.Close()
 	service := New(store)
 
-	result, err := service.Discover(DiscoverRequest{
+	result, err := service.FindKnowledge(FindKnowledgeRequest{
+		Project: "mall-api",
+		Phase:   "implementation",
+		Task:    "add refresh token endpoint",
+		Query:   "refresh token",
+		Files:   []string{"internal/auth/session.go"},
+		Limit:   5,
+	})
+	if err != nil {
+		t.Fatalf("FindKnowledge returned error: %v", err)
+	}
+	if result.Project != "mall-api" || result.Phase != "implementation" || result.Query != "add refresh token endpoint refresh token" {
+		t.Fatalf("expected request metadata on response, got %#v", result)
+	}
+	if result.Capabilities.Metadata != "enabled" || result.Capabilities.FTS != "enabled" || result.Capabilities.Semantic != "disabled" {
+		t.Fatalf("expected discovery capabilities on response, got %#v", result.Capabilities)
+	}
+
+	data, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal find response: %v", err)
+	}
+	for _, field := range []string{`"project"`, `"phase"`, `"query"`, `"capabilities"`} {
+		if !strings.Contains(string(data), field) {
+			t.Fatalf("expected JSON field %s in %s", field, data)
+		}
+	}
+}
+
+func TestFindKnowledgePublicWordingUsesSupportAndReadTerms(t *testing.T) {
+	store := buildFindKnowledgeTestStore(t)
+	defer store.Close()
+	service := New(store)
+
+	strong, err := service.FindKnowledge(FindKnowledgeRequest{
+		Project: "mall-api",
+		Phase:   "implementation",
+		Task:    "add refresh token endpoint",
+		Query:   "refresh token",
+		Files:   []string{"internal/auth/session.go"},
+		Limit:   5,
+	})
+	if err != nil {
+		t.Fatalf("FindKnowledge returned error: %v", err)
+	}
+	if strings.Contains(strong.Support.Recommendation, "Load") || strings.Contains(strong.Support.Recommendation, "load") {
+		t.Fatalf("support recommendation should use read terminology: %q", strong.Support.Recommendation)
+	}
+	if strong.Items[0].RecommendedStep != "read_full_before_implementation" {
+		t.Fatalf("expected read recommended step, got %#v", strong.Items[0])
+	}
+	if len(strong.NextSteps) == 0 || strong.NextSteps[0].Reason != "Read selected knowledge before applying it." {
+		t.Fatalf("expected read next step reason, got %#v", strong.NextSteps)
+	}
+	if strong.Usage.Cite != "after_read_and_used" {
+		t.Fatalf("expected read-based cite guidance, got %#v", strong.Usage)
+	}
+
+	partial, err := service.FindKnowledge(FindKnowledgeRequest{
+		Project: "mall-api",
+		Phase:   "debugging",
+		Task:    "debug session renewal test failure",
+		Query:   "session renewal tests fail logs",
+		Limit:   5,
+	})
+	if err != nil {
+		t.Fatalf("FindKnowledge returned error: %v", err)
+	}
+	if !strings.Contains(partial.Support.Reason, "support") || !strings.Contains(partial.Support.Recommendation, "missing needs") {
+		t.Fatalf("expected support/missing-needs wording, got %#v", partial.Support)
+	}
+	for _, value := range []string{partial.Support.Reason, partial.Support.Recommendation} {
+		if strings.Contains(value, "coverage") || strings.Contains(value, "gaps") || strings.Contains(value, "Load") {
+			t.Fatalf("support wording should avoid old terminology, got %q", value)
+		}
+	}
+}
+
+func TestFindKnowledgeReportsNoneSupportForUnmatchedTask(t *testing.T) {
+	store := buildFindKnowledgeTestStore(t)
+	defer store.Close()
+	service := New(store)
+
+	result, err := service.FindKnowledge(FindKnowledgeRequest{
 		Project: "mall-api",
 		Phase:   "implementation",
 		Task:    "add warehouse barcode scanner",
@@ -426,30 +509,31 @@ func TestDiscoverReportsNoneCoverageForUnmatchedTask(t *testing.T) {
 		Limit:   5,
 	})
 	if err != nil {
-		t.Fatalf("Discover returned error: %v", err)
+		t.Fatalf("FindKnowledge returned error: %v", err)
 	}
-	if result.Coverage.Status != "none" {
-		t.Fatalf("expected none coverage, got %#v", result.Coverage)
+	if result.Support.Level != "none" {
+		t.Fatalf("expected none coverage, got %#v", result.Support)
 	}
 	if len(result.Items) != 0 {
 		t.Fatalf("expected no items, got %#v", result.Items)
 	}
-	for _, call := range result.NextCalls {
-		if call.Tool == "cite_knowledge" {
-			t.Fatalf("did not expect citation recommendation for no match: %#v", result.NextCalls)
+	for _, call := range result.NextSteps {
+		if call.Tool == "argos_cite_knowledge" {
+			t.Fatalf("did not expect citation recommendation for no match: %#v", result.NextSteps)
 		}
 	}
 }
 
-func TestDiscoverActionPolicyFollowsCoverage(t *testing.T) {
+func TestFindKnowledgeUsageFollowsSupport(t *testing.T) {
 	tests := []struct {
-		name string
-		req  DiscoverRequest
-		want ActionPolicy
+		name      string
+		req       FindKnowledgeRequest
+		level     string
+		wantUsage UsageGuidance
 	}{
 		{
 			name: "strong",
-			req: DiscoverRequest{
+			req: FindKnowledgeRequest{
 				Project: "mall-api",
 				Phase:   "implementation",
 				Task:    "add refresh token endpoint",
@@ -457,87 +541,87 @@ func TestDiscoverActionPolicyFollowsCoverage(t *testing.T) {
 				Files:   []string{"internal/auth/session.go"},
 				Limit:   5,
 			},
-			want: ActionPolicy{
-				Authority: "strong",
-				Load:      "recommended",
-				Cite:      "after_loaded_and_used",
-				Claim:     "allowed",
+			level: "strong",
+			wantUsage: UsageGuidance{
+				Read:  "recommended",
+				Cite:  "after_read_and_used",
+				Claim: "allowed",
 			},
 		},
 		{
 			name: "partial",
-			req: DiscoverRequest{
+			req: FindKnowledgeRequest{
 				Project: "mall-api",
 				Phase:   "debugging",
 				Task:    "debug session renewal test failure",
 				Query:   "session renewal tests fail logs",
 				Limit:   5,
 			},
-			want: ActionPolicy{
-				Authority: "partial",
-				Load:      "allowed",
-				Cite:      "after_loaded_and_used",
-				Claim:     "must_separate_argos_backed_and_general_reasoning",
+			level: "partial",
+			wantUsage: UsageGuidance{
+				Read:  "allowed",
+				Cite:  "after_read_and_used",
+				Claim: "must_separate_argos_backed_and_general_reasoning",
 			},
 		},
 		{
 			name: "weak",
-			req: DiscoverRequest{
+			req: FindKnowledgeRequest{
 				Project: "mall-api",
 				Phase:   "implementation",
 				Task:    "add warehouse barcode scanner",
 				Query:   "barcode scanner token",
 				Limit:   5,
 			},
-			want: ActionPolicy{
-				Authority: "weak",
-				Load:      "forbidden",
-				Cite:      "forbidden",
-				Claim:     "forbidden",
+			level: "weak",
+			wantUsage: UsageGuidance{
+				Read:  "forbidden",
+				Cite:  "forbidden",
+				Claim: "forbidden",
 			},
 		},
 		{
 			name: "none",
-			req: DiscoverRequest{
+			req: FindKnowledgeRequest{
 				Project: "mall-api",
 				Phase:   "implementation",
 				Task:    "add payment webhook signature verification",
 				Query:   "payment webhook signature",
 				Limit:   5,
 			},
-			want: ActionPolicy{
-				Authority: "none",
-				Load:      "forbidden",
-				Cite:      "forbidden",
-				Claim:     "forbidden",
+			level: "none",
+			wantUsage: UsageGuidance{
+				Read:  "forbidden",
+				Cite:  "forbidden",
+				Claim: "forbidden",
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			store := buildDiscoveryTestStore(t)
+			store := buildFindKnowledgeTestStore(t)
 			defer store.Close()
 			service := New(store)
 
-			result, err := service.Discover(tt.req)
+			result, err := service.FindKnowledge(tt.req)
 			if err != nil {
-				t.Fatalf("Discover returned error: %v", err)
+				t.Fatalf("FindKnowledge returned error: %v", err)
 			}
-			assertActionPolicy(t, result.ActionPolicy, tt.want)
-			if result.ActionPolicy.Authority != result.Coverage.Status {
-				t.Fatalf("expected policy authority to mirror coverage status, got policy=%#v coverage=%#v", result.ActionPolicy, result.Coverage)
+			if result.Support.Level != tt.level {
+				t.Fatalf("expected support level %q, got %#v", tt.level, result.Support)
 			}
+			assertUsageGuidance(t, result.Usage, tt.wantUsage)
 		})
 	}
 }
 
-func TestDiscoverRecallStateDefaultsSemanticDisabled(t *testing.T) {
-	store := buildDiscoveryTestStore(t)
+func TestFindKnowledgeSearchStatusDefaultsSemanticDisabled(t *testing.T) {
+	store := buildFindKnowledgeTestStore(t)
 	defer store.Close()
 	service := New(store)
 
-	result, err := service.Discover(DiscoverRequest{
+	result, err := service.FindKnowledge(FindKnowledgeRequest{
 		Project: "mall-api",
 		Phase:   "implementation",
 		Task:    "add refresh token endpoint",
@@ -546,22 +630,22 @@ func TestDiscoverRecallStateDefaultsSemanticDisabled(t *testing.T) {
 		Limit:   5,
 	})
 	if err != nil {
-		t.Fatalf("Discover returned error: %v", err)
+		t.Fatalf("FindKnowledge returned error: %v", err)
 	}
-	if result.Recall.Semantic.Status != "disabled" {
-		t.Fatalf("expected semantic recall disabled, got %#v", result.Recall)
+	if result.SearchStatus.Semantic.Status != "disabled" {
+		t.Fatalf("expected semantic recall disabled, got %#v", result.SearchStatus)
 	}
-	if result.Recall.Semantic.Reason == "" {
-		t.Fatalf("expected semantic recall reason, got %#v", result.Recall)
+	if result.SearchStatus.Semantic.Reason == "" {
+		t.Fatalf("expected semantic recall reason, got %#v", result.SearchStatus)
 	}
 }
 
-func TestDiscoverCoverageGapsForNoneCoverage(t *testing.T) {
-	store := buildDiscoveryTestStore(t)
+func TestFindKnowledgeMissingNeedsForNoneSupport(t *testing.T) {
+	store := buildFindKnowledgeTestStore(t)
 	defer store.Close()
 	service := New(store)
 
-	result, err := service.Discover(DiscoverRequest{
+	result, err := service.FindKnowledge(FindKnowledgeRequest{
 		Project: "mall-api",
 		Phase:   "implementation",
 		Task:    "add payment webhook signature verification",
@@ -569,34 +653,34 @@ func TestDiscoverCoverageGapsForNoneCoverage(t *testing.T) {
 		Limit:   5,
 	})
 	if err != nil {
-		t.Fatalf("Discover returned error: %v", err)
+		t.Fatalf("FindKnowledge returned error: %v", err)
 	}
-	if result.Coverage.Status != "none" {
-		t.Fatalf("expected none coverage, got %#v", result.Coverage)
+	if result.Support.Level != "none" {
+		t.Fatalf("expected none coverage, got %#v", result.Support)
 	}
-	assertCoverageGapSources(t, result.CoverageGaps, []string{"unmatched_intent"})
-	for _, gap := range result.CoverageGaps {
+	assertMissingNeedSources(t, result.MissingNeeds, []string{"not_found"})
+	for _, gap := range result.MissingNeeds {
 		if gap.Need == "" {
-			t.Fatalf("expected coverage gap need, got %#v", gap)
+			t.Fatalf("expected missing need need, got %#v", gap)
 		}
 		if gap.Reason == "" {
-			t.Fatalf("expected coverage gap reason, got %#v", gap)
+			t.Fatalf("expected missing need reason, got %#v", gap)
 		}
 		if gap.Severity != "blocking" {
 			t.Fatalf("expected blocking severity for none coverage, got %#v", gap)
 		}
 		if gap.ArgosBacked {
-			t.Fatalf("coverage gaps must not be Argos-backed: %#v", gap)
+			t.Fatalf("missing needs must not be Argos-backed: %#v", gap)
 		}
 	}
 }
 
-func TestDiscoverCoverageGapsReportRestrictiveFilterExclusion(t *testing.T) {
-	store := buildDiscoveryTestStore(t)
+func TestFindKnowledgeMissingNeedsReportRestrictiveFilterExclusion(t *testing.T) {
+	store := buildFindKnowledgeTestStore(t)
 	defer store.Close()
 	service := New(store)
 
-	result, err := service.Discover(DiscoverRequest{
+	result, err := service.FindKnowledge(FindKnowledgeRequest{
 		Project: "mall-api",
 		Phase:   "implementation",
 		Task:    "add refresh token endpoint",
@@ -605,16 +689,16 @@ func TestDiscoverCoverageGapsReportRestrictiveFilterExclusion(t *testing.T) {
 		Limit:   5,
 	})
 	if err != nil {
-		t.Fatalf("Discover returned error: %v", err)
+		t.Fatalf("FindKnowledge returned error: %v", err)
 	}
-	if result.Coverage.Status != "none" {
-		t.Fatalf("expected none coverage, got %#v", result.Coverage)
+	if result.Support.Level != "none" {
+		t.Fatalf("expected none coverage, got %#v", result.Support)
 	}
-	assertCoverageGapSources(t, result.CoverageGaps, []string{"filter_excluded"})
+	assertMissingNeedSources(t, result.MissingNeeds, []string{"filtered_out"})
 }
 
-func TestDiscoverCoverageGapsDoNotReportFilterExclusionForOnlyWeakFilteredKnowledge(t *testing.T) {
-	store := buildDiscoveryStore(t, []knowledge.Item{{
+func TestFindKnowledgeMissingNeedsDoNotReportFilterExclusionForOnlyWeakFilteredKnowledge(t *testing.T) {
+	store := buildFindKnowledgeStore(t, []knowledge.Item{{
 		Path:            "knowledge/items/backend/generic-token.md",
 		ID:              "rule:backend.generic-token.v1",
 		Title:           "Generic token rule",
@@ -631,7 +715,7 @@ func TestDiscoverCoverageGapsDoNotReportFilterExclusionForOnlyWeakFilteredKnowle
 	defer store.Close()
 	service := New(store)
 
-	result, err := service.Discover(DiscoverRequest{
+	result, err := service.FindKnowledge(FindKnowledgeRequest{
 		Project: "mall-api",
 		Phase:   "implementation",
 		Task:    "add warehouse barcode scanner",
@@ -640,16 +724,16 @@ func TestDiscoverCoverageGapsDoNotReportFilterExclusionForOnlyWeakFilteredKnowle
 		Limit:   5,
 	})
 	if err != nil {
-		t.Fatalf("Discover returned error: %v", err)
+		t.Fatalf("FindKnowledge returned error: %v", err)
 	}
-	if result.Coverage.Status != "none" {
-		t.Fatalf("expected none coverage, got %#v", result.Coverage)
+	if result.Support.Level != "none" {
+		t.Fatalf("expected none coverage, got %#v", result.Support)
 	}
-	assertCoverageGapSources(t, result.CoverageGaps, []string{"unmatched_intent"})
+	assertMissingNeedSources(t, result.MissingNeeds, []string{"not_found"})
 }
 
-func TestDiscoverCoverageGapsReportFilterExclusionForPartialCoverage(t *testing.T) {
-	store := buildDiscoveryStore(t, []knowledge.Item{
+func TestFindKnowledgeMissingNeedsReportFilterExclusionForPartialSupport(t *testing.T) {
+	store := buildFindKnowledgeStore(t, []knowledge.Item{
 		{
 			Path:            "knowledge/items/backend/session-debug.md",
 			ID:              "lesson:backend.session-debug.v1",
@@ -683,7 +767,7 @@ func TestDiscoverCoverageGapsReportFilterExclusionForPartialCoverage(t *testing.
 	defer store.Close()
 	service := New(store)
 
-	result, err := service.Discover(DiscoverRequest{
+	result, err := service.FindKnowledge(FindKnowledgeRequest{
 		Project: "mall-api",
 		Phase:   "debugging",
 		Task:    "debug session renewal test failure",
@@ -693,20 +777,20 @@ func TestDiscoverCoverageGapsReportFilterExclusionForPartialCoverage(t *testing.
 		Limit:   5,
 	})
 	if err != nil {
-		t.Fatalf("Discover returned error: %v", err)
+		t.Fatalf("FindKnowledge returned error: %v", err)
 	}
-	if result.Coverage.Status != "partial" {
-		t.Fatalf("expected partial coverage, got %#v", result.Coverage)
+	if result.Support.Level != "partial" {
+		t.Fatalf("expected partial coverage, got %#v", result.Support)
 	}
-	assertCoverageGapSources(t, result.CoverageGaps, []string{"filter_excluded"})
+	assertMissingNeedSources(t, result.MissingNeeds, []string{"filtered_out"})
 }
 
-func TestDiscoverCoverageGapsIncludeDeprecatedIsNotRestrictiveFilter(t *testing.T) {
-	store := buildDiscoveryTestStore(t)
+func TestFindKnowledgeMissingNeedsIncludeDeprecatedIsNotRestrictiveFilter(t *testing.T) {
+	store := buildFindKnowledgeTestStore(t)
 	defer store.Close()
 	service := New(store)
 
-	result, err := service.Discover(DiscoverRequest{
+	result, err := service.FindKnowledge(FindKnowledgeRequest{
 		Project:           "mall-api",
 		Phase:             "implementation",
 		Task:              "add payment webhook signature verification",
@@ -715,16 +799,16 @@ func TestDiscoverCoverageGapsIncludeDeprecatedIsNotRestrictiveFilter(t *testing.
 		Limit:             5,
 	})
 	if err != nil {
-		t.Fatalf("Discover returned error: %v", err)
+		t.Fatalf("FindKnowledge returned error: %v", err)
 	}
-	if result.Coverage.Status != "none" {
-		t.Fatalf("expected none coverage, got %#v", result.Coverage)
+	if result.Support.Level != "none" {
+		t.Fatalf("expected none coverage, got %#v", result.Support)
 	}
-	assertCoverageGapSources(t, result.CoverageGaps, []string{"unmatched_intent"})
+	assertMissingNeedSources(t, result.MissingNeeds, []string{"not_found"})
 }
 
-func TestDiscoverCoverageGapsReportCrossDomainMismatch(t *testing.T) {
-	store := buildDiscoveryStore(t, []knowledge.Item{{
+func TestFindKnowledgeMissingNeedsReportCrossDomainMismatch(t *testing.T) {
+	store := buildFindKnowledgeStore(t, []knowledge.Item{{
 		Path:            "knowledge/items/warehouse/auth.md",
 		ID:              "rule:warehouse.auth.v1",
 		Title:           "Warehouse auth rule",
@@ -741,7 +825,7 @@ func TestDiscoverCoverageGapsReportCrossDomainMismatch(t *testing.T) {
 	defer store.Close()
 	service := New(store)
 
-	result, err := service.Discover(DiscoverRequest{
+	result, err := service.FindKnowledge(FindKnowledgeRequest{
 		Project: "mall-api",
 		Phase:   "implementation",
 		Task:    "update warehouse picking flow",
@@ -749,16 +833,16 @@ func TestDiscoverCoverageGapsReportCrossDomainMismatch(t *testing.T) {
 		Limit:   5,
 	})
 	if err != nil {
-		t.Fatalf("Discover returned error: %v", err)
+		t.Fatalf("FindKnowledge returned error: %v", err)
 	}
-	if result.Coverage.Status != "none" {
-		t.Fatalf("expected none coverage, got %#v", result.Coverage)
+	if result.Support.Level != "none" {
+		t.Fatalf("expected none coverage, got %#v", result.Support)
 	}
-	assertCoverageGapSources(t, result.CoverageGaps, []string{"cross_domain_mismatch"})
+	assertMissingNeedSources(t, result.MissingNeeds, []string{"wrong_scope"})
 }
 
-func TestDiscoverWeakCoverageGapsAreNotArgosBacked(t *testing.T) {
-	store := buildDiscoveryStore(t, []knowledge.Item{{
+func TestFindKnowledgeWeakMissingNeedsAreNotArgosBacked(t *testing.T) {
+	store := buildFindKnowledgeStore(t, []knowledge.Item{{
 		Path:            "knowledge/items/backend/generic-token.md",
 		ID:              "rule:backend.generic-token.v1",
 		Title:           "Generic token rule",
@@ -774,7 +858,7 @@ func TestDiscoverWeakCoverageGapsAreNotArgosBacked(t *testing.T) {
 	defer store.Close()
 	service := New(store)
 
-	result, err := service.Discover(DiscoverRequest{
+	result, err := service.FindKnowledge(FindKnowledgeRequest{
 		Project: "mall-api",
 		Phase:   "implementation",
 		Task:    "add warehouse barcode scanner",
@@ -782,25 +866,25 @@ func TestDiscoverWeakCoverageGapsAreNotArgosBacked(t *testing.T) {
 		Limit:   5,
 	})
 	if err != nil {
-		t.Fatalf("Discover returned error: %v", err)
+		t.Fatalf("FindKnowledge returned error: %v", err)
 	}
-	if result.Coverage.Status != "weak" {
-		t.Fatalf("expected weak coverage, got %#v", result.Coverage)
+	if result.Support.Level != "weak" {
+		t.Fatalf("expected weak coverage, got %#v", result.Support)
 	}
-	assertCoverageGapSources(t, result.CoverageGaps, []string{"weak_match"})
-	for _, gap := range result.CoverageGaps {
+	assertMissingNeedSources(t, result.MissingNeeds, []string{"weak_match"})
+	for _, gap := range result.MissingNeeds {
 		if gap.ArgosBacked {
-			t.Fatalf("coverage gaps must not be Argos-backed: %#v", gap)
+			t.Fatalf("missing needs must not be Argos-backed: %#v", gap)
 		}
 	}
 }
 
-func TestDiscoverPartialCoverageUsesAttributionClaim(t *testing.T) {
-	store := buildDiscoveryTestStore(t)
+func TestFindKnowledgePartialSupportUsesAttributionClaim(t *testing.T) {
+	store := buildFindKnowledgeTestStore(t)
 	defer store.Close()
 	service := New(store)
 
-	result, err := service.Discover(DiscoverRequest{
+	result, err := service.FindKnowledge(FindKnowledgeRequest{
 		Project: "mall-api",
 		Phase:   "debugging",
 		Task:    "debug session renewal test failure",
@@ -808,23 +892,23 @@ func TestDiscoverPartialCoverageUsesAttributionClaim(t *testing.T) {
 		Limit:   5,
 	})
 	if err != nil {
-		t.Fatalf("Discover returned error: %v", err)
+		t.Fatalf("FindKnowledge returned error: %v", err)
 	}
-	if result.Coverage.Status != "partial" {
-		t.Fatalf("expected partial coverage, got %#v", result.Coverage)
+	if result.Support.Level != "partial" {
+		t.Fatalf("expected partial coverage, got %#v", result.Support)
 	}
-	assertCoverageGapSources(t, result.CoverageGaps, []string{"partial_match"})
-	if result.ActionPolicy.Claim != "must_separate_argos_backed_and_general_reasoning" {
-		t.Fatalf("expected attribution claim policy, got %#v", result.ActionPolicy)
+	assertMissingNeedSources(t, result.MissingNeeds, []string{"partial_match"})
+	if result.Usage.Claim != "must_separate_argos_backed_and_general_reasoning" {
+		t.Fatalf("expected attribution claim policy, got %#v", result.Usage)
 	}
 }
 
-func TestDiscoverStrongCoverageOmitsCoverageGaps(t *testing.T) {
-	store := buildDiscoveryTestStore(t)
+func TestFindKnowledgeStrongSupportOmitsMissingNeeds(t *testing.T) {
+	store := buildFindKnowledgeTestStore(t)
 	defer store.Close()
 	service := New(store)
 
-	result, err := service.Discover(DiscoverRequest{
+	result, err := service.FindKnowledge(FindKnowledgeRequest{
 		Project: "mall-api",
 		Phase:   "implementation",
 		Task:    "add refresh token endpoint",
@@ -833,22 +917,29 @@ func TestDiscoverStrongCoverageOmitsCoverageGaps(t *testing.T) {
 		Limit:   5,
 	})
 	if err != nil {
-		t.Fatalf("Discover returned error: %v", err)
+		t.Fatalf("FindKnowledge returned error: %v", err)
 	}
-	if result.Coverage.Status != "strong" {
-		t.Fatalf("expected strong coverage, got %#v", result.Coverage)
+	if result.Support.Level != "strong" {
+		t.Fatalf("expected strong coverage, got %#v", result.Support)
 	}
-	if len(result.CoverageGaps) != 0 {
-		t.Fatalf("strong coverage should not produce coverage gaps: %#v", result.CoverageGaps)
+	if len(result.MissingNeeds) != 0 {
+		t.Fatalf("strong coverage should not produce missing needs: %#v", result.MissingNeeds)
+	}
+	data, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal find response: %v", err)
+	}
+	if strings.Contains(string(data), `"missing_needs"`) {
+		t.Fatalf("strong response should omit missing_needs from JSON: %s", data)
 	}
 }
 
-func TestDiscoverJSONDoesNotExposeLegacyGaps(t *testing.T) {
-	store := buildDiscoveryTestStore(t)
+func TestFindKnowledgeJSONIncludesNonEmptyMissingNeedsAndNoLegacyGaps(t *testing.T) {
+	store := buildFindKnowledgeTestStore(t)
 	defer store.Close()
 	service := New(store)
 
-	result, err := service.Discover(DiscoverRequest{
+	result, err := service.FindKnowledge(FindKnowledgeRequest{
 		Project: "mall-api",
 		Phase:   "implementation",
 		Task:    "add payment webhook signature verification",
@@ -856,15 +947,15 @@ func TestDiscoverJSONDoesNotExposeLegacyGaps(t *testing.T) {
 		Limit:   5,
 	})
 	if err != nil {
-		t.Fatalf("Discover returned error: %v", err)
+		t.Fatalf("FindKnowledge returned error: %v", err)
 	}
 	data, err := json.Marshal(result)
 	if err != nil {
 		t.Fatalf("marshal discovery response: %v", err)
 	}
 	body := string(data)
-	if !strings.Contains(body, `"coverage_gaps"`) {
-		t.Fatalf("expected coverage_gaps in JSON: %s", body)
+	if !strings.Contains(body, `"missing_needs"`) {
+		t.Fatalf("expected missing_needs in JSON: %s", body)
 	}
 	if strings.Contains(body, "gap_"+"candidates") {
 		t.Fatalf("did not expect legacy gap key in JSON: %s", body)
@@ -874,37 +965,36 @@ func TestDiscoverJSONDoesNotExposeLegacyGaps(t *testing.T) {
 	}
 }
 
-func TestMapActionPolicyForbidsLoadCitationAndClaims(t *testing.T) {
-	store := buildDiscoveryTestStore(t)
+func TestListKnowledgeUsageForbidsLoadCitationAndClaims(t *testing.T) {
+	store := buildFindKnowledgeTestStore(t)
 	defer store.Close()
 	service := New(store)
 
-	result, err := service.Map(MapRequest{Project: "mall-api"})
+	result, err := service.ListKnowledge(ListKnowledgeRequest{Project: "mall-api"})
 	if err != nil {
-		t.Fatalf("Map returned error: %v", err)
+		t.Fatalf("ListKnowledge returned error: %v", err)
 	}
-	assertActionPolicy(t, result.ActionPolicy, ActionPolicy{
-		Authority: "inventory",
-		Load:      "forbidden",
-		Cite:      "forbidden",
-		Claim:     "forbidden",
+	assertUsageGuidance(t, result.Usage, UsageGuidance{
+		Read:  "forbidden",
+		Cite:  "forbidden",
+		Claim: "forbidden",
 	})
 }
 
-func assertActionPolicy(t *testing.T, got ActionPolicy, want ActionPolicy) {
+func assertUsageGuidance(t *testing.T, got UsageGuidance, want UsageGuidance) {
 	t.Helper()
-	if got.Authority != want.Authority || got.Load != want.Load || got.Cite != want.Cite || got.Claim != want.Claim {
-		t.Fatalf("expected action policy %#v, got %#v", want, got)
+	if got.Read != want.Read || got.Cite != want.Cite || got.Claim != want.Claim {
+		t.Fatalf("expected usage guidance %#v, got %#v", want, got)
 	}
 	if got.Reason == "" {
-		t.Fatalf("expected action policy reason: %#v", got)
+		t.Fatalf("expected usage guidance reason: %#v", got)
 	}
 }
 
-func assertCoverageGapSources(t *testing.T, got []CoverageGap, want []string) {
+func assertMissingNeedSources(t *testing.T, got []MissingNeed, want []string) {
 	t.Helper()
 	if len(got) != len(want) {
-		t.Fatalf("expected coverage gap sources %v, got %#v", want, got)
+		t.Fatalf("expected missing need sources %v, got %#v", want, got)
 	}
 	seen := map[string]bool{}
 	for _, gap := range got {
@@ -919,22 +1009,22 @@ func assertCoverageGapSources(t *testing.T, got []CoverageGap, want []string) {
 			t.Fatalf("expected severity for %#v", gap)
 		}
 		if gap.ArgosBacked {
-			t.Fatalf("coverage gap must not be Argos-backed: %#v", gap)
+			t.Fatalf("missing need must not be Argos-backed: %#v", gap)
 		}
 	}
 	for _, source := range want {
 		if !seen[source] {
-			t.Fatalf("expected coverage gap source %q in %#v", source, got)
+			t.Fatalf("expected missing need source %q in %#v", source, got)
 		}
 	}
 }
 
-func TestDiscoverFiltersTypesTagsAndDeprecated(t *testing.T) {
-	store := buildDiscoveryTestStore(t)
+func TestFindKnowledgeFiltersTypesTagsAndDeprecated(t *testing.T) {
+	store := buildFindKnowledgeTestStore(t)
 	defer store.Close()
 	service := New(store)
 
-	result, err := service.Discover(DiscoverRequest{
+	result, err := service.FindKnowledge(FindKnowledgeRequest{
 		Project: "mall-api",
 		Query:   "auth",
 		Types:   []string{"lesson"},
@@ -942,7 +1032,7 @@ func TestDiscoverFiltersTypesTagsAndDeprecated(t *testing.T) {
 		Limit:   10,
 	})
 	if err != nil {
-		t.Fatalf("Discover returned error: %v", err)
+		t.Fatalf("FindKnowledge returned error: %v", err)
 	}
 	if len(result.Items) != 1 || result.Items[0].ID != "lesson:backend.auth-debug.v1" {
 		t.Fatalf("expected auth lesson only, got %#v", result.Items)
@@ -954,56 +1044,56 @@ func TestDiscoverFiltersTypesTagsAndDeprecated(t *testing.T) {
 	}
 }
 
-func TestDiscoverTagsFilterMatchesAnyRequestedTag(t *testing.T) {
-	store := buildDiscoveryTestStore(t)
+func TestFindKnowledgeTagsFilterMatchesAnyRequestedTag(t *testing.T) {
+	store := buildFindKnowledgeTestStore(t)
 	defer store.Close()
 	service := New(store)
 
-	result, err := service.Discover(DiscoverRequest{
+	result, err := service.FindKnowledge(FindKnowledgeRequest{
 		Project: "mall-api",
 		Query:   "auth",
 		Tags:    []string{"missing", "auth"},
 		Limit:   5,
 	})
 	if err != nil {
-		t.Fatalf("Discover returned error: %v", err)
+		t.Fatalf("FindKnowledge returned error: %v", err)
 	}
-	if !containsDiscoveryItem(result.Items, "rule:backend.auth.v1") {
+	if !containsKnowledgeSummary(result.Items, "rule:backend.auth.v1") {
 		t.Fatalf("expected auth item with one matching requested tag, got %#v", result.Items)
 	}
 }
 
-func TestDiscoverDomainsFilterMatchesAnyRequestedDomain(t *testing.T) {
-	store := buildDiscoveryTestStore(t)
+func TestFindKnowledgeDomainsFilterMatchesAnyRequestedDomain(t *testing.T) {
+	store := buildFindKnowledgeTestStore(t)
 	defer store.Close()
 	service := New(store)
 
-	result, err := service.Discover(DiscoverRequest{
+	result, err := service.FindKnowledge(FindKnowledgeRequest{
 		Project: "mall-api",
 		Query:   "auth",
 		Domains: []string{"missing", "security"},
 		Limit:   5,
 	})
 	if err != nil {
-		t.Fatalf("Discover returned error: %v", err)
+		t.Fatalf("FindKnowledge returned error: %v", err)
 	}
-	if !containsDiscoveryItem(result.Items, "rule:backend.auth.v1") {
+	if !containsKnowledgeSummary(result.Items, "rule:backend.auth.v1") {
 		t.Fatalf("expected auth item with one matching requested domain, got %#v", result.Items)
 	}
 }
 
-func TestDiscoverExplicitTagsAndDomainsMustMatchAtLeastOneValuePerField(t *testing.T) {
-	store := buildDiscoveryTestStore(t)
+func TestFindKnowledgeExplicitTagsAndDomainsMustMatchAtLeastOneValuePerField(t *testing.T) {
+	store := buildFindKnowledgeTestStore(t)
 	defer store.Close()
 	service := New(store)
 
 	for _, tc := range []struct {
 		name string
-		req  DiscoverRequest
+		req  FindKnowledgeRequest
 	}{
 		{
 			name: "tags",
-			req: DiscoverRequest{
+			req: FindKnowledgeRequest{
 				Project: "mall-api",
 				Query:   "auth",
 				Tags:    []string{"missing"},
@@ -1012,7 +1102,7 @@ func TestDiscoverExplicitTagsAndDomainsMustMatchAtLeastOneValuePerField(t *testi
 		},
 		{
 			name: "domains",
-			req: DiscoverRequest{
+			req: FindKnowledgeRequest{
 				Project: "mall-api",
 				Query:   "auth",
 				Domains: []string{"missing"},
@@ -1021,7 +1111,7 @@ func TestDiscoverExplicitTagsAndDomainsMustMatchAtLeastOneValuePerField(t *testi
 		},
 		{
 			name: "tags and domains",
-			req: DiscoverRequest{
+			req: FindKnowledgeRequest{
 				Project: "mall-api",
 				Query:   "auth",
 				Tags:    []string{"auth"},
@@ -1031,22 +1121,22 @@ func TestDiscoverExplicitTagsAndDomainsMustMatchAtLeastOneValuePerField(t *testi
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := service.Discover(tc.req)
+			result, err := service.FindKnowledge(tc.req)
 			if err != nil {
-				t.Fatalf("Discover returned error: %v", err)
+				t.Fatalf("FindKnowledge returned error: %v", err)
 			}
 			if len(result.Items) != 0 {
 				t.Fatalf("expected no items for non-matching explicit filter, got %#v", result.Items)
 			}
-			if result.Coverage.Status == "strong" {
-				t.Fatalf("expected non-strong coverage for non-matching explicit filter, got %#v", result.Coverage)
+			if result.Support.Level == "strong" {
+				t.Fatalf("expected non-strong coverage for non-matching explicit filter, got %#v", result.Support)
 			}
 		})
 	}
 }
 
-func TestDiscoverWeakSingleTermGenericLexicalMatchDoesNotProduceStrongCoverageOrLoadCalls(t *testing.T) {
-	store := buildDiscoveryStore(t, []knowledge.Item{{
+func TestFindKnowledgeWeakSingleTermGenericLexicalMatchDoesNotProduceStrongSupportOrLoadCalls(t *testing.T) {
+	store := buildFindKnowledgeStore(t, []knowledge.Item{{
 		Path:            "knowledge/items/backend/generic-token.md",
 		ID:              "rule:backend.generic-token.v1",
 		Title:           "Generic token rule",
@@ -1062,7 +1152,7 @@ func TestDiscoverWeakSingleTermGenericLexicalMatchDoesNotProduceStrongCoverageOr
 	defer store.Close()
 	service := New(store)
 
-	result, err := service.Discover(DiscoverRequest{
+	result, err := service.FindKnowledge(FindKnowledgeRequest{
 		Project: "mall-api",
 		Phase:   "implementation",
 		Task:    "add warehouse barcode scanner",
@@ -1070,20 +1160,20 @@ func TestDiscoverWeakSingleTermGenericLexicalMatchDoesNotProduceStrongCoverageOr
 		Limit:   5,
 	})
 	if err != nil {
-		t.Fatalf("Discover returned error: %v", err)
+		t.Fatalf("FindKnowledge returned error: %v", err)
 	}
-	if result.Coverage.Status == "strong" {
-		t.Fatalf("single weak generic term must not produce strong coverage: %#v", result.Coverage)
+	if result.Support.Level == "strong" {
+		t.Fatalf("single weak generic term must not produce strong coverage: %#v", result.Support)
 	}
-	for _, call := range result.NextCalls {
-		if call.Tool == "get_knowledge_item" {
-			t.Fatalf("weak generic lexical match must not recommend loading full bodies: %#v", result.NextCalls)
+	for _, call := range result.NextSteps {
+		if call.Tool == "argos_read_knowledge" {
+			t.Fatalf("weak generic lexical match must not recommend loading full bodies: %#v", result.NextSteps)
 		}
 	}
 }
 
-func TestDiscoverTypeAndPhaseFiltersAloneDoNotReturnUnrelatedKnowledge(t *testing.T) {
-	store := buildDiscoveryStore(t, []knowledge.Item{{
+func TestFindKnowledgeTypeAndPhaseFiltersAloneDoNotReturnUnrelatedKnowledge(t *testing.T) {
+	store := buildFindKnowledgeStore(t, []knowledge.Item{{
 		Path:            "knowledge/items/backend/auth.md",
 		ID:              "rule:backend.auth.v1",
 		Title:           "Auth rule",
@@ -1099,7 +1189,7 @@ func TestDiscoverTypeAndPhaseFiltersAloneDoNotReturnUnrelatedKnowledge(t *testin
 	defer store.Close()
 	service := New(store)
 
-	result, err := service.Discover(DiscoverRequest{
+	result, err := service.FindKnowledge(FindKnowledgeRequest{
 		Project: "mall-api",
 		Phase:   "implementation",
 		Task:    "add warehouse barcode scanner",
@@ -1108,26 +1198,26 @@ func TestDiscoverTypeAndPhaseFiltersAloneDoNotReturnUnrelatedKnowledge(t *testin
 		Limit:   5,
 	})
 	if err != nil {
-		t.Fatalf("Discover returned error: %v", err)
+		t.Fatalf("FindKnowledge returned error: %v", err)
 	}
 	if len(result.Items) != 0 {
 		t.Fatalf("expected type/phase filters alone not to prove relevance, got %#v", result.Items)
 	}
-	if result.Coverage.Status != "none" {
-		t.Fatalf("expected none coverage, got %#v", result.Coverage)
+	if result.Support.Level != "none" {
+		t.Fatalf("expected none coverage, got %#v", result.Support)
 	}
 }
 
-func TestDiscoverWeakAndNoneNextCallsOnlyUseImplementedTools(t *testing.T) {
+func TestFindKnowledgeWeakAndNoneNextStepsOnlyUseImplementedTools(t *testing.T) {
 	implementedTools := map[string]bool{
-		"get_knowledge_item": true,
-		"cite_knowledge":     true,
+		"argos_read_knowledge": true,
+		"argos_cite_knowledge": true,
 	}
 
 	for _, tc := range []struct {
 		name  string
 		items []knowledge.Item
-		req   DiscoverRequest
+		req   FindKnowledgeRequest
 	}{
 		{
 			name: "none",
@@ -1144,7 +1234,7 @@ func TestDiscoverWeakAndNoneNextCallsOnlyUseImplementedTools(t *testing.T) {
 				UpdatedAt:       "2026-04-29",
 				Body:            "Require explicit auth middleware.",
 			}},
-			req: DiscoverRequest{
+			req: FindKnowledgeRequest{
 				Project: "mall-api",
 				Phase:   "implementation",
 				Task:    "add warehouse barcode scanner",
@@ -1167,7 +1257,7 @@ func TestDiscoverWeakAndNoneNextCallsOnlyUseImplementedTools(t *testing.T) {
 				UpdatedAt:       "2026-04-29",
 				Body:            "Token guidance applies to platform work.",
 			}},
-			req: DiscoverRequest{
+			req: FindKnowledgeRequest{
 				Project: "mall-api",
 				Phase:   "implementation",
 				Task:    "add warehouse barcode scanner",
@@ -1177,28 +1267,28 @@ func TestDiscoverWeakAndNoneNextCallsOnlyUseImplementedTools(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			store := buildDiscoveryStore(t, tc.items)
+			store := buildFindKnowledgeStore(t, tc.items)
 			defer store.Close()
 			service := New(store)
 
-			result, err := service.Discover(tc.req)
+			result, err := service.FindKnowledge(tc.req)
 			if err != nil {
-				t.Fatalf("Discover returned error: %v", err)
+				t.Fatalf("FindKnowledge returned error: %v", err)
 			}
-			if result.Coverage.Status != tc.name {
-				t.Fatalf("expected %s coverage, got %#v", tc.name, result.Coverage)
+			if result.Support.Level != tc.name {
+				t.Fatalf("expected %s coverage, got %#v", tc.name, result.Support)
 			}
-			for _, call := range result.NextCalls {
+			for _, call := range result.NextSteps {
 				if !implementedTools[call.Tool] {
-					t.Fatalf("expected implemented tool only, got %#v", result.NextCalls)
+					t.Fatalf("expected implemented tool only, got %#v", result.NextSteps)
 				}
 			}
 		})
 	}
 }
 
-func TestDiscoverAndMapTreatEmptyProjectsAsGlobalKnowledge(t *testing.T) {
-	store := buildDiscoveryStore(t, []knowledge.Item{{
+func TestFindKnowledgeAndListKnowledgeTreatEmptyProjectsAsGlobalKnowledge(t *testing.T) {
+	store := buildFindKnowledgeStore(t, []knowledge.Item{{
 		Path:            "knowledge/items/backend/global-refresh.md",
 		ID:              "rule:backend.global-refresh.v1",
 		Title:           "Global refresh token rule",
@@ -1214,30 +1304,30 @@ func TestDiscoverAndMapTreatEmptyProjectsAsGlobalKnowledge(t *testing.T) {
 	defer store.Close()
 	service := New(store)
 
-	discovered, err := service.Discover(DiscoverRequest{
+	discovered, err := service.FindKnowledge(FindKnowledgeRequest{
 		Project: "mall-api",
 		Phase:   "implementation",
 		Query:   "refresh token",
 		Limit:   5,
 	})
 	if err != nil {
-		t.Fatalf("Discover returned error: %v", err)
+		t.Fatalf("FindKnowledge returned error: %v", err)
 	}
 	if len(discovered.Items) != 1 || discovered.Items[0].ID != "rule:backend.global-refresh.v1" {
-		t.Fatalf("expected global discovery item, got %#v", discovered.Items)
+		t.Fatalf("expected global knowledge summary, got %#v", discovered.Items)
 	}
 
-	mapped, err := service.Map(MapRequest{Project: "mall-api", Domain: "backend"})
+	mapped, err := service.ListKnowledge(ListKnowledgeRequest{Project: "mall-api", Domain: "backend"})
 	if err != nil {
-		t.Fatalf("Map returned error: %v", err)
+		t.Fatalf("ListKnowledge returned error: %v", err)
 	}
 	if mapped.Inventory.Types["rule"] != 1 {
 		t.Fatalf("expected global map item, got %#v", mapped.Inventory)
 	}
 }
 
-func TestDiscoverReturnsErrorForInvalidFileScopeGlob(t *testing.T) {
-	store := buildDiscoveryStore(t, []knowledge.Item{{
+func TestFindKnowledgeReturnsErrorForInvalidFileScopeGlob(t *testing.T) {
+	store := buildFindKnowledgeStore(t, []knowledge.Item{{
 		Path:            "knowledge/items/backend/bad-glob.md",
 		ID:              "rule:backend.bad-glob.v1",
 		Title:           "Bad glob rule",
@@ -1254,7 +1344,7 @@ func TestDiscoverReturnsErrorForInvalidFileScopeGlob(t *testing.T) {
 	defer store.Close()
 	service := New(store)
 
-	_, err := service.Discover(DiscoverRequest{
+	_, err := service.FindKnowledge(FindKnowledgeRequest{
 		Project: "mall-api",
 		Phase:   "implementation",
 		Query:   "refresh token",
@@ -1266,14 +1356,14 @@ func TestDiscoverReturnsErrorForInvalidFileScopeGlob(t *testing.T) {
 	}
 }
 
-func TestMapReturnsInventoryWithoutFullBodies(t *testing.T) {
-	store := buildDiscoveryTestStore(t)
+func TestListKnowledgeReturnsInventoryWithoutFullBodies(t *testing.T) {
+	store := buildFindKnowledgeTestStore(t)
 	defer store.Close()
 	service := New(store)
 
-	result, err := service.Map(MapRequest{Project: "mall-api", Domain: "backend"})
+	result, err := service.ListKnowledge(ListKnowledgeRequest{Project: "mall-api", Domain: "backend"})
 	if err != nil {
-		t.Fatalf("Map returned error: %v", err)
+		t.Fatalf("ListKnowledge returned error: %v", err)
 	}
 	if result.Inventory.Types["rule"] == 0 || result.Inventory.Types["package"] == 0 {
 		t.Fatalf("expected rule and package counts: %#v", result.Inventory.Types)
@@ -1284,13 +1374,34 @@ func TestMapReturnsInventoryWithoutFullBodies(t *testing.T) {
 	for _, group := range result.Groups {
 		for _, item := range group.Items {
 			if item.Body != "" {
-				t.Fatalf("map must not return full body: %#v", item)
+				t.Fatalf("list must not return full body: %#v", item)
 			}
 		}
 	}
 }
 
-func TestContextRecommendsNextCalls(t *testing.T) {
+func TestListKnowledgeResponsePreservesProject(t *testing.T) {
+	store := buildFindKnowledgeTestStore(t)
+	defer store.Close()
+	service := New(store)
+
+	result, err := service.ListKnowledge(ListKnowledgeRequest{Project: "mall-api", Domain: "backend"})
+	if err != nil {
+		t.Fatalf("ListKnowledge returned error: %v", err)
+	}
+	if result.Project != "mall-api" {
+		t.Fatalf("expected project on response, got %#v", result)
+	}
+	data, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal list response: %v", err)
+	}
+	if !strings.Contains(string(data), `"project"`) {
+		t.Fatalf("expected project JSON field in %s", data)
+	}
+}
+
+func TestContextRecommendsNextSteps(t *testing.T) {
 	service := New(nil)
 	result := service.Context(ContextRequest{
 		Project: "mall-api",
@@ -1302,20 +1413,19 @@ func TestContextRecommendsNextCalls(t *testing.T) {
 	if result.Project != "mall-api" {
 		t.Fatalf("unexpected project: %s", result.Project)
 	}
-	if len(result.RecommendedNextCalls) == 0 {
-		t.Fatal("expected recommended next calls")
+	if len(result.RecommendedNextSteps) == 0 {
+		t.Fatal("expected recommended next steps")
 	}
 }
 
 func TestContextRecommendationsOnlyUseCallableTools(t *testing.T) {
 	service := New(nil)
 	callableTools := map[string]bool{
-		"argos_context":      true,
-		"argos_discover":     true,
-		"argos_map":          true,
-		"argos_standards":    true,
-		"get_knowledge_item": true,
-		"cite_knowledge":     true,
+		"argos_find_knowledge": true,
+		"argos_list_knowledge": true,
+		"argos_standards":      true,
+		"argos_read_knowledge": true,
+		"argos_cite_knowledge": true,
 	}
 	unavailableTools := map[string]bool{
 		"argos_requirements": true,
@@ -1339,10 +1449,10 @@ func TestContextRecommendationsOnlyUseCallableTools(t *testing.T) {
 				Task:    "add refresh token endpoint",
 			})
 
-			if len(result.RecommendedNextCalls) == 0 {
-				t.Fatal("expected recommended next calls")
+			if len(result.RecommendedNextSteps) == 0 {
+				t.Fatal("expected recommended next steps")
 			}
-			for _, call := range result.RecommendedNextCalls {
+			for _, call := range result.RecommendedNextSteps {
 				if !callableTools[call.Tool] {
 					t.Fatalf("expected callable recommendation, got %q", call.Tool)
 				}
@@ -1354,7 +1464,7 @@ func TestContextRecommendationsOnlyUseCallableTools(t *testing.T) {
 	}
 }
 
-func TestContextRecommendsDiscoveryForBroadWork(t *testing.T) {
+func TestContextRecommendsFindKnowledgeForBroadWork(t *testing.T) {
 	service := New(nil)
 	result := service.Context(ContextRequest{
 		Project: "mall-api",
@@ -1363,15 +1473,15 @@ func TestContextRecommendsDiscoveryForBroadWork(t *testing.T) {
 	})
 
 	var tools []string
-	for _, call := range result.RecommendedNextCalls {
+	for _, call := range result.RecommendedNextSteps {
 		tools = append(tools, call.Tool)
 	}
-	if !contains(tools, "argos_map") || !contains(tools, "argos_discover") {
-		t.Fatalf("expected map and discover recommendations, got %#v", result.RecommendedNextCalls)
+	if !contains(tools, "argos_list_knowledge") || !contains(tools, "argos_find_knowledge") || !contains(tools, "argos_standards") {
+		t.Fatalf("expected list, find, and standards recommendations, got %#v", result.RecommendedNextSteps)
 	}
 }
 
-func TestContextDoesNotRecommendMapForNarrowImplementationWork(t *testing.T) {
+func TestContextDoesNotRecommendListKnowledgeForNarrowImplementationWork(t *testing.T) {
 	service := New(nil)
 	result := service.Context(ContextRequest{
 		Project: "mall-api",
@@ -1380,25 +1490,25 @@ func TestContextDoesNotRecommendMapForNarrowImplementationWork(t *testing.T) {
 	})
 
 	var tools []string
-	for _, call := range result.RecommendedNextCalls {
+	for _, call := range result.RecommendedNextSteps {
 		tools = append(tools, call.Tool)
 	}
-	if !contains(tools, "argos_discover") || !contains(tools, "argos_standards") {
-		t.Fatalf("expected discover and standards recommendations, got %#v", result.RecommendedNextCalls)
+	if !contains(tools, "argos_find_knowledge") || !contains(tools, "argos_standards") {
+		t.Fatalf("expected find and standards recommendations, got %#v", result.RecommendedNextSteps)
 	}
-	if contains(tools, "argos_map") {
-		t.Fatalf("did not expect map recommendation for narrow implementation work: %#v", result.RecommendedNextCalls)
+	if contains(tools, "argos_list_knowledge") {
+		t.Fatalf("did not expect list recommendation for narrow implementation work: %#v", result.RecommendedNextSteps)
 	}
 }
 
-func TestGetKnowledgeItemReturnsFullBody(t *testing.T) {
+func TestReadKnowledgeReturnsFullBody(t *testing.T) {
 	store := buildQueryTestStore(t)
 	defer store.Close()
 	service := New(store)
 
-	item, err := service.GetKnowledgeItem("rule:backend.auth.v1")
+	item, err := service.ReadKnowledge("rule:backend.auth.v1")
 	if err != nil {
-		t.Fatalf("GetKnowledgeItem returned error: %v", err)
+		t.Fatalf("ReadKnowledge returned error: %v", err)
 	}
 	if item.Body != "Require explicit auth middleware for account endpoints.\nThis is the full rule body." {
 		t.Fatalf("expected full body, got %q", item.Body)
@@ -1422,7 +1532,7 @@ func TestCiteKnowledgeReportsMissingIDs(t *testing.T) {
 	}
 }
 
-func containsDiscoveryItem(items []DiscoveryItem, id string) bool {
+func containsKnowledgeSummary(items []KnowledgeSummary, id string) bool {
 	for _, item := range items {
 		if item.ID == id {
 			return true
@@ -1475,7 +1585,7 @@ func buildQueryTestStore(t *testing.T) *index.Store {
 	return store
 }
 
-func buildDiscoveryTestStore(t *testing.T) *index.Store {
+func buildFindKnowledgeTestStore(t *testing.T) *index.Store {
 	t.Helper()
 
 	items := []knowledge.Item{
@@ -1537,10 +1647,10 @@ func buildDiscoveryTestStore(t *testing.T) *index.Store {
 			Body:            "Deprecated auth guidance.",
 		},
 	}
-	return buildDiscoveryStore(t, items)
+	return buildFindKnowledgeStore(t, items)
 }
 
-func buildDiscoveryStore(t *testing.T, items []knowledge.Item) *index.Store {
+func buildFindKnowledgeStore(t *testing.T, items []knowledge.Item) *index.Store {
 	t.Helper()
 
 	dbPath := filepath.Join(t.TempDir(), "argos/index.db")

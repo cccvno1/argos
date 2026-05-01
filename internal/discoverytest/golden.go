@@ -38,13 +38,13 @@ type Input struct {
 }
 
 type Expected struct {
-	Coverage                         string         `json:"coverage"`
-	ActionAuthority                  string         `json:"action_authority"`
-	ActionLoad                       string         `json:"action_load"`
-	ActionCite                       string         `json:"action_cite"`
-	ActionClaim                      string         `json:"action_claim"`
-	RecallSemanticStatus             string         `json:"recall_semantic_status"`
-	CoverageGapSources               []string       `json:"coverage_gap_sources"`
+	Support                          string         `json:"support"`
+	SupportLevel                     string         `json:"support_level"`
+	UsageRead                        string         `json:"usage_read"`
+	UsageCite                        string         `json:"usage_cite"`
+	UsageClaim                       string         `json:"usage_claim"`
+	SearchSemanticStatus             string         `json:"search_semantic_status"`
+	MissingNeedSources               []string       `json:"missing_need_sources"`
 	TopID                            string         `json:"top_id"`
 	IncludeIDs                       []string       `json:"include_ids"`
 	ExcludeIDs                       []string       `json:"exclude_ids"`
@@ -56,8 +56,8 @@ type Expected struct {
 	ExcludeText                      []string       `json:"exclude_text"`
 	InventoryTypesMin                map[string]int `json:"inventory_types_min"`
 	IncludeDeprecatedIDWhenRequested string         `json:"include_deprecated_id_when_requested"`
-	RequireNextCallTools             []string       `json:"require_next_call_tools"`
-	ForbidNextCallTools              []string       `json:"forbid_next_call_tools"`
+	RequireNextStepTools             []string       `json:"require_next_step_tools"`
+	ForbidNextStepTools              []string       `json:"forbid_next_step_tools"`
 	WhyContains                      []string       `json:"why_contains"`
 	NoBodies                         bool           `json:"no_bodies"`
 	GroupsEmpty                      bool           `json:"groups_empty"`

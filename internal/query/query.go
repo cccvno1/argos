@@ -29,7 +29,7 @@ type ContextRequest struct {
 	Files   []string `json:"files"`
 }
 
-type DiscoverRequest struct {
+type FindKnowledgeRequest struct {
 	Project           string   `json:"project"`
 	Phase             string   `json:"phase"`
 	Task              string   `json:"task"`
@@ -43,7 +43,7 @@ type DiscoverRequest struct {
 	Limit             int      `json:"limit"`
 }
 
-type MapRequest struct {
+type ListKnowledgeRequest struct {
 	Project           string   `json:"project"`
 	Domain            string   `json:"domain"`
 	Types             []string `json:"types"`
@@ -51,59 +51,58 @@ type MapRequest struct {
 }
 
 type ContextResponse struct {
-	Project              string            `json:"project"`
-	Phase                string            `json:"phase"`
-	RecommendedNextCalls []RecommendedCall `json:"recommended_next_calls"`
+	Project              string     `json:"project"`
+	Phase                string     `json:"phase"`
+	RecommendedNextSteps []NextStep `json:"recommended_next_steps"`
 }
 
-type DiscoveryResponse struct {
+type FindKnowledgeResponse struct {
 	Project      string                      `json:"project"`
 	Phase        string                      `json:"phase"`
 	Query        string                      `json:"query"`
 	Capabilities index.DiscoveryCapabilities `json:"capabilities"`
-	Coverage     Coverage                    `json:"coverage"`
-	ActionPolicy ActionPolicy                `json:"action_policy"`
-	Recall       RecallState                 `json:"recall"`
-	CoverageGaps []CoverageGap               `json:"coverage_gaps,omitempty"`
-	Items        []DiscoveryItem             `json:"items"`
-	NextCalls    []RecommendedCall           `json:"next_calls"`
+	Support      Support                     `json:"support"`
+	Usage        UsageGuidance               `json:"usage"`
+	SearchStatus SearchStatus                `json:"search_status"`
+	MissingNeeds []MissingNeed               `json:"missing_needs,omitempty"`
+	Items        []KnowledgeSummary          `json:"items"`
+	NextSteps    []NextStep                  `json:"next_steps"`
 }
 
-type MapResponse struct {
-	Project      string       `json:"project"`
-	ActionPolicy ActionPolicy `json:"action_policy"`
-	Inventory    Inventory    `json:"inventory"`
-	Groups       []MapGroup   `json:"groups"`
+type ListKnowledgeResponse struct {
+	Project   string        `json:"project"`
+	Usage     UsageGuidance `json:"usage"`
+	Inventory Inventory     `json:"inventory"`
+	Groups    []ListGroup   `json:"groups"`
 }
 
-type Coverage struct {
-	Status                string   `json:"status"`
+type Support struct {
+	Level                 string   `json:"level"`
 	Confidence            float64  `json:"confidence"`
 	Reason                string   `json:"reason"`
 	Recommendation        string   `json:"recommendation"`
 	MissingKnowledgeHints []string `json:"missing_knowledge_hints,omitempty"`
 }
 
-type ActionPolicy struct {
-	Authority string `json:"authority"`
-	Load      string `json:"load"`
-	Cite      string `json:"cite"`
-	Claim     string `json:"claim"`
-	Reason    string `json:"reason"`
+type UsageGuidance struct {
+	Read   string `json:"read"`
+	Cite   string `json:"cite"`
+	Claim  string `json:"claim"`
+	Reason string `json:"reason"`
 }
 
-type RecallState struct {
-	Semantic SemanticRecallState `json:"semantic"`
+type SearchStatus struct {
+	Semantic SemanticSearchStatus `json:"semantic"`
 }
 
-type SemanticRecallState struct {
+type SemanticSearchStatus struct {
 	Status   string `json:"status"`
 	Provider string `json:"provider,omitempty"`
 	Model    string `json:"model,omitempty"`
 	Reason   string `json:"reason,omitempty"`
 }
 
-type CoverageGap struct {
+type MissingNeed struct {
 	Need        string `json:"need"`
 	Reason      string `json:"reason"`
 	Source      string `json:"source"`
@@ -112,22 +111,22 @@ type CoverageGap struct {
 }
 
 type Inventory struct {
-	Types    map[string]int  `json:"types"`
-	Domains  []string        `json:"domains"`
-	Tags     []string        `json:"tags"`
-	Packages []DiscoveryItem `json:"packages"`
+	Types    map[string]int     `json:"types"`
+	Domains  []string           `json:"domains"`
+	Tags     []string           `json:"tags"`
+	Packages []KnowledgeSummary `json:"packages"`
 }
 
-type MapGroup struct {
-	Key   string          `json:"key"`
-	Title string          `json:"title"`
-	Items []DiscoveryItem `json:"items"`
+type ListGroup struct {
+	Key   string             `json:"key"`
+	Title string             `json:"title"`
+	Items []KnowledgeSummary `json:"items"`
 }
 
 type Response struct {
-	Items                []ResultItem      `json:"items"`
-	Conflicts            []ResultItem      `json:"conflicts"`
-	RecommendedNextCalls []RecommendedCall `json:"recommended_next_calls"`
+	Items                []ResultItem `json:"items"`
+	Conflicts            []ResultItem `json:"conflicts"`
+	RecommendedNextSteps []NextStep   `json:"recommended_next_steps"`
 }
 
 type ResultItem struct {
@@ -162,21 +161,21 @@ type Citation struct {
 	Status string `json:"status"`
 }
 
-type DiscoveryItem struct {
-	ID                string          `json:"id"`
-	Type              string          `json:"type"`
-	Title             string          `json:"title"`
-	Summary           string          `json:"summary"`
-	Status            string          `json:"status"`
-	Priority          string          `json:"priority"`
-	Path              string          `json:"path"`
-	Score             float64         `json:"score"`
-	ScoreComponents   ScoreComponents `json:"score_components"`
-	WhyMatched        []string        `json:"why_matched"`
-	MatchedSections   []string        `json:"matched_sections"`
-	Disclosure        Disclosure      `json:"disclosure"`
-	RecommendedAction string          `json:"recommended_action"`
-	Body              string          `json:"-"`
+type KnowledgeSummary struct {
+	ID              string          `json:"id"`
+	Type            string          `json:"type"`
+	Title           string          `json:"title"`
+	Summary         string          `json:"summary"`
+	Status          string          `json:"status"`
+	Priority        string          `json:"priority"`
+	Path            string          `json:"path"`
+	Score           float64         `json:"score"`
+	ScoreComponents ScoreComponents `json:"score_components"`
+	WhyMatched      []string        `json:"why_matched"`
+	MatchedSections []string        `json:"matched_sections"`
+	ReadStatus      ReadStatus      `json:"read_status"`
+	RecommendedStep string          `json:"recommended_step"`
+	Body            string          `json:"-"`
 }
 
 type ScoreComponents struct {
@@ -190,13 +189,13 @@ type ScoreComponents struct {
 	Semantic  float64 `json:"semantic"`
 }
 
-type Disclosure struct {
+type ReadStatus struct {
 	Level             string `json:"level"`
 	FullBodyAvailable bool   `json:"full_body_available"`
-	LoadTool          string `json:"load_tool"`
+	ReadTool          string `json:"read_tool"`
 }
 
-type RecommendedCall struct {
+type NextStep struct {
 	Tool   string   `json:"tool"`
 	Reason string   `json:"reason"`
 	IDs    []string `json:"ids,omitempty"`
@@ -231,18 +230,18 @@ func (s *Service) Context(req ContextRequest) ContextResponse {
 		reason = "operational work should respect active project standards"
 	}
 
-	calls := []RecommendedCall{
-		{Tool: "argos_discover", Reason: "discover task-relevant Argos knowledge without loading full bodies"},
+	calls := []NextStep{
+		{Tool: "argos_find_knowledge", Reason: "find task-relevant Argos knowledge without reading full bodies"},
 		{Tool: "argos_standards", Reason: reason},
 	}
 	if req.Phase == "planning" || strings.Contains(strings.ToLower(req.Task), "understand") {
-		calls = append([]RecommendedCall{{Tool: "argos_map", Reason: "inventory available project knowledge before broad work"}}, calls...)
+		calls = append([]NextStep{{Tool: "argos_list_knowledge", Reason: "inventory available project knowledge before broad work"}}, calls...)
 	}
 
 	return ContextResponse{
 		Project:              req.Project,
 		Phase:                req.Phase,
-		RecommendedNextCalls: calls,
+		RecommendedNextSteps: calls,
 	}
 }
 
@@ -305,14 +304,14 @@ func (s *Service) Standards(req StandardsRequest) (Response, error) {
 	return response, nil
 }
 
-func (s *Service) Discover(req DiscoverRequest) (DiscoveryResponse, error) {
+func (s *Service) FindKnowledge(req FindKnowledgeRequest) (FindKnowledgeResponse, error) {
 	caps, err := s.store.DiscoveryCapabilities()
 	if err != nil {
-		return DiscoveryResponse{}, err
+		return FindKnowledgeResponse{}, err
 	}
 	items, err := s.store.ListItems()
 	if err != nil {
-		return DiscoveryResponse{}, err
+		return FindKnowledgeResponse{}, err
 	}
 
 	limit := req.Limit
@@ -326,19 +325,19 @@ func (s *Service) Discover(req DiscoverRequest) (DiscoveryResponse, error) {
 	intent := strings.TrimSpace(strings.Join([]string{req.Task, req.Query}, " "))
 	textMatches, err := s.store.SearchText(intent, 50)
 	if err != nil {
-		return DiscoveryResponse{}, err
+		return FindKnowledgeResponse{}, err
 	}
 	lexical := lexicalScores(textMatches)
 	sections := matchedSections(textMatches)
 
-	var results []DiscoveryItem
+	var results []KnowledgeSummary
 	for _, item := range items {
-		if !discoverCandidateAllowed(item, req) {
+		if !findCandidateAllowed(item, req) {
 			continue
 		}
-		result, err := discoveryItem(item, req, lexical[item.ID], sections[item.ID], intent)
+		result, err := knowledgeSummary(item, req, lexical[item.ID], sections[item.ID], intent)
 		if err != nil {
-			return DiscoveryResponse{}, err
+			return FindKnowledgeResponse{}, err
 		}
 		if item.Type == "package" && result.ScoreComponents.Lexical < 0.25 && result.ScoreComponents.FileScope < 1 && result.ScoreComponents.TagDomain <= 0.3 && !contains(req.Types, "package") {
 			continue
@@ -361,37 +360,37 @@ func (s *Service) Discover(req DiscoverRequest) (DiscoveryResponse, error) {
 		results = results[:limit]
 	}
 
-	coverage := discoveryCoverage(results, intent, req)
-	nextCalls := discoveryNextCalls(results, coverage, req.Phase)
+	support := findSupport(results, intent, req)
+	nextSteps := findNextSteps(results, support, req.Phase)
 
-	return DiscoveryResponse{
+	return FindKnowledgeResponse{
 		Project:      req.Project,
 		Phase:        req.Phase,
 		Query:        intent,
 		Capabilities: caps,
-		Coverage:     coverage,
-		ActionPolicy: discoveryActionPolicy(coverage),
-		Recall:       defaultRecallState(),
-		CoverageGaps: coverageGapsForCoverage(coverage, req, intent, items, lexical),
+		Support:      support,
+		Usage:        usageGuidance(support),
+		SearchStatus: defaultSearchStatus(),
+		MissingNeeds: missingNeedsForSupport(support, req, intent, items, lexical),
 		Items:        results,
-		NextCalls:    nextCalls,
+		NextSteps:    nextSteps,
 	}, nil
 }
 
-func (s *Service) Map(req MapRequest) (MapResponse, error) {
+func (s *Service) ListKnowledge(req ListKnowledgeRequest) (ListKnowledgeResponse, error) {
 	items, err := s.store.ListItems()
 	if err != nil {
-		return MapResponse{}, err
+		return ListKnowledgeResponse{}, err
 	}
 	inventory := Inventory{
 		Types: map[string]int{},
 	}
-	grouped := map[string][]DiscoveryItem{}
+	grouped := map[string][]KnowledgeSummary{}
 	domainSet := map[string]bool{}
 	tagSet := map[string]bool{}
 
 	for _, item := range items {
-		if !mapCandidateAllowed(item, req) {
+		if !listCandidateAllowed(item, req) {
 			continue
 		}
 		inventory.Types[item.Type]++
@@ -401,11 +400,11 @@ func (s *Service) Map(req MapRequest) (MapResponse, error) {
 		for _, tag := range item.Tags {
 			tagSet[tag] = true
 		}
-		route := discoveryItemFromKnowledge(item)
+		route := knowledgeSummaryFromKnowledge(item)
 		if item.Type == "package" {
 			inventory.Packages = append(inventory.Packages, route)
 		}
-		key := mapGroupKey(item)
+		key := listGroupKey(item)
 		grouped[key] = append(grouped[key], route)
 	}
 
@@ -413,17 +412,17 @@ func (s *Service) Map(req MapRequest) (MapResponse, error) {
 	inventory.Tags = sortedKeys(tagSet)
 	sort.Slice(inventory.Packages, func(i, j int) bool { return inventory.Packages[i].ID < inventory.Packages[j].ID })
 
-	var groups []MapGroup
+	var groups []ListGroup
 	for key, groupItems := range grouped {
 		sort.Slice(groupItems, func(i, j int) bool { return groupItems[i].ID < groupItems[j].ID })
-		groups = append(groups, MapGroup{Key: key, Title: titleFromKey(key), Items: groupItems})
+		groups = append(groups, ListGroup{Key: key, Title: titleFromKey(key), Items: groupItems})
 	}
 	sort.Slice(groups, func(i, j int) bool { return groups[i].Key < groups[j].Key })
 
-	return MapResponse{Project: req.Project, ActionPolicy: mapActionPolicy(), Inventory: inventory, Groups: groups}, nil
+	return ListKnowledgeResponse{Project: req.Project, Usage: listUsageGuidance(), Inventory: inventory, Groups: groups}, nil
 }
 
-func (s *Service) GetKnowledgeItem(id string) (KnowledgeItemResult, error) {
+func (s *Service) ReadKnowledge(id string) (KnowledgeItemResult, error) {
 	item, err := s.store.GetItem(id)
 	if err != nil {
 		return KnowledgeItemResult{}, err
@@ -517,10 +516,10 @@ func firstSentence(body string) string {
 	return ""
 }
 
-func discoveryItem(item knowledge.Item, req DiscoverRequest, lexical float64, sections []string, intent string) (DiscoveryItem, error) {
+func knowledgeSummary(item knowledge.Item, req FindKnowledgeRequest, lexical float64, sections []string, intent string) (KnowledgeSummary, error) {
 	fileScope, err := fileScopeScore(item, req.Files)
 	if err != nil {
-		return DiscoveryItem{}, fmt.Errorf("%s: match file scope: %w", item.ID, err)
+		return KnowledgeSummary{}, fmt.Errorf("%s: match file scope: %w", item.ID, err)
 	}
 	lexical = minFloat(lexical, lexicalTermScore(item, intent))
 	components := ScoreComponents{
@@ -534,17 +533,17 @@ func discoveryItem(item knowledge.Item, req DiscoverRequest, lexical float64, se
 		Semantic:  0,
 	}
 	score := weightedScore(components)
-	result := discoveryItemFromKnowledge(item)
+	result := knowledgeSummaryFromKnowledge(item)
 	result.Score = score
 	result.ScoreComponents = components
 	result.WhyMatched = whyMatched(item, req, components)
 	result.MatchedSections = sections
-	result.RecommendedAction = recommendedAction(item, score, req.Phase, relevanceScore(components, req))
+	result.RecommendedStep = recommendedStep(item, score, req.Phase, relevanceScore(components, req))
 	return result, nil
 }
 
-func discoveryItemFromKnowledge(item knowledge.Item) DiscoveryItem {
-	return DiscoveryItem{
+func knowledgeSummaryFromKnowledge(item knowledge.Item) KnowledgeSummary {
+	return KnowledgeSummary{
 		ID:       item.ID,
 		Type:     item.Type,
 		Title:    item.Title,
@@ -552,12 +551,12 @@ func discoveryItemFromKnowledge(item knowledge.Item) DiscoveryItem {
 		Status:   item.Status,
 		Priority: item.Priority,
 		Path:     item.Path,
-		Disclosure: Disclosure{
+		ReadStatus: ReadStatus{
 			Level:             "summary",
 			FullBodyAvailable: true,
-			LoadTool:          "get_knowledge_item",
+			ReadTool:          "argos_read_knowledge",
 		},
-		RecommendedAction: "skim_summary_only",
+		RecommendedStep: "skim_summary_only",
 	}
 }
 
@@ -583,7 +582,7 @@ func projectScore(item knowledge.Item, project string) float64 {
 	return 0
 }
 
-func discoverCandidateAllowed(item knowledge.Item, req DiscoverRequest) bool {
+func findCandidateAllowed(item knowledge.Item, req FindKnowledgeRequest) bool {
 	if item.Status == "deprecated" && !req.IncludeDeprecated {
 		return false
 	}
@@ -605,7 +604,7 @@ func discoverCandidateAllowed(item knowledge.Item, req DiscoverRequest) bool {
 	return true
 }
 
-func mapCandidateAllowed(item knowledge.Item, req MapRequest) bool {
+func listCandidateAllowed(item knowledge.Item, req ListKnowledgeRequest) bool {
 	if item.Status == "deprecated" && !req.IncludeDeprecated {
 		return false
 	}
@@ -733,7 +732,7 @@ func matchedSections(matches []index.TextMatch) map[string][]string {
 	return result
 }
 
-func whyMatched(item knowledge.Item, req DiscoverRequest, c ScoreComponents) []string {
+func whyMatched(item knowledge.Item, req FindKnowledgeRequest, c ScoreComponents) []string {
 	var reasons []string
 	if c.Project > 0 {
 		reasons = append(reasons, fmt.Sprintf("project %s matched", req.Project))
@@ -756,35 +755,35 @@ func whyMatched(item knowledge.Item, req DiscoverRequest, c ScoreComponents) []s
 	return reasons
 }
 
-func recommendedAction(item knowledge.Item, score float64, phase string, relevance float64) string {
+func recommendedStep(item knowledge.Item, score float64, phase string, relevance float64) string {
 	if score < 0.45 || relevance < 0.5 {
 		return "skim_summary_only"
 	}
 	switch phase {
 	case "implementation":
 		if item.Priority == "must" || item.Type == "package" {
-			return "load_full_before_implementation"
+			return "read_full_before_implementation"
 		}
 	case "review":
 		if item.Priority == "must" || item.Type == "decision" {
-			return "load_full_before_review"
+			return "read_full_before_review"
 		}
 	case "debugging":
 		if item.Type == "lesson" || item.Type == "runbook" {
-			return "load_full_before_debugging"
+			return "read_full_before_debugging"
 		}
 	case "planning":
 		if item.Type == "decision" || item.Type == "package" {
-			return "load_full_before_planning"
+			return "read_full_before_planning"
 		}
 	}
 	return "cite_if_used"
 }
 
-func discoveryCoverage(items []DiscoveryItem, intent string, req DiscoverRequest) Coverage {
+func findSupport(items []KnowledgeSummary, intent string, req FindKnowledgeRequest) Support {
 	if len(items) == 0 {
-		return Coverage{
-			Status:                "none",
+		return Support{
+			Level:                 "none",
 			Confidence:            0,
 			Reason:                "No active Argos knowledge matched this request strongly.",
 			Recommendation:        "Proceed without Argos-specific claims and do not cite Argos knowledge for this task.",
@@ -794,100 +793,95 @@ func discoveryCoverage(items []DiscoveryItem, intent string, req DiscoverRequest
 	topItem := items[0]
 	top := topItem.Score
 	if topItem.Type == "lesson" && top >= 0.7 {
-		return Coverage{Status: "partial", Confidence: top, Reason: "Found related Argos knowledge, but task-specific coverage has gaps.", Recommendation: "Load only high-confidence IDs and mention gaps when relevant.", MissingKnowledgeHints: missingKnowledgeHints(intent)}
+		return Support{Level: "partial", Confidence: top, Reason: "Found related Argos knowledge, but task-specific support has missing needs.", Recommendation: "Read only high-confidence IDs and mention missing needs when relevant.", MissingKnowledgeHints: missingKnowledgeHints(intent)}
 	}
 	if topItem.Type == "reference" && (top >= 0.6 || topItem.ScoreComponents.Lexical >= 0.3) {
-		return Coverage{Status: "partial", Confidence: top, Reason: "Found related Argos knowledge, but task-specific coverage has gaps.", Recommendation: "Load only high-confidence IDs and mention gaps when relevant.", MissingKnowledgeHints: missingKnowledgeHints(intent)}
+		return Support{Level: "partial", Confidence: top, Reason: "Found related Argos knowledge, but task-specific support has missing needs.", Recommendation: "Read only high-confidence IDs and mention missing needs when relevant.", MissingKnowledgeHints: missingKnowledgeHints(intent)}
 	}
 	if topItem.ScoreComponents.Lexical > 0 && topItem.ScoreComponents.Lexical < 0.5 && topItem.ScoreComponents.FileScope < 1 && topItem.ScoreComponents.TagDomain > 0.3 {
-		return Coverage{Status: "weak", Confidence: top, Reason: "Only broad or low-confidence Argos knowledge matched.", Recommendation: "Skim summaries or inspect the map; do not treat results as authoritative.", MissingKnowledgeHints: missingKnowledgeHints(intent)}
+		return Support{Level: "weak", Confidence: top, Reason: "Only broad or low-confidence Argos knowledge matched.", Recommendation: "Skim summaries or inspect the knowledge list; do not treat results as authoritative.", MissingKnowledgeHints: missingKnowledgeHints(intent)}
 	}
 	if topItem.ScoreComponents.Lexical > 0 && topItem.ScoreComponents.Lexical < 0.3 && topItem.ScoreComponents.FileScope < 1 && topItem.ScoreComponents.TagDomain <= 0.3 {
-		return Coverage{Status: "weak", Confidence: top, Reason: "Only broad or low-confidence Argos knowledge matched.", Recommendation: "Skim summaries or inspect the map; do not treat results as authoritative.", MissingKnowledgeHints: missingKnowledgeHints(intent)}
+		return Support{Level: "weak", Confidence: top, Reason: "Only broad or low-confidence Argos knowledge matched.", Recommendation: "Skim summaries or inspect the knowledge list; do not treat results as authoritative.", MissingKnowledgeHints: missingKnowledgeHints(intent)}
 	}
 	if top < 0.6 && topItem.ScoreComponents.Lexical > 0 && topItem.ScoreComponents.Lexical < 0.5 && topItem.ScoreComponents.FileScope < 1 && topItem.ScoreComponents.TagDomain <= 0.3 {
-		return Coverage{Status: "weak", Confidence: top, Reason: "Only broad or low-confidence Argos knowledge matched.", Recommendation: "Skim summaries or inspect the map; do not treat results as authoritative.", MissingKnowledgeHints: missingKnowledgeHints(intent)}
+		return Support{Level: "weak", Confidence: top, Reason: "Only broad or low-confidence Argos knowledge matched.", Recommendation: "Skim summaries or inspect the knowledge list; do not treat results as authoritative.", MissingKnowledgeHints: missingKnowledgeHints(intent)}
 	}
 	switch {
 	case top >= 0.75:
-		return Coverage{Status: "strong", Confidence: top, Reason: "Found active project knowledge matching this request.", Recommendation: "Load high-priority matched knowledge before work."}
+		return Support{Level: "strong", Confidence: top, Reason: "Found active project knowledge matching this request.", Recommendation: "Read high-priority matched knowledge before work."}
 	case top >= 0.7 && (topItem.Type != "package" || !packageOnlyRequest(req)) && (topItem.ScoreComponents.Lexical >= 0.4 || topItem.ScoreComponents.FileScope >= 1):
-		return Coverage{Status: "strong", Confidence: top, Reason: "Found active project knowledge matching this request.", Recommendation: "Load high-priority matched knowledge before work."}
+		return Support{Level: "strong", Confidence: top, Reason: "Found active project knowledge matching this request.", Recommendation: "Read high-priority matched knowledge before work."}
 	case top >= 0.6:
-		return Coverage{Status: "partial", Confidence: top, Reason: "Found related Argos knowledge, but task-specific coverage has gaps.", Recommendation: "Load only high-confidence IDs and mention gaps when relevant.", MissingKnowledgeHints: missingKnowledgeHints(intent)}
+		return Support{Level: "partial", Confidence: top, Reason: "Found related Argos knowledge, but task-specific support has missing needs.", Recommendation: "Read only high-confidence IDs and mention missing needs when relevant.", MissingKnowledgeHints: missingKnowledgeHints(intent)}
 	case top >= 0.5:
-		return Coverage{Status: "partial", Confidence: top, Reason: "Found related Argos knowledge, but task-specific coverage has gaps.", Recommendation: "Load only high-confidence IDs and mention gaps when relevant.", MissingKnowledgeHints: missingKnowledgeHints(intent)}
+		return Support{Level: "partial", Confidence: top, Reason: "Found related Argos knowledge, but task-specific support has missing needs.", Recommendation: "Read only high-confidence IDs and mention missing needs when relevant.", MissingKnowledgeHints: missingKnowledgeHints(intent)}
 	default:
-		return Coverage{Status: "weak", Confidence: top, Reason: "Only broad or low-confidence Argos knowledge matched.", Recommendation: "Skim summaries or inspect the map; do not treat results as authoritative.", MissingKnowledgeHints: missingKnowledgeHints(intent)}
+		return Support{Level: "weak", Confidence: top, Reason: "Only broad or low-confidence Argos knowledge matched.", Recommendation: "Skim summaries or inspect the knowledge list; do not treat results as authoritative.", MissingKnowledgeHints: missingKnowledgeHints(intent)}
 	}
 }
 
-func packageOnlyRequest(req DiscoverRequest) bool {
+func packageOnlyRequest(req FindKnowledgeRequest) bool {
 	return len(req.Types) == 1 && req.Types[0] == "package"
 }
 
-func discoveryActionPolicy(coverage Coverage) ActionPolicy {
-	switch coverage.Status {
+func usageGuidance(coverage Support) UsageGuidance {
+	switch coverage.Level {
 	case "strong":
-		return ActionPolicy{
-			Authority: "strong",
-			Load:      "recommended",
-			Cite:      "after_loaded_and_used",
-			Claim:     "allowed",
-			Reason:    "Strong Argos coverage; load selected items before applying and cite only loaded knowledge actually used.",
+		return UsageGuidance{
+			Read:   "recommended",
+			Cite:   "after_read_and_used",
+			Claim:  "allowed",
+			Reason: "Strong Argos support; read selected items before applying and cite only read knowledge actually used.",
 		}
 	case "partial":
-		return ActionPolicy{
-			Authority: "partial",
-			Load:      "allowed",
-			Cite:      "after_loaded_and_used",
-			Claim:     "must_separate_argos_backed_and_general_reasoning",
-			Reason:    "Partial Argos coverage; load only relevant shared knowledge and separate Argos-backed claims from general reasoning.",
+		return UsageGuidance{
+			Read:   "allowed",
+			Cite:   "after_read_and_used",
+			Claim:  "must_separate_argos_backed_and_general_reasoning",
+			Reason: "Partial Argos support; read only relevant shared knowledge and separate Argos-backed claims from general reasoning.",
 		}
 	case "weak":
-		return ActionPolicy{
-			Authority: "weak",
-			Load:      "forbidden",
-			Cite:      "forbidden",
-			Claim:     "forbidden",
-			Reason:    "Weak Argos coverage; inspect summaries only and do not make Argos-backed claims.",
+		return UsageGuidance{
+			Read:   "forbidden",
+			Cite:   "forbidden",
+			Claim:  "forbidden",
+			Reason: "Weak Argos support; inspect summaries only and do not make Argos-backed claims.",
 		}
 	default:
-		return ActionPolicy{
-			Authority: "none",
-			Load:      "forbidden",
-			Cite:      "forbidden",
-			Claim:     "forbidden",
-			Reason:    "No Argos coverage; use missing knowledge hints as gaps only and do not cite Argos knowledge.",
+		return UsageGuidance{
+			Read:   "forbidden",
+			Cite:   "forbidden",
+			Claim:  "forbidden",
+			Reason: "No Argos support; use missing knowledge hints as missing needs only and do not cite Argos knowledge.",
 		}
 	}
 }
 
-func mapActionPolicy() ActionPolicy {
-	return ActionPolicy{
-		Authority: "inventory",
-		Load:      "forbidden",
-		Cite:      "forbidden",
-		Claim:     "forbidden",
-		Reason:    "Map inventory is for orientation only; do not load, cite, or make task claims from inventory alone.",
+func listUsageGuidance() UsageGuidance {
+	return UsageGuidance{
+		Read:   "forbidden",
+		Cite:   "forbidden",
+		Claim:  "forbidden",
+		Reason: "List inventory is for orientation only; do not read, cite, or make task claims from inventory alone.",
 	}
 }
 
-func discoveryNextCalls(items []DiscoveryItem, coverage Coverage, phase string) []RecommendedCall {
-	if coverage.Status == "none" || coverage.Status == "weak" {
+func findNextSteps(items []KnowledgeSummary, coverage Support, phase string) []NextStep {
+	if coverage.Level == "none" || coverage.Level == "weak" {
 		return nil
 	}
 	var ids []string
 	for _, item := range items {
-		if strings.HasPrefix(item.RecommendedAction, "load_full") {
+		if strings.HasPrefix(item.RecommendedStep, "read_full") {
 			ids = append(ids, item.ID)
 		}
 	}
-	var calls []RecommendedCall
+	var calls []NextStep
 	if len(ids) > 0 {
-		calls = append(calls, RecommendedCall{Tool: "get_knowledge_item", Reason: "Load selected routed knowledge before applying it.", IDs: ids})
+		calls = append(calls, NextStep{Tool: "argos_read_knowledge", Reason: "Read selected knowledge before applying it.", IDs: ids})
 	}
-	calls = append(calls, RecommendedCall{Tool: "cite_knowledge", Reason: "Cite Argos knowledge IDs actually used in the final response."})
+	calls = append(calls, NextStep{Tool: "argos_cite_knowledge", Reason: "Cite Argos knowledge IDs actually used in the final response."})
 	return calls
 }
 
@@ -899,35 +893,35 @@ func missingKnowledgeHints(intent string) []string {
 	return []string{intent + " standard", intent + " decision", intent + " lesson"}
 }
 
-func defaultRecallState() RecallState {
-	return RecallState{
-		Semantic: SemanticRecallState{
+func defaultSearchStatus() SearchStatus {
+	return SearchStatus{
+		Semantic: SemanticSearchStatus{
 			Status: "disabled",
 			Reason: "semantic provider is not configured",
 		},
 	}
 }
 
-func coverageGapsForCoverage(coverage Coverage, req DiscoverRequest, intent string, items []knowledge.Item, lexical map[string]float64) []CoverageGap {
-	if coverage.Status == "strong" || len(coverage.MissingKnowledgeHints) == 0 {
+func missingNeedsForSupport(coverage Support, req FindKnowledgeRequest, intent string, items []knowledge.Item, lexical map[string]float64) []MissingNeed {
+	if coverage.Level == "strong" || len(coverage.MissingKnowledgeHints) == 0 {
 		return nil
 	}
-	need := coverageGapNeed(req, intent)
+	need := missingNeedText(req, intent)
 	if need == "" {
 		return nil
 	}
-	source := coverageGapSource(coverage, req, intent, items, lexical)
-	severity := coverageGapSeverity(coverage, source)
-	return []CoverageGap{{
+	source := missingNeedSource(coverage, req, intent, items, lexical)
+	severity := missingNeedSeverity(coverage, source)
+	return []MissingNeed{{
 		Need:        need,
-		Reason:      coverageGapReason(coverage, source, need),
+		Reason:      missingNeedReason(coverage, source, need),
 		Source:      source,
 		Severity:    severity,
 		ArgosBacked: false,
 	}}
 }
 
-func coverageGapNeed(req DiscoverRequest, intent string) string {
+func missingNeedText(req FindKnowledgeRequest, intent string) string {
 	task := strings.TrimSpace(req.Task)
 	query := strings.TrimSpace(req.Query)
 	if task == "" {
@@ -947,28 +941,28 @@ func coverageGapNeed(req DiscoverRequest, intent string) string {
 	return strings.TrimSpace(task + " / " + query)
 }
 
-func coverageGapSource(coverage Coverage, req DiscoverRequest, intent string, items []knowledge.Item, lexical map[string]float64) string {
-	if (coverage.Status == "none" || coverage.Status == "partial") && hasRestrictiveDiscoveryFilters(req) && restrictiveFiltersExcludedRelevantKnowledge(req, intent, items, lexical) {
-		return "filter_excluded"
+func missingNeedSource(coverage Support, req FindKnowledgeRequest, intent string, items []knowledge.Item, lexical map[string]float64) string {
+	if (coverage.Level == "none" || coverage.Level == "partial") && hasRestrictiveDiscoveryFilters(req) && restrictiveFiltersExcludedRelevantKnowledge(req, intent, items, lexical) {
+		return "filtered_out"
 	}
-	if coverage.Status == "none" && crossDomainMismatchKnowledge(req, intent, items, lexical) {
-		return "cross_domain_mismatch"
+	if coverage.Level == "none" && crossDomainMismatchKnowledge(req, intent, items, lexical) {
+		return "wrong_scope"
 	}
-	switch coverage.Status {
+	switch coverage.Level {
 	case "partial":
 		return "partial_match"
 	case "weak":
 		return "weak_match"
 	default:
-		return "unmatched_intent"
+		return "not_found"
 	}
 }
 
-func hasRestrictiveDiscoveryFilters(req DiscoverRequest) bool {
+func hasRestrictiveDiscoveryFilters(req FindKnowledgeRequest) bool {
 	return len(req.Types) > 0 || len(req.Tags) > 0 || len(req.Domains) > 0 || len(req.Status) > 0
 }
 
-func restrictiveFiltersExcludedRelevantKnowledge(req DiscoverRequest, intent string, items []knowledge.Item, lexical map[string]float64) bool {
+func restrictiveFiltersExcludedRelevantKnowledge(req FindKnowledgeRequest, intent string, items []knowledge.Item, lexical map[string]float64) bool {
 	unfiltered := req
 	unfiltered.Types = nil
 	unfiltered.Tags = nil
@@ -976,16 +970,16 @@ func restrictiveFiltersExcludedRelevantKnowledge(req DiscoverRequest, intent str
 	unfiltered.Status = nil
 
 	for _, item := range items {
-		if !discoverCandidateAllowed(item, unfiltered) || discoverCandidateAllowed(item, req) {
+		if !findCandidateAllowed(item, unfiltered) || findCandidateAllowed(item, req) {
 			continue
 		}
 		if lexical[item.ID] > 0 || lexicalTermScore(item, intent) > 0 {
-			unfilteredResult, err := discoveryItem(item, unfiltered, lexical[item.ID], nil, intent)
+			unfilteredResult, err := knowledgeSummary(item, unfiltered, lexical[item.ID], nil, intent)
 			if err != nil {
 				continue
 			}
-			unfilteredCoverage := discoveryCoverage([]DiscoveryItem{unfilteredResult}, intent, unfiltered)
-			if unfilteredCoverage.Status == "strong" || unfilteredCoverage.Status == "partial" {
+			unfilteredSupport := findSupport([]KnowledgeSummary{unfilteredResult}, intent, unfiltered)
+			if unfilteredSupport.Level == "strong" || unfilteredSupport.Level == "partial" {
 				return true
 			}
 		}
@@ -993,7 +987,7 @@ func restrictiveFiltersExcludedRelevantKnowledge(req DiscoverRequest, intent str
 	return false
 }
 
-func crossDomainMismatchKnowledge(req DiscoverRequest, intent string, items []knowledge.Item, lexical map[string]float64) bool {
+func crossDomainMismatchKnowledge(req FindKnowledgeRequest, intent string, items []knowledge.Item, lexical map[string]float64) bool {
 	if req.Project == "" {
 		return false
 	}
@@ -1011,32 +1005,32 @@ func crossDomainMismatchKnowledge(req DiscoverRequest, intent string, items []kn
 	return false
 }
 
-func coverageGapSeverity(coverage Coverage, source string) string {
-	if coverage.Status == "none" {
+func missingNeedSeverity(coverage Support, source string) string {
+	if coverage.Level == "none" {
 		return "blocking"
 	}
-	if source == "weak_match" || source == "partial_match" || source == "filter_excluded" {
+	if source == "weak_match" || source == "partial_match" || source == "filtered_out" {
 		return "important"
 	}
 	return "informational"
 }
 
-func coverageGapReason(coverage Coverage, source string, need string) string {
+func missingNeedReason(coverage Support, source string, need string) string {
 	switch source {
-	case "filter_excluded":
+	case "filtered_out":
 		return "Explicit discovery filters excluded shared knowledge that might otherwise match: " + need
 	case "partial_match":
 		return "Some shared knowledge matched, but it does not fully cover this task need: " + need
 	case "weak_match":
 		return "Only weak shared knowledge matched, so this need is not Argos-backed: " + need
-	case "cross_domain_mismatch":
+	case "wrong_scope":
 		return "Similar shared knowledge exists, but its project or domain scope does not match this task need: " + need
 	default:
 		return "No sufficiently relevant shared knowledge matched this task need: " + need
 	}
 }
 
-func mapGroupKey(item knowledge.Item) string {
+func listGroupKey(item knowledge.Item) string {
 	if len(item.TechDomains) > 0 {
 		if len(item.Tags) > 0 {
 			return item.TechDomains[0] + "/" + item.Tags[0]
@@ -1058,7 +1052,7 @@ func sortedKeys(values map[string]bool) []string {
 	return keys
 }
 
-func hasDiscoverySignal(c ScoreComponents, req DiscoverRequest) bool {
+func hasDiscoverySignal(c ScoreComponents, req FindKnowledgeRequest) bool {
 	if c.Lexical > 0 || c.FileScope >= 1 {
 		return true
 	}
@@ -1068,7 +1062,7 @@ func hasDiscoverySignal(c ScoreComponents, req DiscoverRequest) bool {
 	return false
 }
 
-func relevanceScore(c ScoreComponents, req DiscoverRequest) float64 {
+func relevanceScore(c ScoreComponents, req FindKnowledgeRequest) float64 {
 	score := maxFloat(c.Lexical, c.FileScope)
 	if len(req.Tags) > 0 || len(req.Domains) > 0 {
 		score = maxFloat(score, c.TagDomain)

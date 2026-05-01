@@ -7,17 +7,17 @@ import (
 	"argos/internal/discoverytest"
 )
 
-func TestGoldenDiscoveryCases(t *testing.T) {
+func TestGoldenFindKnowledgeCases(t *testing.T) {
 	_, store := discoverytest.BuildIndexedWorkspace(t)
 	defer store.Close()
 	service := New(store)
 
 	for _, tc := range discoverytest.LoadCases(t) {
-		if tc.Operation != "discover" && tc.Operation != "workflow" {
+		if tc.Operation != "find" && tc.Operation != "workflow" {
 			continue
 		}
 		t.Run(tc.ID, func(t *testing.T) {
-			result, err := service.Discover(DiscoverRequest{
+			result, err := service.FindKnowledge(FindKnowledgeRequest{
 				Project:           tc.Input.Project,
 				Phase:             tc.Input.Phase,
 				Task:              tc.Input.Task,
@@ -31,17 +31,18 @@ func TestGoldenDiscoveryCases(t *testing.T) {
 				Limit:             tc.Input.Limit,
 			})
 			if err != nil {
-				t.Fatalf("Discover returned error: %v", err)
+				t.Fatalf("FindKnowledge returned error: %v", err)
 			}
-			assertCoverage(t, result.Coverage, tc.Expected.Coverage, result.Items)
-			assertActionPolicyMatchesExpected(t, result.ActionPolicy, tc.Expected)
-			assertRecallMatchesExpected(t, result.Recall, tc.Expected)
-			assertCoverageGapsMatchExpected(t, result.CoverageGaps, tc.Expected.CoverageGapSources)
-			assertDiscoveryIDs(t, result.Items, tc.Expected.IncludeIDs, tc.Expected.ExcludeIDs)
+			assertSupport(t, result.Support, tc.Expected.Support, result.Items)
+			assertSupportLevelMatchesExpected(t, result.Support, tc.Expected, result.Items)
+			assertUsageMatchesExpected(t, result.Usage, tc.Expected)
+			assertSearchStatusMatchesExpected(t, result.SearchStatus, tc.Expected)
+			assertMissingNeedsMatchExpected(t, result.MissingNeeds, tc.Expected.MissingNeedSources)
+			assertKnowledgeIDs(t, result.Items, tc.Expected.IncludeIDs, tc.Expected.ExcludeIDs)
 			assertTopID(t, result.Items, tc.Expected.TopID)
-			assertNoDiscoveryBodies(t, result.Items, tc.Expected.NoBodies)
-			assertNextCalls(t, result.NextCalls, tc.Expected.RequireNextCallTools, tc.Expected.ForbidNextCallTools)
-			assertMissingHints(t, result.Coverage, tc.Expected.RequireMissingHints)
+			assertNoKnowledgeBodies(t, result.Items, tc.Expected.NoBodies)
+			assertNextSteps(t, result.NextSteps, tc.Expected.RequireNextStepTools, tc.Expected.ForbidNextStepTools)
+			assertMissingHints(t, result.Support, tc.Expected.RequireMissingHints)
 			assertWhyContains(t, result.Items, tc.Expected.WhyContains)
 			if tc.Expected.ItemsEmpty && len(result.Items) != 0 {
 				t.Fatalf("expected empty items, got %#v", result.Items)
@@ -50,71 +51,71 @@ func TestGoldenDiscoveryCases(t *testing.T) {
 	}
 }
 
-func TestGoldenMapCases(t *testing.T) {
+func TestGoldenListKnowledgeCases(t *testing.T) {
 	_, store := discoverytest.BuildIndexedWorkspace(t)
 	defer store.Close()
 	service := New(store)
 
 	for _, tc := range discoverytest.LoadCases(t) {
-		if tc.Operation != "map" {
+		if tc.Operation != "list" {
 			continue
 		}
 		t.Run(tc.ID, func(t *testing.T) {
-			result, err := service.Map(MapRequest{Project: tc.Input.Project})
+			result, err := service.ListKnowledge(ListKnowledgeRequest{Project: tc.Input.Project})
 			if err != nil {
-				t.Fatalf("Map returned error: %v", err)
+				t.Fatalf("ListKnowledge returned error: %v", err)
 			}
-			assertActionPolicyMatchesExpected(t, result.ActionPolicy, tc.Expected)
+			assertUsageMatchesExpected(t, result.Usage, tc.Expected)
 			assertInventoryMinimums(t, result.Inventory.Types, tc.Expected.InventoryTypesMin)
 			assertStringIncludes(t, result.Inventory.Domains, tc.Expected.IncludeDomains)
 			assertStringIncludes(t, result.Inventory.Tags, tc.Expected.IncludeTags)
-			assertMapIDs(t, result.Groups, tc.Expected.IncludeIDs, tc.Expected.ExcludeIDs)
-			assertNoMapBodies(t, result.Groups, tc.Expected.NoBodies)
+			assertListIDs(t, result.Groups, tc.Expected.IncludeIDs, tc.Expected.ExcludeIDs)
+			assertNoListBodies(t, result.Groups, tc.Expected.NoBodies)
 		})
 	}
 }
 
-func TestGoldenMapEmptyCase(t *testing.T) {
-	tc := discoverytest.CaseByID(t, discoverytest.LoadCases(t), "map_inventory_empty")
+func TestGoldenListKnowledgeEmptyCase(t *testing.T) {
+	tc := discoverytest.CaseByID(t, discoverytest.LoadCases(t), "list_inventory_empty")
 	if tc.Fixture != "empty" {
-		t.Fatalf("expected map_inventory_empty to use empty fixture, got %q", tc.Fixture)
+		t.Fatalf("expected list_inventory_empty to use empty fixture, got %q", tc.Fixture)
 	}
 	_, store := discoverytest.BuildIndexedEmptyWorkspace(t)
 	defer store.Close()
 	service := New(store)
 
-	result, err := service.Map(MapRequest{Project: tc.Input.Project})
+	result, err := service.ListKnowledge(ListKnowledgeRequest{Project: tc.Input.Project})
 	if err != nil {
-		t.Fatalf("Map returned error: %v", err)
+		t.Fatalf("ListKnowledge returned error: %v", err)
 	}
-	assertActionPolicyMatchesExpected(t, result.ActionPolicy, tc.Expected)
+	assertUsageMatchesExpected(t, result.Usage, tc.Expected)
 	if tc.Expected.GroupsEmpty && len(result.Groups) != 0 {
 		t.Fatalf("expected empty groups, got %#v", result.Groups)
 	}
-	assertNoMapBodies(t, result.Groups, tc.Expected.NoBodies)
+	assertNoListBodies(t, result.Groups, tc.Expected.NoBodies)
 }
 
-func TestGoldenDeprecatedMapCase(t *testing.T) {
+func TestGoldenDeprecatedListKnowledgeCase(t *testing.T) {
 	_, store := discoverytest.BuildIndexedWorkspace(t)
 	defer store.Close()
 	service := New(store)
-	tc := discoverytest.CaseByID(t, discoverytest.LoadCases(t), "map_hides_deprecated_by_default")
+	tc := discoverytest.CaseByID(t, discoverytest.LoadCases(t), "list_hides_deprecated_by_default")
 
-	result, err := service.Map(MapRequest{Project: tc.Input.Project, IncludeDeprecated: true})
+	result, err := service.ListKnowledge(ListKnowledgeRequest{Project: tc.Input.Project, IncludeDeprecated: true})
 	if err != nil {
-		t.Fatalf("Map returned error: %v", err)
+		t.Fatalf("ListKnowledge returned error: %v", err)
 	}
-	assertActionPolicyMatchesExpected(t, result.ActionPolicy, tc.Expected)
-	assertMapIDs(t, result.Groups, []string{tc.Expected.IncludeDeprecatedIDWhenRequested}, nil)
+	assertUsageMatchesExpected(t, result.Usage, tc.Expected)
+	assertListIDs(t, result.Groups, []string{tc.Expected.IncludeDeprecatedIDWhenRequested}, nil)
 }
 
-func TestGoldenProgressiveDisclosureAndCitationGuard(t *testing.T) {
+func TestGoldenProgressiveReadStatusAndCitationGuard(t *testing.T) {
 	_, store := discoverytest.BuildIndexedWorkspace(t)
 	defer store.Close()
 	service := New(store)
-	tc := discoverytest.CaseByID(t, discoverytest.LoadCases(t), "progressive_disclosure_and_citation_guard")
+	tc := discoverytest.CaseByID(t, discoverytest.LoadCases(t), "progressive_read_status_and_citation_guard")
 
-	discovered, err := service.Discover(DiscoverRequest{
+	found, err := service.FindKnowledge(FindKnowledgeRequest{
 		Project: tc.Input.Project,
 		Phase:   tc.Input.Phase,
 		Task:    tc.Input.Task,
@@ -123,14 +124,14 @@ func TestGoldenProgressiveDisclosureAndCitationGuard(t *testing.T) {
 		Limit:   tc.Input.Limit,
 	})
 	if err != nil {
-		t.Fatalf("Discover returned error: %v", err)
+		t.Fatalf("FindKnowledge returned error: %v", err)
 	}
-	assertNoDiscoveryBodies(t, discovered.Items, true)
+	assertNoKnowledgeBodies(t, found.Items, true)
 
 	for _, id := range tc.Expected.LoadIDs {
-		item, err := service.GetKnowledgeItem(id)
+		item, err := service.ReadKnowledge(id)
 		if err != nil {
-			t.Fatalf("GetKnowledgeItem(%s) returned error: %v", id, err)
+			t.Fatalf("ReadKnowledge(%s) returned error: %v", id, err)
 		}
 		if item.Body == "" {
 			t.Fatalf("expected full body for loaded ID %s", id)
@@ -145,64 +146,73 @@ func TestGoldenProgressiveDisclosureAndCitationGuard(t *testing.T) {
 	}
 }
 
-func assertCoverage(t *testing.T, got Coverage, want string, items []DiscoveryItem) {
+func assertSupport(t *testing.T, got Support, want string, items []KnowledgeSummary) {
 	t.Helper()
-	if want != "" && got.Status != want {
-		t.Fatalf("expected coverage %q, got %#v with items %#v", want, got, items)
+	if want != "" && got.Level != want {
+		t.Fatalf("expected support %q, got %#v with items %#v", want, got, items)
 	}
 }
 
-func assertActionPolicyMatchesExpected(t *testing.T, got ActionPolicy, expected discoverytest.Expected) {
+func assertSupportLevelMatchesExpected(t *testing.T, got Support, expected discoverytest.Expected, items []KnowledgeSummary) {
 	t.Helper()
-	if expected.ActionAuthority == "" {
+	if expected.SupportLevel == "" {
 		return
 	}
-	want := ActionPolicy{
-		Authority: expected.ActionAuthority,
-		Load:      expected.ActionLoad,
-		Cite:      expected.ActionCite,
-		Claim:     expected.ActionClaim,
+	if got.Level != expected.SupportLevel {
+		t.Fatalf("expected support level %q, got %#v with items %#v", expected.SupportLevel, got, items)
 	}
-	assertActionPolicy(t, got, want)
 }
 
-func assertRecallMatchesExpected(t *testing.T, got RecallState, expected discoverytest.Expected) {
+func assertUsageMatchesExpected(t *testing.T, got UsageGuidance, expected discoverytest.Expected) {
 	t.Helper()
-	if expected.RecallSemanticStatus == "" {
+	if expected.UsageRead == "" {
 		return
 	}
-	if got.Semantic.Status != expected.RecallSemanticStatus {
-		t.Fatalf("expected semantic recall status %q, got %#v", expected.RecallSemanticStatus, got)
+	want := UsageGuidance{
+		Read:  expected.UsageRead,
+		Cite:  expected.UsageCite,
+		Claim: expected.UsageClaim,
+	}
+	assertUsageGuidance(t, got, want)
+}
+
+func assertSearchStatusMatchesExpected(t *testing.T, got SearchStatus, expected discoverytest.Expected) {
+	t.Helper()
+	if expected.SearchSemanticStatus == "" {
+		return
+	}
+	if got.Semantic.Status != expected.SearchSemanticStatus {
+		t.Fatalf("expected semantic search status %q, got %#v", expected.SearchSemanticStatus, got)
 	}
 }
 
-func assertCoverageGapsMatchExpected(t *testing.T, got []CoverageGap, want []string) {
+func assertMissingNeedsMatchExpected(t *testing.T, got []MissingNeed, want []string) {
 	t.Helper()
 	if len(want) == 0 {
 		if len(got) != 0 {
-			t.Fatalf("expected no coverage gaps, got %#v", got)
+			t.Fatalf("expected no missing needs, got %#v", got)
 		}
 		return
 	}
-	assertCoverageGapSources(t, got, want)
+	assertMissingNeedSources(t, got, want)
 }
 
-func assertDiscoveryIDs(t *testing.T, items []DiscoveryItem, include []string, exclude []string) {
+func assertKnowledgeIDs(t *testing.T, items []KnowledgeSummary, include []string, exclude []string) {
 	t.Helper()
-	ids := discoveryIDs(items)
+	ids := knowledgeIDs(items)
 	for _, id := range include {
 		if !ids[id] {
-			t.Fatalf("expected discovery ID %s in %#v", id, items)
+			t.Fatalf("expected knowledge ID %s in %#v", id, items)
 		}
 	}
 	for _, id := range exclude {
 		if ids[id] {
-			t.Fatalf("did not expect discovery ID %s in %#v", id, items)
+			t.Fatalf("did not expect knowledge ID %s in %#v", id, items)
 		}
 	}
 }
 
-func assertTopID(t *testing.T, items []DiscoveryItem, want string) {
+func assertTopID(t *testing.T, items []KnowledgeSummary, want string) {
 	t.Helper()
 	if want == "" {
 		return
@@ -212,19 +222,19 @@ func assertTopID(t *testing.T, items []DiscoveryItem, want string) {
 	}
 }
 
-func assertNoDiscoveryBodies(t *testing.T, items []DiscoveryItem, required bool) {
+func assertNoKnowledgeBodies(t *testing.T, items []KnowledgeSummary, required bool) {
 	t.Helper()
 	if !required {
 		return
 	}
 	for _, item := range items {
 		if item.Body != "" {
-			t.Fatalf("discover returned body for %s", item.ID)
+			t.Fatalf("find returned body for %s", item.ID)
 		}
 	}
 }
 
-func assertNoMapBodies(t *testing.T, groups []MapGroup, required bool) {
+func assertNoListBodies(t *testing.T, groups []ListGroup, required bool) {
 	t.Helper()
 	if !required {
 		return
@@ -232,38 +242,38 @@ func assertNoMapBodies(t *testing.T, groups []MapGroup, required bool) {
 	for _, group := range groups {
 		for _, item := range group.Items {
 			if item.Body != "" {
-				t.Fatalf("map returned body for %s", item.ID)
+				t.Fatalf("list returned body for %s", item.ID)
 			}
 		}
 	}
 }
 
-func assertNextCalls(t *testing.T, calls []RecommendedCall, require []string, forbid []string) {
+func assertNextSteps(t *testing.T, steps []NextStep, require []string, forbid []string) {
 	t.Helper()
 	tools := map[string]bool{}
-	for _, call := range calls {
-		tools[call.Tool] = true
+	for _, step := range steps {
+		tools[step.Tool] = true
 	}
 	for _, tool := range require {
 		if !tools[tool] {
-			t.Fatalf("expected next call %s in %#v", tool, calls)
+			t.Fatalf("expected next step %s in %#v", tool, steps)
 		}
 	}
 	for _, tool := range forbid {
 		if tools[tool] {
-			t.Fatalf("did not expect next call %s in %#v", tool, calls)
+			t.Fatalf("did not expect next step %s in %#v", tool, steps)
 		}
 	}
 }
 
-func assertMissingHints(t *testing.T, coverage Coverage, required bool) {
+func assertMissingHints(t *testing.T, support Support, required bool) {
 	t.Helper()
-	if required && len(coverage.MissingKnowledgeHints) == 0 {
-		t.Fatalf("expected missing knowledge hints in %#v", coverage)
+	if required && len(support.MissingKnowledgeHints) == 0 {
+		t.Fatalf("expected missing knowledge hints in %#v", support)
 	}
 }
 
-func assertWhyContains(t *testing.T, items []DiscoveryItem, fragments []string) {
+func assertWhyContains(t *testing.T, items []KnowledgeSummary, fragments []string) {
 	t.Helper()
 	for _, fragment := range fragments {
 		found := false
@@ -302,7 +312,7 @@ func assertStringIncludes(t *testing.T, got []string, include []string) {
 	}
 }
 
-func assertMapIDs(t *testing.T, groups []MapGroup, include []string, exclude []string) {
+func assertListIDs(t *testing.T, groups []ListGroup, include []string, exclude []string) {
 	t.Helper()
 	ids := map[string]bool{}
 	for _, group := range groups {
@@ -312,17 +322,17 @@ func assertMapIDs(t *testing.T, groups []MapGroup, include []string, exclude []s
 	}
 	for _, id := range include {
 		if !ids[id] {
-			t.Fatalf("expected map ID %s in %#v", id, groups)
+			t.Fatalf("expected list ID %s in %#v", id, groups)
 		}
 	}
 	for _, id := range exclude {
 		if ids[id] {
-			t.Fatalf("did not expect map ID %s in %#v", id, groups)
+			t.Fatalf("did not expect list ID %s in %#v", id, groups)
 		}
 	}
 }
 
-func discoveryIDs(items []DiscoveryItem) map[string]bool {
+func knowledgeIDs(items []KnowledgeSummary) map[string]bool {
 	ids := map[string]bool{}
 	for _, item := range items {
 		ids[item.ID] = true

@@ -1,14 +1,14 @@
 {
   "cases": [
     {
-      "id": "map_inventory_normal",
-      "operation": "map",
+      "id": "list_inventory_normal",
+      "operation": "list",
       "input": {"project": "mall-api"},
       "expected": {
-        "action_authority": "inventory",
-        "action_load": "forbidden",
-        "action_cite": "forbidden",
-        "action_claim": "forbidden",
+        "support_level": "inventory",
+        "usage_read": "forbidden",
+        "usage_cite": "forbidden",
+        "usage_claim": "forbidden",
         "inventory_types_min": {"rule": 2, "package": 1},
         "include_domains": ["backend", "security"],
         "include_tags": ["auth", "refresh-token"],
@@ -17,42 +17,42 @@
       }
     },
     {
-      "id": "map_inventory_empty",
+      "id": "list_inventory_empty",
       "fixture": "empty",
-      "operation": "map-empty",
+      "operation": "list-empty",
       "input": {"project": "unknown-api"},
       "expected": {
-        "action_authority": "inventory",
-        "action_load": "forbidden",
-        "action_cite": "forbidden",
-        "action_claim": "forbidden",
+        "support_level": "inventory",
+        "usage_read": "forbidden",
+        "usage_cite": "forbidden",
+        "usage_claim": "forbidden",
         "groups_empty": true,
         "no_bodies": true
       }
     },
     {
-      "id": "map_hides_deprecated_by_default",
-      "operation": "map",
+      "id": "list_hides_deprecated_by_default",
+      "operation": "list",
       "input": {"project": "mall-api"},
       "expected": {
-        "action_authority": "inventory",
-        "action_load": "forbidden",
-        "action_cite": "forbidden",
-        "action_claim": "forbidden",
+        "support_level": "inventory",
+        "usage_read": "forbidden",
+        "usage_cite": "forbidden",
+        "usage_claim": "forbidden",
         "exclude_ids": ["rule:backend.deprecated-auth.v1"],
         "include_deprecated_id_when_requested": "rule:backend.deprecated-auth.v1",
         "no_bodies": true
       }
     },
     {
-      "id": "map_global_knowledge_visible",
-      "operation": "map",
+      "id": "list_global_knowledge_visible",
+      "operation": "list",
       "input": {"project": "mall-api"},
       "expected": {
-        "action_authority": "inventory",
-        "action_load": "forbidden",
-        "action_cite": "forbidden",
-        "action_claim": "forbidden",
+        "support_level": "inventory",
+        "usage_read": "forbidden",
+        "usage_cite": "forbidden",
+        "usage_claim": "forbidden",
         "include_ids": ["reference:backend.global-refresh.v1"],
         "exclude_ids": ["rule:warehouse.auth.v1"],
         "no_bodies": true
@@ -60,7 +60,7 @@
     },
     {
       "id": "strong_auth_refresh_full_signal",
-      "operation": "discover",
+      "operation": "find",
       "input": {
         "project": "mall-api",
         "phase": "implementation",
@@ -70,22 +70,22 @@
         "limit": 5
       },
       "expected": {
-        "coverage": "strong",
-        "action_authority": "strong",
-        "action_load": "recommended",
-        "action_cite": "after_loaded_and_used",
-        "action_claim": "allowed",
-        "recall_semantic_status": "disabled",
+        "support": "strong",
+        "support_level": "strong",
+        "usage_read": "recommended",
+        "usage_cite": "after_read_and_used",
+        "usage_claim": "allowed",
+        "search_semantic_status": "disabled",
         "top_id": "rule:backend.auth-refresh.v1",
         "include_ids": ["rule:backend.auth-refresh.v1", "decision:backend.session-renewal.v1"],
         "exclude_ids": ["rule:backend.deprecated-auth.v1"],
-        "require_next_call_tools": ["get_knowledge_item"],
+        "require_next_step_tools": ["argos_read_knowledge"],
         "no_bodies": true
       }
     },
     {
       "id": "strong_auth_refresh_query_only",
-      "operation": "discover",
+      "operation": "find",
       "input": {
         "project": "mall-api",
         "phase": "planning",
@@ -93,12 +93,12 @@
         "limit": 5
       },
       "expected": {
-        "coverage": "strong",
-        "action_authority": "strong",
-        "action_load": "recommended",
-        "action_cite": "after_loaded_and_used",
-        "action_claim": "allowed",
-        "recall_semantic_status": "disabled",
+        "support": "strong",
+        "support_level": "strong",
+        "usage_read": "recommended",
+        "usage_cite": "after_read_and_used",
+        "usage_claim": "allowed",
+        "search_semantic_status": "disabled",
         "include_ids": ["rule:backend.auth-refresh.v1"],
         "exclude_ids": ["reference:backend.cache-policy.v1"],
         "no_bodies": true
@@ -106,7 +106,7 @@
     },
     {
       "id": "strong_auth_refresh_task_only",
-      "operation": "discover",
+      "operation": "find",
       "input": {
         "project": "mall-api",
         "phase": "implementation",
@@ -114,12 +114,12 @@
         "limit": 5
       },
       "expected": {
-        "coverage": "strong",
-        "action_authority": "strong",
-        "action_load": "recommended",
-        "action_cite": "after_loaded_and_used",
-        "action_claim": "allowed",
-        "recall_semantic_status": "disabled",
+        "support": "strong",
+        "support_level": "strong",
+        "usage_read": "recommended",
+        "usage_cite": "after_read_and_used",
+        "usage_claim": "allowed",
+        "search_semantic_status": "disabled",
         "include_ids": ["rule:backend.auth-refresh.v1"],
         "exclude_ids": ["reference:backend.cache-policy.v1"],
         "no_bodies": true
@@ -127,7 +127,7 @@
     },
     {
       "id": "strong_file_scope_beats_generic",
-      "operation": "discover",
+      "operation": "find",
       "input": {
         "project": "mall-api",
         "phase": "implementation",
@@ -137,12 +137,12 @@
         "limit": 5
       },
       "expected": {
-        "coverage": "strong",
-        "action_authority": "strong",
-        "action_load": "recommended",
-        "action_cite": "after_loaded_and_used",
-        "action_claim": "allowed",
-        "recall_semantic_status": "disabled",
+        "support": "strong",
+        "support_level": "strong",
+        "usage_read": "recommended",
+        "usage_cite": "after_read_and_used",
+        "usage_claim": "allowed",
+        "search_semantic_status": "disabled",
         "top_id": "rule:backend.auth-refresh.v1",
         "include_ids": ["rule:backend.generic.v1"],
         "why_contains": ["file scope matched"],
@@ -151,7 +151,7 @@
     },
     {
       "id": "partial_domain_without_task_detail",
-      "operation": "discover",
+      "operation": "find",
       "input": {
         "project": "mall-api",
         "phase": "implementation",
@@ -161,13 +161,13 @@
         "limit": 5
       },
       "expected": {
-        "coverage": "partial",
-        "action_authority": "partial",
-        "action_load": "allowed",
-        "action_cite": "after_loaded_and_used",
-        "action_claim": "must_separate_argos_backed_and_general_reasoning",
-        "recall_semantic_status": "disabled",
-        "coverage_gap_sources": ["partial_match"],
+        "support": "partial",
+        "support_level": "partial",
+        "usage_read": "allowed",
+        "usage_cite": "after_read_and_used",
+        "usage_claim": "must_separate_argos_backed_and_general_reasoning",
+        "search_semantic_status": "disabled",
+        "missing_need_sources": ["partial_match"],
         "include_ids": ["reference:backend.cache-policy.v1"],
         "require_missing_hints": true,
         "no_bodies": true
@@ -175,7 +175,7 @@
     },
     {
       "id": "partial_lesson_without_rule",
-      "operation": "discover",
+      "operation": "find",
       "input": {
         "project": "mall-api",
         "phase": "debugging",
@@ -184,13 +184,13 @@
         "limit": 5
       },
       "expected": {
-        "coverage": "partial",
-        "action_authority": "partial",
-        "action_load": "allowed",
-        "action_cite": "after_loaded_and_used",
-        "action_claim": "must_separate_argos_backed_and_general_reasoning",
-        "recall_semantic_status": "disabled",
-        "coverage_gap_sources": ["partial_match"],
+        "support": "partial",
+        "support_level": "partial",
+        "usage_read": "allowed",
+        "usage_cite": "after_read_and_used",
+        "usage_claim": "must_separate_argos_backed_and_general_reasoning",
+        "search_semantic_status": "disabled",
+        "missing_need_sources": ["partial_match"],
         "include_ids": ["lesson:backend.auth-debug.v1"],
         "require_missing_hints": true,
         "no_bodies": true
@@ -198,7 +198,7 @@
     },
     {
       "id": "partial_package_entrypoint_without_detail",
-      "operation": "discover",
+      "operation": "find",
       "input": {
         "project": "mall-api",
         "phase": "planning",
@@ -208,13 +208,13 @@
         "limit": 5
       },
       "expected": {
-        "coverage": "partial",
-        "action_authority": "partial",
-        "action_load": "allowed",
-        "action_cite": "after_loaded_and_used",
-        "action_claim": "must_separate_argos_backed_and_general_reasoning",
-        "recall_semantic_status": "disabled",
-        "coverage_gap_sources": ["partial_match"],
+        "support": "partial",
+        "support_level": "partial",
+        "usage_read": "allowed",
+        "usage_cite": "after_read_and_used",
+        "usage_claim": "must_separate_argos_backed_and_general_reasoning",
+        "search_semantic_status": "disabled",
+        "missing_need_sources": ["partial_match"],
         "include_ids": ["package:backend.auth-refresh.v1"],
         "exclude_ids": ["references/example.md"],
         "no_bodies": true
@@ -222,7 +222,7 @@
     },
     {
       "id": "weak_single_generic_term",
-      "operation": "discover",
+      "operation": "find",
       "input": {
         "project": "mall-api",
         "phase": "implementation",
@@ -231,20 +231,20 @@
         "limit": 5
       },
       "expected": {
-        "coverage": "weak",
-        "action_authority": "weak",
-        "action_load": "forbidden",
-        "action_cite": "forbidden",
-        "action_claim": "forbidden",
-        "recall_semantic_status": "disabled",
-        "coverage_gap_sources": ["weak_match"],
-        "forbid_next_call_tools": ["get_knowledge_item", "cite_knowledge"],
+        "support": "weak",
+        "support_level": "weak",
+        "usage_read": "forbidden",
+        "usage_cite": "forbidden",
+        "usage_claim": "forbidden",
+        "search_semantic_status": "disabled",
+        "missing_need_sources": ["weak_match"],
+        "forbid_next_step_tools": ["argos_read_knowledge", "argos_cite_knowledge"],
         "no_bodies": true
       }
     },
     {
       "id": "weak_broad_tag_only",
-      "operation": "discover",
+      "operation": "find",
       "input": {
         "project": "mall-api",
         "phase": "implementation",
@@ -254,20 +254,20 @@
         "limit": 5
       },
       "expected": {
-        "coverage": "weak",
-        "action_authority": "weak",
-        "action_load": "forbidden",
-        "action_cite": "forbidden",
-        "action_claim": "forbidden",
-        "recall_semantic_status": "disabled",
-        "coverage_gap_sources": ["weak_match"],
-        "forbid_next_call_tools": ["get_knowledge_item", "cite_knowledge"],
+        "support": "weak",
+        "support_level": "weak",
+        "usage_read": "forbidden",
+        "usage_cite": "forbidden",
+        "usage_claim": "forbidden",
+        "search_semantic_status": "disabled",
+        "missing_need_sources": ["weak_match"],
+        "forbid_next_step_tools": ["argos_read_knowledge", "argos_cite_knowledge"],
         "no_bodies": true
       }
     },
     {
       "id": "none_payment_webhook",
-      "operation": "discover",
+      "operation": "find",
       "input": {
         "project": "mall-api",
         "phase": "implementation",
@@ -276,21 +276,21 @@
         "limit": 5
       },
       "expected": {
-        "coverage": "none",
-        "action_authority": "none",
-        "action_load": "forbidden",
-        "action_cite": "forbidden",
-        "action_claim": "forbidden",
-        "recall_semantic_status": "disabled",
-        "coverage_gap_sources": ["unmatched_intent"],
+        "support": "none",
+        "support_level": "none",
+        "usage_read": "forbidden",
+        "usage_cite": "forbidden",
+        "usage_claim": "forbidden",
+        "search_semantic_status": "disabled",
+        "missing_need_sources": ["not_found"],
         "items_empty": true,
-        "forbid_next_call_tools": ["get_knowledge_item", "cite_knowledge"],
+        "forbid_next_step_tools": ["argos_read_knowledge", "argos_cite_knowledge"],
         "no_bodies": true
       }
     },
     {
       "id": "none_project_scope_mismatch",
-      "operation": "discover",
+      "operation": "find",
       "input": {
         "project": "mall-api",
         "phase": "implementation",
@@ -299,21 +299,21 @@
         "limit": 5
       },
       "expected": {
-        "coverage": "none",
-        "action_authority": "none",
-        "action_load": "forbidden",
-        "action_cite": "forbidden",
-        "action_claim": "forbidden",
-        "recall_semantic_status": "disabled",
-        "coverage_gap_sources": ["cross_domain_mismatch"],
+        "support": "none",
+        "support_level": "none",
+        "usage_read": "forbidden",
+        "usage_cite": "forbidden",
+        "usage_claim": "forbidden",
+        "search_semantic_status": "disabled",
+        "missing_need_sources": ["wrong_scope"],
         "exclude_ids": ["rule:warehouse.auth.v1"],
-        "forbid_next_call_tools": ["get_knowledge_item", "cite_knowledge"],
+        "forbid_next_step_tools": ["argos_read_knowledge", "argos_cite_knowledge"],
         "no_bodies": true
       }
     },
     {
       "id": "none_explicit_filter_excludes_match",
-      "operation": "discover",
+      "operation": "find",
       "input": {
         "project": "mall-api",
         "phase": "implementation",
@@ -323,20 +323,20 @@
         "limit": 5
       },
       "expected": {
-        "coverage": "none",
-        "action_authority": "none",
-        "action_load": "forbidden",
-        "action_cite": "forbidden",
-        "action_claim": "forbidden",
-        "recall_semantic_status": "disabled",
-        "coverage_gap_sources": ["filter_excluded"],
+        "support": "none",
+        "support_level": "none",
+        "usage_read": "forbidden",
+        "usage_cite": "forbidden",
+        "usage_claim": "forbidden",
+        "search_semantic_status": "disabled",
+        "missing_need_sources": ["filtered_out"],
         "items_empty": true,
-        "forbid_next_call_tools": ["get_knowledge_item", "cite_knowledge"],
+        "forbid_next_step_tools": ["argos_read_knowledge", "argos_cite_knowledge"],
         "no_bodies": true
       }
     },
     {
-      "id": "progressive_disclosure_and_citation_guard",
+      "id": "progressive_read_status_and_citation_guard",
       "operation": "workflow",
       "input": {
         "project": "mall-api",
@@ -347,12 +347,12 @@
         "limit": 5
       },
       "expected": {
-        "coverage": "strong",
-        "action_authority": "strong",
-        "action_load": "recommended",
-        "action_cite": "after_loaded_and_used",
-        "action_claim": "allowed",
-        "recall_semantic_status": "disabled",
+        "support": "strong",
+        "support_level": "strong",
+        "usage_read": "recommended",
+        "usage_cite": "after_read_and_used",
+        "usage_claim": "allowed",
+        "search_semantic_status": "disabled",
         "include_ids": ["rule:backend.auth-refresh.v1"],
         "load_ids": ["rule:backend.auth-refresh.v1"],
         "cite_ids": ["rule:backend.auth-refresh.v1"],
@@ -360,8 +360,8 @@
       }
     },
     {
-      "id": "interface_cli_discover_matches_query",
-      "operation": "cli-discover",
+      "id": "interface_cli_find_matches_query",
+      "operation": "cli-find",
       "input": {
         "project": "mall-api",
         "phase": "implementation",
@@ -371,25 +371,25 @@
         "limit": 5
       },
       "expected": {
-        "coverage": "strong",
-        "action_authority": "strong",
-        "action_load": "recommended",
-        "action_cite": "after_loaded_and_used",
-        "action_claim": "allowed",
-        "recall_semantic_status": "disabled",
+        "support": "strong",
+        "support_level": "strong",
+        "usage_read": "recommended",
+        "usage_cite": "after_read_and_used",
+        "usage_claim": "allowed",
+        "search_semantic_status": "disabled",
         "include_ids": ["rule:backend.auth-refresh.v1"],
         "no_bodies": true
       }
     },
     {
-      "id": "interface_cli_map_matches_query",
-      "operation": "cli-map",
+      "id": "interface_cli_list_matches_query",
+      "operation": "cli-list",
       "input": {"project": "mall-api"},
       "expected": {
-        "action_authority": "inventory",
-        "action_load": "forbidden",
-        "action_cite": "forbidden",
-        "action_claim": "forbidden",
+        "support_level": "inventory",
+        "usage_read": "forbidden",
+        "usage_cite": "forbidden",
+        "usage_claim": "forbidden",
         "inventory_types_min": {"rule": 2, "package": 1},
         "include_ids": ["package:backend.auth-refresh.v1"],
         "no_bodies": true
