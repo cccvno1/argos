@@ -2,123 +2,201 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Rename Argos shared-knowledge discovery surfaces to plain professional language: list/find/read/cite, support, missing_needs, usage, search_status, read_status, and next_steps.
+**Goal:** Complete one coherent naming migration for Argos shared-knowledge discovery so public surfaces read as list/find/read/cite, support, missing_needs, usage, search_status, read_status, and next_steps.
 
-**Architecture:** Keep the existing search, ranking, support-level, and citation behavior unchanged. This is a naming migration across query response types, MCP tools, CLI commands, golden fixtures, adapters, and active guidance documents. Because Argos is still in development, old development-stage names are removed from active public surfaces instead of preserved as long-term aliases.
+**Architecture:** Keep storage, ranking, validation, indexing, and citation behavior unchanged. Start by adding an active-surface retired-name guard, then migrate query/golden models, MCP tools, CLI commands, adapters, README, active specs, templates, and checklists. Old development-stage names are removed from active public surfaces; historical plans and reports may keep them as record.
 
-**Tech Stack:** Go, MCP JSON-RPC over stdio, Cobra-free internal CLI, JSON golden fixtures, Markdown specs/templates/checklists.
+**Tech Stack:** Go, JSON golden fixtures, MCP JSON-RPC over stdio, internal CLI, Markdown docs/templates/checklists, `rg`-backed retired-name verification.
 
 ---
 
 ## File Structure
 
-- Modify `internal/query/query.go`: rename response types, JSON fields, helper functions, returned tool names, and user-facing reason strings.
-- Modify `internal/query/query_test.go`: update unit tests to the new names and add active-surface negative checks.
-- Modify `internal/query/discovery_golden_test.go`: update golden assertions from coverage/action policy/recall/disclosure naming to support/usage/search/read naming.
-- Modify `internal/discoverytest/golden.go`: rename expected fixture fields from coverage-oriented names to support-oriented names.
-- Modify `internal/discoverytest/golden_test.go`: update fixture sanity tests.
-- Modify `testdata/discovery-golden/cases.json`: rename operations and expected fields.
-- Modify `internal/mcp/server.go`: expose new MCP tool names and error messages.
-- Modify `internal/mcp/server_test.go`: update schema/call/error tests and add rejection tests for old tool names.
-- Modify `internal/cli/cli.go`: rename CLI commands to `knowledge list/find/read/cite` or, if keeping the current flat command style for one slice, at minimum rename `discover` to `find` and `map` to `list`.
-- Modify `internal/cli/cli_test.go` and `internal/cli/discovery_golden_test.go`: update CLI tests.
-- Modify `cmd/argos/e2e_test.go`: update any CLI help or command expectations.
-- Modify `internal/adapters/adapters.go`: teach list/find/read/cite and the new JSON field names.
-- Modify `internal/adapters/adapters_test.go`: update adapter output assertions and retired-name scans.
-- Modify `docs/superpowers/templates/argos-discovery-dogfood-report.md`: rename report labels.
-- Modify `docs/superpowers/checklists/2026-04-30-argos-discovery-dogfood-checklist.md`: rename dogfood workflow.
+- Modify `internal/query/query.go`: rename request/response types, JSON fields, helper functions, returned tool names, read status, missing-need source values, and user-facing reason strings.
+- Modify `internal/query/query_test.go`: update unit tests to new names and add JSON negative assertions.
+- Modify `internal/query/discovery_golden_test.go`: update golden assertions to support/usage/search/read naming.
+- Modify `internal/discoverytest/golden.go`: rename expected fixture fields from coverage/action/recall/next-call terms to support/usage/search/next-step terms.
+- Modify `internal/discoverytest/golden_test.go`: update fixture sanity tests and renamed case IDs.
+- Modify `testdata/discovery-golden/cases.json`: rename operations, expected fields, old tool names, and old missing-need source values.
+- Modify `internal/mcp/server.go`: expose new MCP tools and reject old tool names.
+- Modify `internal/mcp/server_test.go`: update schemas/calls/errors and add old-tool rejection tests.
+- Modify `internal/cli/cli.go`: replace `discover` and `map` with `knowledge find/list/read/cite`.
+- Modify `internal/cli/cli_test.go` and `internal/cli/discovery_golden_test.go`: update command tests and JSON shape assertions.
+- Modify `cmd/argos/e2e_test.go`: update end-to-end command expectations.
+- Modify `internal/adapters/adapters.go`: teach list/find/read/cite and new JSON names.
+- Modify `internal/adapters/adapters_test.go`: assert new adapter text and retired-name absence.
+- Modify `README.md`: update Discovery, MCP, and Agent/Internal Commands sections to the new vocabulary.
+- Modify `docs/superpowers/templates/argos-discovery-dogfood-report.md`: rename report labels to support/missing-needs/search/read language.
+- Modify `docs/superpowers/checklists/2026-04-30-argos-discovery-dogfood-checklist.md`: rename dogfood workflow and tool names.
 - Modify active specs:
   - `docs/superpowers/specs/2026-04-30-argos-discovery-layer-design.md`
   - `docs/superpowers/specs/2026-04-30-argos-discovery-validation-harness-design.md`
   - `docs/superpowers/specs/2026-04-30-argos-shared-knowledge-discovery-semantics-design.md`
   - `docs/superpowers/specs/2026-04-30-argos-naming-audit-design.md`
 
+Historical implementation plans and reports under `docs/superpowers/plans/` and `docs/superpowers/reports/` may retain old terminology except this plan and active templates/checklists/specs.
+
 ---
 
-### Task 1: Update Golden Fixture Vocabulary
+### Task 0: Add Retired-Name Guard First
 
 **Files:**
-- Modify: `testdata/discovery-golden/cases.json`
+- Modify: `internal/query/query_test.go`
+
+- [ ] **Step 1: Add an active-surface retired-name test**
+
+Add this test to `internal/query/query_test.go`:
+
+```go
+func TestActiveSurfacesDoNotUseRetiredSharedKnowledgeNames(t *testing.T) {
+	retired := []string{
+		"argos_map",
+		"argos_discover",
+		"get_knowledge_item",
+		"coverage_gaps",
+		"CoverageGap",
+		"action_policy",
+		"ActionPolicy",
+		"authority",
+		"recall",
+		"RecallState",
+		"disclosure",
+		"Disclosure",
+		"next_calls",
+		"RecommendedCall",
+	}
+	root := repoRootForActiveSurfaceTest(t)
+	activeRoots := []string{
+		"README.md",
+		"internal",
+		"testdata",
+		"docs/superpowers/templates",
+		"docs/superpowers/checklists",
+		"docs/superpowers/specs/2026-04-30-argos-discovery-layer-design.md",
+		"docs/superpowers/specs/2026-04-30-argos-discovery-validation-harness-design.md",
+		"docs/superpowers/specs/2026-04-30-argos-shared-knowledge-discovery-semantics-design.md",
+	}
+
+	for _, rel := range activeRoots {
+		body := readActiveSurface(t, filepath.Join(root, rel))
+		for _, term := range retired {
+			if strings.Contains(body, term) {
+				t.Fatalf("active surface %s contains retired term %q", rel, term)
+			}
+		}
+	}
+}
+
+func repoRootForActiveSurfaceTest(t *testing.T) string {
+	t.Helper()
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("resolve test file path")
+	}
+	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
+}
+
+func readActiveSurface(t *testing.T, path string) string {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat active surface %s: %v", path, err)
+	}
+	if !info.IsDir() {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read active surface %s: %v", path, err)
+		}
+		return string(data)
+	}
+	var builder strings.Builder
+	err = filepath.WalkDir(path, func(file string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || !strings.HasSuffix(file, ".md") && !strings.HasSuffix(file, ".go") && !strings.HasSuffix(file, ".json") {
+			return nil
+		}
+		data, err := os.ReadFile(file)
+		if err != nil {
+			return err
+		}
+		builder.WriteString("\n")
+		builder.Write(data)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk active surface %s: %v", path, err)
+	}
+	return builder.String()
+}
+```
+
+Also add imports used by the test:
+
+```go
+import (
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+
+	"argos/internal/discoverytest"
+)
+```
+
+- [ ] **Step 2: Run the guard and confirm it fails before migration**
+
+Run:
+
+```bash
+go test ./internal/query -run TestActiveSurfacesDoNotUseRetiredSharedKnowledgeNames -count=1
+```
+
+Expected: FAIL with at least one retired term such as `argos_discover`, `coverage_gaps`, or `action_policy`.
+
+- [ ] **Step 3: Commit the failing guard**
+
+```bash
+git add internal/query/query_test.go
+git commit -m "test: guard retired shared knowledge names"
+```
+
+---
+
+### Task 1: Rename Query Model And Golden Vocabulary
+
+**Files:**
+- Modify: `internal/query/query.go`
+- Modify: `internal/query/query_test.go`
+- Modify: `internal/query/discovery_golden_test.go`
 - Modify: `internal/discoverytest/golden.go`
 - Modify: `internal/discoverytest/golden_test.go`
+- Modify: `testdata/discovery-golden/cases.json`
 
-- [ ] **Step 1: Rename fixture expectation fields**
+- [ ] **Step 1: Rename golden fixture fields and operations**
 
-In `testdata/discovery-golden/cases.json`, rename only test metadata fields, not knowledge IDs or prose unless the prose is active guidance:
+In `testdata/discovery-golden/cases.json`, apply these JSON key/value migrations:
 
-```json
-"coverage": "strong"
+```text
+"operation": "map" -> "operation": "list"
+"operation": "map-empty" -> "operation": "list-empty"
+"operation": "discover" -> "operation": "find"
+"operation": "cli-map" -> "operation": "cli-list"
+"operation": "cli-discover" -> "operation": "cli-find"
+"coverage" -> "support"
+"action_authority" -> "support_level"
+"action_load" -> "usage_read"
+"action_cite" -> "usage_cite"
+"action_claim" -> "usage_claim"
+"recall_semantic_status" -> "search_semantic_status"
+"coverage_gap_sources" -> "missing_need_sources"
+"require_next_call_tools" -> "require_next_step_tools"
+"forbid_next_call_tools" -> "forbid_next_step_tools"
 ```
 
-becomes:
-
-```json
-"support": "strong"
-```
-
-```json
-"coverage_gap_sources": ["partial_match"]
-```
-
-becomes:
-
-```json
-"missing_need_sources": ["partial_match"]
-```
-
-```json
-"recall_semantic_status": "disabled"
-```
-
-becomes:
-
-```json
-"search_semantic_status": "disabled"
-```
-
-Rename operation values:
-
-```json
-"operation": "map"
-```
-
-to:
-
-```json
-"operation": "list"
-```
-
-```json
-"operation": "discover"
-```
-
-to:
-
-```json
-"operation": "find"
-```
-
-```json
-"operation": "cli-map"
-```
-
-to:
-
-```json
-"operation": "cli-list"
-```
-
-```json
-"operation": "cli-discover"
-```
-
-to:
-
-```json
-"operation": "cli-find"
-```
-
-Keep case IDs unchanged in this first task unless they contain old tool names. For case IDs that do contain old names, rename:
+Rename case IDs that contain old operation names:
 
 ```text
 map_inventory_normal -> list_inventory_normal
@@ -129,123 +207,79 @@ interface_cli_discover_matches_query -> interface_cli_find_matches_query
 interface_cli_map_matches_query -> interface_cli_list_matches_query
 ```
 
-- [ ] **Step 2: Update the fixture loader struct**
+Replace expected tool names in fixture arrays:
 
-In `internal/discoverytest/golden.go`, change:
-
-```go
-type Expected struct {
-	Coverage                         string         `json:"coverage"`
-	TopID                            string         `json:"top_id"`
-	IncludeIDs                       []string       `json:"include_ids"`
-	ExcludeIDs                       []string       `json:"exclude_ids"`
-	RequireNextCallTools             []string       `json:"require_next_call_tools"`
-	ForbidNextCallTools              []string       `json:"forbid_next_call_tools"`
-	RequireMissingHints              bool           `json:"require_missing_hints"`
-	RequireActionClaim               string         `json:"require_action_claim"`
-	RecallSemanticStatus             string         `json:"recall_semantic_status"`
-	CoverageGapSources               []string       `json:"coverage_gap_sources"`
-	NoBodies                         bool           `json:"no_bodies"`
-	CiteIDs                          []string       `json:"cite_ids"`
-	InventoryTypesMin                map[string]int `json:"inventory_types_min"`
-	IncludeDeprecated                bool           `json:"include_deprecated"`
-	RequireWhyContains               []string       `json:"require_why_contains"`
-	RequireRecommendedActions        []string       `json:"require_recommended_actions"`
-	RequireAdapterRecommendations    []string       `json:"require_adapter_recommendations"`
-	ForbidAdapterRecommendations     []string       `json:"forbid_adapter_recommendations"`
-}
+```text
+get_knowledge_item -> argos_read_knowledge
+cite_knowledge -> argos_cite_knowledge
 ```
 
-to:
+Replace missing-need source values:
+
+```text
+unmatched_intent -> not_found
+filter_excluded -> filtered_out
+conflicting_shared_knowledge -> conflict
+cross_domain_mismatch -> wrong_scope
+```
+
+- [ ] **Step 2: Update fixture structs**
+
+In `internal/discoverytest/golden.go`, update `Expected` to:
 
 ```go
 type Expected struct {
 	Support                         string         `json:"support"`
+	SupportLevel                    string         `json:"support_level"`
+	UsageRead                       string         `json:"usage_read"`
+	UsageCite                       string         `json:"usage_cite"`
+	UsageClaim                      string         `json:"usage_claim"`
+	SearchSemanticStatus            string         `json:"search_semantic_status"`
+	MissingNeedSources              []string       `json:"missing_need_sources"`
 	TopID                           string         `json:"top_id"`
 	IncludeIDs                      []string       `json:"include_ids"`
 	ExcludeIDs                      []string       `json:"exclude_ids"`
+	LoadIDs                         []string       `json:"load_ids"`
+	CiteIDs                         []string       `json:"cite_ids"`
+	IncludeDomains                  []string       `json:"include_domains"`
+	IncludeTags                     []string       `json:"include_tags"`
+	IncludeText                     []string       `json:"include_text"`
+	ExcludeText                     []string       `json:"exclude_text"`
+	InventoryTypesMin               map[string]int `json:"inventory_types_min"`
+	IncludeDeprecatedIDWhenRequested string        `json:"include_deprecated_id_when_requested"`
 	RequireNextStepTools            []string       `json:"require_next_step_tools"`
 	ForbidNextStepTools             []string       `json:"forbid_next_step_tools"`
-	RequireMissingHints             bool           `json:"require_missing_hints"`
-	RequireUsageClaim               string         `json:"require_usage_claim"`
-	SearchSemanticStatus            string         `json:"search_semantic_status"`
-	MissingNeedSources              []string       `json:"missing_need_sources"`
+	WhyContains                     []string       `json:"why_contains"`
 	NoBodies                        bool           `json:"no_bodies"`
-	CiteIDs                         []string       `json:"cite_ids"`
-	InventoryTypesMin               map[string]int `json:"inventory_types_min"`
-	IncludeDeprecated               bool           `json:"include_deprecated"`
-	RequireWhyContains              []string       `json:"require_why_contains"`
-	RequireRecommendedSteps         []string       `json:"require_recommended_steps"`
-	RequireAdapterRecommendations   []string       `json:"require_adapter_recommendations"`
-	ForbidAdapterRecommendations    []string       `json:"forbid_adapter_recommendations"`
+	GroupsEmpty                     bool           `json:"groups_empty"`
+	ItemsEmpty                      bool           `json:"items_empty"`
+	RequireMissingHints             bool           `json:"require_missing_hints"`
+	RejectUnknownArguments          bool           `json:"reject_unknown_arguments"`
+	RejectMissingTaskAndQuery       bool           `json:"reject_missing_task_and_query"`
+	RejectOutOfRangeLimit           bool           `json:"reject_out_of_range_limit"`
 }
 ```
 
-- [ ] **Step 3: Update fixture sanity tests**
+- [ ] **Step 3: Rename query public types and JSON fields**
 
-In `internal/discoverytest/golden_test.go`, update case IDs and fields:
+In `internal/query/query.go`, rename:
 
-```go
-func TestLoadCases(t *testing.T) {
-	cases := LoadCases(t)
-	if len(cases) == 0 {
-		t.Fatal("expected discovery golden cases")
-	}
-	if CaseByID(t, cases, "strong_auth_refresh_full_signal").Expected.Support != "strong" {
-		t.Fatalf("expected strong_auth_refresh_full_signal to expect strong support")
-	}
-	if CaseByID(t, cases, "list_inventory_empty").Fixture != "empty" {
-		t.Fatalf("expected list_inventory_empty to use empty fixture")
-	}
-}
+```text
+DiscoverRequest -> FindKnowledgeRequest
+MapRequest -> ListKnowledgeRequest
+DiscoveryResponse -> FindKnowledgeResponse
+MapResponse -> ListKnowledgeResponse
+Coverage -> Support
+ActionPolicy -> UsageGuidance
+RecallState -> SearchStatus
+SemanticRecallState -> SemanticSearchStatus
+CoverageGap -> MissingNeed
+DiscoveryItem -> KnowledgeSummary
+Disclosure -> ReadStatus
+RecommendedCall -> NextStep
 ```
 
-- [ ] **Step 4: Run fixture loader tests and verify expected failure/pass**
-
-Run:
-
-```bash
-go test ./internal/discoverytest -count=1
-```
-
-Expected: PASS after all fixture field references are updated.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add testdata/discovery-golden/cases.json internal/discoverytest/golden.go internal/discoverytest/golden_test.go
-git commit -m "test: rename discovery golden vocabulary"
-```
-
----
-
-### Task 2: Rename Query Response Model
-
-**Files:**
-- Modify: `internal/query/query.go`
-- Modify: `internal/query/query_test.go`
-- Modify: `internal/query/discovery_golden_test.go`
-
-- [ ] **Step 1: Update response and helper type names**
-
-In `internal/query/query.go`, rename these public types and JSON fields:
-
-```go
-type DiscoveryResponse struct {
-	Project      string                   `json:"project"`
-	Phase        string                   `json:"phase"`
-	Query        string                   `json:"query"`
-	Capabilities index.DiscoveryCapabilities `json:"capabilities"`
-	Coverage     Coverage                 `json:"coverage"`
-	ActionPolicy ActionPolicy             `json:"action_policy"`
-	Recall       RecallState              `json:"recall"`
-	CoverageGaps []CoverageGap            `json:"coverage_gaps,omitempty"`
-	Items        []DiscoveryItem          `json:"items"`
-	NextCalls    []RecommendedCall        `json:"next_calls"`
-}
-```
-
-to:
+Use these final response shapes:
 
 ```go
 type FindKnowledgeResponse struct {
@@ -260,29 +294,14 @@ type FindKnowledgeResponse struct {
 	Items        []KnowledgeSummary          `json:"items"`
 	NextSteps    []NextStep                  `json:"next_steps"`
 }
-```
 
-Rename:
+type ListKnowledgeResponse struct {
+	Project   string        `json:"project"`
+	Usage     UsageGuidance `json:"usage"`
+	Inventory Inventory     `json:"inventory"`
+	Groups    []ListGroup   `json:"groups"`
+}
 
-```go
-type MapResponse struct
-```
-
-to:
-
-```go
-type ListKnowledgeResponse struct
-```
-
-Rename:
-
-```go
-type Coverage struct
-```
-
-to:
-
-```go
 type Support struct {
 	Level                 string   `json:"level"`
 	Confidence            float64  `json:"confidence"`
@@ -290,85 +309,75 @@ type Support struct {
 	Recommendation        string   `json:"recommendation"`
 	MissingKnowledgeHints  []string `json:"missing_knowledge_hints,omitempty"`
 }
-```
 
-Rename:
-
-```go
-type ActionPolicy struct
-```
-
-to:
-
-```go
 type UsageGuidance struct {
 	Read   string `json:"read"`
 	Cite   string `json:"cite"`
 	Claim  string `json:"claim"`
 	Reason string `json:"reason"`
 }
-```
 
-Remove the old `Authority` field. Use `Support.Level` as the support signal.
+type SearchStatus struct {
+	Semantic SemanticSearchStatus `json:"semantic"`
+}
 
-Rename:
+type SemanticSearchStatus struct {
+	Status   string `json:"status"`
+	Provider string `json:"provider,omitempty"`
+	Model    string `json:"model,omitempty"`
+	Reason   string `json:"reason,omitempty"`
+}
 
-```go
-type RecallState struct
-type SemanticRecallState struct
-type CoverageGap struct
-type DiscoveryItem struct
-type Disclosure struct
-type RecommendedCall struct
-```
+type MissingNeed struct {
+	Need        string `json:"need"`
+	Reason      string `json:"reason"`
+	Source      string `json:"source"`
+	Severity    string `json:"severity"`
+	ArgosBacked bool   `json:"argos_backed"`
+}
 
-to:
+type KnowledgeSummary struct {
+	ID              string          `json:"id"`
+	Type            string          `json:"type"`
+	Title           string          `json:"title"`
+	Summary         string          `json:"summary"`
+	Status          string          `json:"status"`
+	Priority        string          `json:"priority"`
+	Path            string          `json:"path"`
+	Score           float64         `json:"score"`
+	ScoreComponents ScoreComponents `json:"score_components"`
+	WhyMatched      []string        `json:"why_matched"`
+	MatchedSections []string        `json:"matched_sections"`
+	ReadStatus      ReadStatus      `json:"read_status"`
+	RecommendedStep string          `json:"recommended_step"`
+	Body            string          `json:"-"`
+}
 
-```go
-type SearchStatus struct
-type SemanticSearchStatus struct
-type MissingNeed struct
-type KnowledgeSummary struct
-type ReadStatus struct
-type NextStep struct
-```
-
-Use:
-
-```go
 type ReadStatus struct {
 	Level             string `json:"level"`
 	FullBodyAvailable bool   `json:"full_body_available"`
 	ReadTool          string `json:"read_tool"`
 }
+
+type NextStep struct {
+	Tool   string   `json:"tool"`
+	Reason string   `json:"reason"`
+	IDs    []string `json:"ids,omitempty"`
+}
 ```
 
-- [ ] **Step 2: Rename service methods while preserving behavior**
+Remove the old `Authority` field. Use `Support.Level` and fixture `SupportLevel` for the same behavioral signal.
 
-Rename:
+- [ ] **Step 4: Rename query service methods and helpers**
 
-```go
-func (s *Service) Discover(req DiscoverRequest) (DiscoveryResponse, error)
-func (s *Service) Map(req MapRequest) (MapResponse, error)
+Rename public methods:
+
+```text
+Discover -> FindKnowledge
+Map -> ListKnowledge
+GetKnowledgeItem -> ReadKnowledge
+CiteKnowledge -> CiteKnowledge
 ```
-
-to:
-
-```go
-func (s *Service) FindKnowledge(req FindKnowledgeRequest) (FindKnowledgeResponse, error)
-func (s *Service) ListKnowledge(req ListKnowledgeRequest) (ListKnowledgeResponse, error)
-```
-
-Rename request types:
-
-```go
-type DiscoverRequest -> type FindKnowledgeRequest
-type MapRequest -> type ListKnowledgeRequest
-```
-
-Do not change request JSON fields except where tool names appear in descriptions. Keep `project`, `phase`, `task`, `query`, `files`, `types`, `tags`, `domains`, `status`, `include_deprecated`, and `limit`.
-
-- [ ] **Step 3: Rename helper functions and source values**
 
 Rename helpers mechanically:
 
@@ -390,198 +399,7 @@ mapActionPolicy -> listUsageGuidance
 mapGroupKey -> listGroupKey
 ```
 
-Rename missing need source values:
-
-```go
-"unmatched_intent" -> "not_found"
-"filter_excluded" -> "filtered_out"
-"conflicting_shared_knowledge" -> "conflict"
-"cross_domain_mismatch" -> "wrong_scope"
-```
-
-Keep these source values unchanged:
-
-```go
-"weak_match"
-"partial_match"
-"low_confidence"
-```
-
-- [ ] **Step 4: Update query tests to compile against new names**
-
-In `internal/query/discovery_golden_test.go`, change assertions:
-
-```go
-assertCoverage(t, result.Coverage, tc.Expected.Coverage, result.Items)
-assertActionPolicyMatchesExpected(t, result.ActionPolicy, tc.Expected)
-assertRecallMatchesExpected(t, result.Recall, tc.Expected)
-assertCoverageGapsMatchExpected(t, result.CoverageGaps, tc.Expected.CoverageGapSources)
-assertNoDiscoveryBodies(t, result.Items, tc.Expected.NoBodies)
-```
-
-to:
-
-```go
-assertSupport(t, result.Support, tc.Expected.Support, result.Items)
-assertUsageMatchesExpected(t, result.Usage, tc.Expected)
-assertSearchStatusMatchesExpected(t, result.SearchStatus, tc.Expected)
-assertMissingNeedsMatchExpected(t, result.MissingNeeds, tc.Expected.MissingNeedSources)
-assertNoKnowledgeBodies(t, result.Items, tc.Expected.NoBodies)
-```
-
-Update helper signatures:
-
-```go
-func assertSupport(t *testing.T, got Support, want string, items []KnowledgeSummary)
-func assertUsageMatchesExpected(t *testing.T, got UsageGuidance, expected discoverytest.Expected)
-func assertSearchStatusMatchesExpected(t *testing.T, got SearchStatus, expected discoverytest.Expected)
-func assertMissingNeedsMatchExpected(t *testing.T, got []MissingNeed, want []string)
-```
-
-- [ ] **Step 5: Run query tests**
-
-Run:
-
-```bash
-go test ./internal/query -count=1
-```
-
-Expected: PASS.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add internal/query/query.go internal/query/query_test.go internal/query/discovery_golden_test.go
-git commit -m "refactor: rename query discovery model"
-```
-
----
-
-### Task 3: Rename MCP Tool Surface
-
-**Files:**
-- Modify: `internal/mcp/server.go`
-- Modify: `internal/mcp/server_test.go`
-
-- [ ] **Step 1: Update MCP tool handlers**
-
-In `internal/mcp/server.go`, replace handler cases:
-
-```go
-case "argos_discover":
-```
-
-with:
-
-```go
-case "argos_find_knowledge":
-```
-
-and call:
-
-```go
-result, err := s.queries.FindKnowledge(req)
-```
-
-Replace:
-
-```go
-case "argos_map":
-```
-
-with:
-
-```go
-case "argos_list_knowledge":
-```
-
-and call:
-
-```go
-result, err := s.queries.ListKnowledge(req)
-```
-
-Replace:
-
-```go
-case "get_knowledge_item":
-```
-
-with:
-
-```go
-case "argos_read_knowledge":
-```
-
-Replace:
-
-```go
-case "cite_knowledge":
-```
-
-with:
-
-```go
-case "argos_cite_knowledge":
-```
-
-Update error prefixes to the new tool names:
-
-```text
-invalid arguments for argos_find_knowledge
-invalid arguments for argos_list_knowledge
-invalid arguments for argos_read_knowledge
-invalid arguments for argos_cite_knowledge
-```
-
-- [ ] **Step 2: Update `tools/list` schemas**
-
-In `tools()`, expose:
-
-```go
-{
-	Name:        "argos_find_knowledge",
-	Description: "Find shared knowledge for current work.",
-	InputSchema: findKnowledgeInputSchema(),
-},
-{
-	Name:        "argos_list_knowledge",
-	Description: "List available shared knowledge for a project.",
-	InputSchema: objectSchema(...),
-},
-{
-	Name:        "argos_read_knowledge",
-	Description: "Read a knowledge item by id.",
-	InputSchema: objectSchema(...),
-},
-{
-	Name:        "argos_cite_knowledge",
-	Description: "Create citations for knowledge items actually used.",
-	InputSchema: objectSchema(...),
-},
-```
-
-Rename:
-
-```go
-func discoverInputSchema()
-```
-
-to:
-
-```go
-func findKnowledgeInputSchema()
-```
-
-Change the limit description to:
-
-```go
-"Maximum number of knowledge items to return."
-```
-
-- [ ] **Step 3: Update context and next-step tool names**
-
-In `internal/query/query.go`, every `NextStep.Tool` and context recommendation should use:
+Every returned `NextStep.Tool` must use:
 
 ```text
 argos_list_knowledge
@@ -590,11 +408,96 @@ argos_read_knowledge
 argos_cite_knowledge
 ```
 
-Do not return old tool names in any `next_steps` response.
+- [ ] **Step 5: Update golden query assertions**
 
-- [ ] **Step 4: Update MCP tests**
+In `internal/query/discovery_golden_test.go`, use:
 
-In `internal/mcp/server_test.go`, update the expected tools list:
+```go
+result, err := service.FindKnowledge(FindKnowledgeRequest{...})
+assertSupport(t, result.Support, tc.Expected.Support, result.Items)
+assertUsageMatchesExpected(t, result.Usage, tc.Expected)
+assertSearchStatusMatchesExpected(t, result.SearchStatus, tc.Expected)
+assertMissingNeedsMatchExpected(t, result.MissingNeeds, tc.Expected.MissingNeedSources)
+assertKnowledgeIDs(t, result.Items, tc.Expected.IncludeIDs, tc.Expected.ExcludeIDs)
+assertNoKnowledgeBodies(t, result.Items, tc.Expected.NoBodies)
+assertNextSteps(t, result.NextSteps, tc.Expected.RequireNextStepTools, tc.Expected.ForbidNextStepTools)
+```
+
+Use `service.ListKnowledge(ListKnowledgeRequest{...})` for inventory cases and `service.ReadKnowledge(id)` for full-body reads.
+
+- [ ] **Step 6: Run query and fixture tests**
+
+Run:
+
+```bash
+go test ./internal/discoverytest ./internal/query -count=1
+```
+
+Expected: PASS except the Task 0 guard may still fail because MCP, CLI, adapters, and docs are not migrated yet. If only the retired-name guard fails, continue to Task 2.
+
+- [ ] **Step 7: Commit query and golden migration**
+
+```bash
+git add internal/query internal/discoverytest testdata/discovery-golden/cases.json
+git commit -m "refactor: rename shared knowledge query model"
+```
+
+---
+
+### Task 2: Rename MCP Tool Surface
+
+**Files:**
+- Modify: `internal/mcp/server.go`
+- Modify: `internal/mcp/server_test.go`
+- Modify: `internal/query/query.go`
+
+- [ ] **Step 1: Rename MCP handler cases**
+
+In `internal/mcp/server.go`, replace handler cases:
+
+```text
+argos_discover -> argos_find_knowledge
+argos_map -> argos_list_knowledge
+get_knowledge_item -> argos_read_knowledge
+cite_knowledge -> argos_cite_knowledge
+```
+
+Call the renamed query methods:
+
+```go
+result, err := s.service.FindKnowledge(req)
+result, err := s.service.ListKnowledge(req)
+result, err := s.service.ReadKnowledge(req.ID)
+result := s.service.CiteKnowledge(req.IDs)
+```
+
+Use new error prefixes:
+
+```text
+invalid arguments for argos_find_knowledge
+invalid arguments for argos_list_knowledge
+invalid arguments for argos_read_knowledge
+invalid arguments for argos_cite_knowledge
+```
+
+- [ ] **Step 2: Rename MCP schemas**
+
+In `tools()`, expose these names:
+
+```go
+"argos_context"
+"argos_standards"
+"argos_find_knowledge"
+"argos_list_knowledge"
+"argos_read_knowledge"
+"argos_cite_knowledge"
+```
+
+Rename `discoverInputSchema()` to `findKnowledgeInputSchema()`.
+
+- [ ] **Step 3: Update MCP tests**
+
+In `internal/mcp/server_test.go`, update `tools/list` expectations to:
 
 ```go
 for _, name := range []string{
@@ -609,56 +512,24 @@ for _, name := range []string{
 }
 ```
 
-Update tool-call JSON examples from:
+Update all `tools/call` JSON examples to the new names and decode find responses into `query.FindKnowledgeResponse`.
 
-```json
-{"name":"argos_discover","arguments":{"project":"mall-api","query":"auth"}}
-```
+- [ ] **Step 4: Add old tool rejection tests**
 
-to:
-
-```json
-{"name":"argos_find_knowledge","arguments":{"project":"mall-api","query":"auth"}}
-```
-
-Update decoded response type to:
-
-```go
-var decoded query.FindKnowledgeResponse
-```
-
-Assert:
-
-```go
-if decoded.Support.Level != "none" {
-	t.Fatalf("expected none support, got %q", decoded.Support.Level)
-}
-if len(decoded.MissingNeeds) == 0 {
-	t.Fatalf("expected missing needs, got none: %#v", decoded)
-}
-```
-
-- [ ] **Step 5: Add old tool rejection tests**
-
-Add a table test to `internal/mcp/server_test.go`:
+Add:
 
 ```go
 func TestRenamedMCPToolsRejectOldNames(t *testing.T) {
 	_, store := discoverytest.BuildIndexedWorkspace(t)
-	server := NewServer(store)
+	defer store.Close()
+	server := NewServerWithStore(store)
 
-	oldNames := []string{
-		"argos_discover",
-		"argos_map",
-		"get_knowledge_item",
-		"cite_knowledge",
-	}
+	oldNames := []string{"argos_discover", "argos_map", "get_knowledge_item", "cite_knowledge"}
 	for _, oldName := range oldNames {
 		t.Run(oldName, func(t *testing.T) {
 			var out bytes.Buffer
 			line := []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"` + oldName + `","arguments":{"project":"mall-api","query":"auth","id":"rule:backend.auth.v1","ids":["rule:backend.auth.v1"]}}}`)
-			err := server.HandleLine(line, &out)
-			if err != nil {
+			if err := server.HandleLine(line, &out); err != nil {
 				t.Fatalf("handle line: %v", err)
 			}
 			assertToolErrorContains(t, out.Bytes(), "unknown tool")
@@ -667,7 +538,7 @@ func TestRenamedMCPToolsRejectOldNames(t *testing.T) {
 }
 ```
 
-- [ ] **Step 6: Run MCP tests**
+- [ ] **Step 5: Run MCP tests**
 
 Run:
 
@@ -677,16 +548,16 @@ go test ./internal/mcp -count=1
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Commit MCP migration**
 
 ```bash
-git add internal/mcp/server.go internal/mcp/server_test.go internal/query/query.go internal/query/query_test.go
-git commit -m "feat: rename mcp knowledge tools"
+git add internal/mcp internal/query/query.go
+git commit -m "feat: rename mcp shared knowledge tools"
 ```
 
 ---
 
-### Task 4: Rename CLI Commands And Golden CLI Cases
+### Task 3: Rename CLI Commands
 
 **Files:**
 - Modify: `internal/cli/cli.go`
@@ -695,82 +566,56 @@ git commit -m "feat: rename mcp knowledge tools"
 - Modify: `cmd/argos/e2e_test.go`
 - Modify: `testdata/discovery-golden/cases.json`
 
-- [ ] **Step 1: Choose the CLI shape for this migration**
+- [ ] **Step 1: Replace top-level discovery commands with grouped commands**
 
-Use the grouped command shape from the approved spec:
-
-```text
-argos knowledge list
-argos knowledge find
-argos knowledge read <id>
-argos knowledge cite <id>...
-```
-
-Keep `context` and `standards` as existing top-level commands.
-
-- [ ] **Step 2: Update CLI dispatch**
-
-In `internal/cli/cli.go`, replace the top-level `discover` and `map` cases with a `knowledge` case:
+In `internal/cli/cli.go`, remove top-level `discover` and `map` dispatches. Add:
 
 ```go
 case "knowledge":
-	if len(args) < 2 {
+	return runKnowledge(args[1:], stdout, stderr)
+```
+
+Implement:
+
+```go
+func runKnowledge(args []string, stdout io.Writer, stderr io.Writer) int {
+	if len(args) == 0 {
 		fmt.Fprintln(stderr, "knowledge: subcommand is required")
 		printUsage(stderr)
 		return 2
 	}
-	switch args[1] {
+	switch args[0] {
 	case "find":
-		return runKnowledgeFind(args[2:], stdout, stderr)
+		return runKnowledgeFind(args[1:], stdout, stderr)
 	case "list":
-		return runKnowledgeList(args[2:], stdout, stderr)
+		return runKnowledgeList(args[1:], stdout, stderr)
 	case "read":
-		return runKnowledgeRead(args[2:], stdout, stderr)
+		return runKnowledgeRead(args[1:], stdout, stderr)
 	case "cite":
-		return runKnowledgeCite(args[2:], stdout, stderr)
+		return runKnowledgeCite(args[1:], stdout, stderr)
 	default:
-		fmt.Fprintf(stderr, "knowledge: unknown subcommand %q\n", args[1])
+		fmt.Fprintf(stderr, "knowledge: unknown subcommand %q\n", args[0])
 		printUsage(stderr)
 		return 2
 	}
+}
 ```
 
-Move the current `discover` case body into:
+Move existing `discover` behavior into `runKnowledgeFind`. Move existing `map` behavior into `runKnowledgeList`.
 
-```go
-func runKnowledgeFind(args []string, stdout io.Writer, stderr io.Writer) int
-```
+- [ ] **Step 2: Add `knowledge read` and `knowledge cite`**
 
-Move the current `map` case body into:
-
-```go
-func runKnowledgeList(args []string, stdout io.Writer, stderr io.Writer) int
-```
-
-Use new error prefixes:
-
-```text
-knowledge find: --json is required
-knowledge find: --project is required
-knowledge find: --task or --query is required
-knowledge find: --limit must be between 1 and 20
-knowledge list: --json is required
-knowledge list: --project is required
-```
-
-- [ ] **Step 3: Add read and cite CLI subcommands**
-
-The current CLI has no read/cite commands. Add:
+Implement `knowledge read`:
 
 ```go
 func runKnowledgeRead(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("knowledge read", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	jsonOutput := flags.Bool("json", false, "print JSON")
+	jsonOut := flags.Bool("json", false, "print JSON output")
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
-	if !*jsonOutput {
+	if !*jsonOut {
 		fmt.Fprintln(stderr, "knowledge read: --json is required")
 		return 2
 	}
@@ -783,8 +628,7 @@ func runKnowledgeRead(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 1
 	}
 	defer closeStore()
-	service := query.New(store)
-	result, err := service.GetKnowledgeItem(flags.Arg(0))
+	result, err := query.New(store).ReadKnowledge(flags.Arg(0))
 	if err != nil {
 		fmt.Fprintf(stderr, "knowledge read: %v\n", err)
 		return 1
@@ -793,22 +637,22 @@ func runKnowledgeRead(args []string, stdout io.Writer, stderr io.Writer) int {
 }
 ```
 
-Add:
+Implement `knowledge cite`:
 
 ```go
 func runKnowledgeCite(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("knowledge cite", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	jsonOutput := flags.Bool("json", false, "print JSON")
+	jsonOut := flags.Bool("json", false, "print JSON output")
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
-	if !*jsonOutput {
+	if !*jsonOut {
 		fmt.Fprintln(stderr, "knowledge cite: --json is required")
 		return 2
 	}
 	if flags.NArg() == 0 {
-		fmt.Fprintln(stderr, "knowledge cite: ids are required")
+		fmt.Fprintln(stderr, "knowledge cite: at least one id is required")
 		return 2
 	}
 	store, closeStore, available := openIndexStore(stderr)
@@ -816,69 +660,59 @@ func runKnowledgeCite(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 1
 	}
 	defer closeStore()
-	service := query.New(store)
-	result := service.CiteKnowledge(flags.Args())
+	result := query.New(store).CiteKnowledge(flags.Args())
 	return printJSON(stdout, stderr, result)
 }
 ```
 
-- [ ] **Step 4: Update CLI help**
+- [ ] **Step 3: Update CLI errors and usage text**
 
-In `printUsage`, replace:
-
-```text
-discover
-map
-```
-
-with:
+Use these error prefixes:
 
 ```text
-knowledge list
-knowledge find
-knowledge read
-knowledge cite
+knowledge find: --json is required
+knowledge find: --project is required
+knowledge find: --task or --query is required
+knowledge find: --limit must be between 1 and 20
+knowledge list: --json is required
+knowledge list: --project is required
+knowledge read: --json is required
+knowledge read: id is required
+knowledge cite: --json is required
+knowledge cite: at least one id is required
 ```
 
-- [ ] **Step 5: Update CLI tests**
-
-Rename tests:
+Update usage examples to:
 
 ```text
-TestRunDiscoverReturnsJSONRoutes -> TestRunKnowledgeFindReturnsJSONItems
-TestRunDiscoverAcceptsRepeatedFiles -> TestRunKnowledgeFindAcceptsRepeatedFiles
-TestRunDiscoverAcceptsDiscoveryFiltersAndLimit -> TestRunKnowledgeFindAcceptsFiltersAndLimit
-TestRunMapReturnsJSONInventory -> TestRunKnowledgeListReturnsJSONInventory
-TestRunMapAcceptsTypesAndIncludeDeprecated -> TestRunKnowledgeListAcceptsTypesAndIncludeDeprecated
+argos knowledge list --json --project <project>
+argos knowledge find --json --project <project> --task <task>
+argos knowledge read --json <id>
+argos knowledge cite --json <id>...
 ```
 
-Update calls:
+- [ ] **Step 4: Update CLI tests and golden CLI cases**
+
+In `internal/cli/discovery_golden_test.go`, rename tests:
+
+```text
+TestGoldenCLIDiscoverMatchesQueryBehavior -> TestGoldenCLIKnowledgeFindMatchesQueryBehavior
+TestGoldenCLIDiscoverNoneIncludesCoverageGaps -> TestGoldenCLIKnowledgeFindNoneIncludesMissingNeeds
+TestGoldenCLIMapMatchesQueryBehavior -> TestGoldenCLIKnowledgeListMatchesQueryBehavior
+```
+
+Use command args:
 
 ```go
-Run([]string{"discover", "--json", "--project", "mall-api", "--query", "auth"}, &stdout, &stderr)
+[]string{"knowledge", "find", "--json", "--project", ...}
+[]string{"knowledge", "list", "--json", "--project", ...}
+[]string{"knowledge", "read", "--json", "rule:backend.auth-refresh.v1"}
+[]string{"knowledge", "cite", "--json", "rule:backend.auth-refresh.v1"}
 ```
 
-to:
+Decode find output into `query.FindKnowledgeResponse`, list output into `query.ListKnowledgeResponse`, and assert `Support.Level`, `Usage.Read`, `SearchStatus.Semantic.Status`, `MissingNeeds`, and `NextSteps`.
 
-```go
-Run([]string{"knowledge", "find", "--json", "--project", "mall-api", "--query", "auth"}, &stdout, &stderr)
-```
-
-Update:
-
-```go
-Run([]string{"map", "--json", "--project", "mall-api"}, &stdout, &stderr)
-```
-
-to:
-
-```go
-Run([]string{"knowledge", "list", "--json", "--project", "mall-api"}, &stdout, &stderr)
-```
-
-Update JSON assertions to `support.level`.
-
-- [ ] **Step 6: Run CLI tests**
+- [ ] **Step 5: Run CLI and E2E tests**
 
 Run:
 
@@ -888,160 +722,166 @@ go test ./internal/cli ./cmd/argos -count=1
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Commit CLI migration**
 
 ```bash
-git add internal/cli/cli.go internal/cli/cli_test.go internal/cli/discovery_golden_test.go cmd/argos/e2e_test.go testdata/discovery-golden/cases.json
-git commit -m "feat: rename cli knowledge commands"
+git add internal/cli cmd/argos testdata/discovery-golden/cases.json
+git commit -m "feat: group shared knowledge cli commands"
 ```
 
 ---
 
-### Task 5: Update Adapters And Active Guidance Docs
+### Task 4: Update Adapters And Active Guidance Docs
 
 **Files:**
 - Modify: `internal/adapters/adapters.go`
 - Modify: `internal/adapters/adapters_test.go`
+- Modify: `README.md`
 - Modify: `docs/superpowers/templates/argos-discovery-dogfood-report.md`
 - Modify: `docs/superpowers/checklists/2026-04-30-argos-discovery-dogfood-checklist.md`
-- Modify: active specs listed in File Structure.
+- Modify: active specs listed in File Structure
 
-- [ ] **Step 1: Update adapter instructions**
+- [ ] **Step 1: Update adapter protocol text**
 
-In `internal/adapters/adapters.go`, replace the workflow block with:
+In `internal/adapters/adapters.go`, replace the Work Protocol with:
 
 ```text
-1. Use argos_context to understand the current workflow.
+1. Before substantial project work, call argos_context when available; otherwise follow equivalent adapter or Markdown guidance.
 2. Use argos_list_knowledge for broad orientation before unfamiliar project work.
-3. Use argos_find_knowledge to find shared knowledge for the current task.
-4. Use argos_read_knowledge only for selected knowledge IDs you plan to apply.
-5. Use argos_cite_knowledge only for knowledge IDs you actually read and used.
-6. Do not query SQLite, vector tables, or generated files as the primary path when MCP is available.
-7. If MCP is unavailable, use CLI JSON next: argos knowledge list/find/read/cite.
-8. If both MCP and CLI are unavailable, use generated adapter files and Markdown as fallbacks.
-9. Do not cite IDs returned only by list/find; cite only read and used knowledge.
-10. Weak or none support means Argos did not provide task support; continue with normal reasoning without Argos-backed claims.
-11. When missing_needs are present, separate shared-knowledge-backed claims from general reasoning.
-12. Do not cite missing_needs; they are task needs, not knowledge items.
+3. Use argos_find_knowledge to find shared knowledge for current work.
+4. Before implementation or review, call argos_standards when available; otherwise follow equivalent adapter or Markdown guidance.
+5. Follow next_steps returned by Argos.
+6. Read full knowledge items only through argos_read_knowledge when routed to specific IDs or paths.
+7. Cite Argos knowledge IDs used in final responses only after reading and applying them.
+8. Do not cite IDs returned only by argos_list_knowledge or argos_find_knowledge.
+9. Cite only knowledge IDs whose full item was read with argos_read_knowledge and actually applied.
+10. Follow usage.read before reading full knowledge items.
+11. Follow usage.cite before calling argos_cite_knowledge.
+12. When missing_needs are present, separate Argos-backed claims from general reasoning.
+13. Do not cite missing_needs; they are unsupported needs, not knowledge items.
+14. Do not start upload, capture, or inbox creation from find results alone.
+15. Semantic search status never overrides usage guidance.
 ```
 
-- [ ] **Step 2: Update adapter tests**
+- [ ] **Step 2: Update README commands and explanation**
 
-In `internal/adapters/adapters_test.go`, update expected snippets:
+In `README.md`, update examples to:
 
-```go
-"Use argos_find_knowledge to find shared knowledge for the current task.",
-"Use argos_list_knowledge for broad orientation before unfamiliar project work.",
-"Use argos_read_knowledge only for selected knowledge IDs you plan to apply.",
-"Use argos_cite_knowledge only for knowledge IDs you actually read and used.",
-"When missing_needs are present, separate shared-knowledge-backed claims from general reasoning.",
-"Do not cite missing_needs; they are task needs, not knowledge items.",
+```bash
+argos knowledge find --json --project <project> --phase <phase> --task "<task>" --query "<query>"
+argos knowledge list --json --project <project> --domain <domain>
+argos knowledge read --json <id>
+argos knowledge cite --json <id>...
 ```
 
-Update retired terms helper to reject old active names:
+Update MCP tool list to:
+
+```text
+argos_find_knowledge
+argos_list_knowledge
+argos_read_knowledge
+argos_cite_knowledge
+```
+
+Describe JSON fields as `support`, `usage`, `search_status`, `missing_needs`, and `next_steps`.
+
+- [ ] **Step 3: Update active specs/templates/checklists**
+
+In active docs, replace active guidance vocabulary:
+
+```text
+argos_map -> argos_list_knowledge
+argos_discover -> argos_find_knowledge
+get_knowledge_item -> argos_read_knowledge
+cite_knowledge -> argos_cite_knowledge
+coverage -> support
+coverage_gaps -> missing_needs
+action_policy -> usage
+recall -> search_status
+disclosure -> read_status
+next_calls -> next_steps
+recommended_action -> recommended_step
+```
+
+When docs mention source values, also replace:
+
+```text
+unmatched_intent -> not_found
+filter_excluded -> filtered_out
+conflicting_shared_knowledge -> conflict
+cross_domain_mismatch -> wrong_scope
+```
+
+Do not edit historical dogfood reports except to add a superseded note if an active doc points readers there.
+
+- [ ] **Step 4: Update adapter tests**
+
+In `internal/adapters/adapters_test.go`, assert the new recommendations:
 
 ```go
-func retiredUserVisibleTerms() []string {
-	return []string{
-		"argos_discover",
-		"argos_map",
-		"get_knowledge_item",
-		"coverage_gaps",
-		"action_policy",
-		"Authority",
-		"RecallState",
-		"Disclosure",
-	}
+required := []string{
+	"Use argos_list_knowledge for broad orientation before unfamiliar project work.",
+	"Use argos_find_knowledge to find shared knowledge for current work.",
+	"Follow next_steps returned by Argos.",
+	"Read full knowledge items only through argos_read_knowledge when routed to specific IDs or paths.",
+	"Do not cite IDs returned only by argos_list_knowledge or argos_find_knowledge.",
+	"Follow usage.read before reading full knowledge items.",
+	"Follow usage.cite before calling argos_cite_knowledge.",
+	"When missing_needs are present, separate Argos-backed claims from general reasoning.",
+	"Do not cite missing_needs; they are unsupported needs, not knowledge items.",
+	"Semantic search status never overrides usage guidance.",
 }
 ```
 
-Do not reject `argos_cite_knowledge`.
+Add retired-name negative assertions for adapter output:
 
-- [ ] **Step 3: Update dogfood checklist**
-
-In `docs/superpowers/checklists/2026-04-30-argos-discovery-dogfood-checklist.md`, replace the runner workflow with:
-
-```text
-1. Start from a fresh context.
-2. Call `argos_list_knowledge` if you need inventory awareness.
-3. Call `argos_find_knowledge` with the case input.
-4. Inspect `support`, `missing_needs`, `usage`, `search_status`, and `next_steps`.
-5. Call `argos_read_knowledge` only for selected IDs.
-6. Call `argos_cite_knowledge` only for IDs actually read and used.
-7. Produce the report using `docs/superpowers/templates/argos-discovery-dogfood-report.md`.
+```go
+retired := []string{
+	"argos_map",
+	"argos_discover",
+	"get_knowledge_item",
+	"coverage_gaps",
+	"action_policy",
+	"Semantic recall",
+}
 ```
 
-Replace:
-
-```text
-coverage -> support
-coverage gaps -> missing needs
-map/discover -> list/find
-loaded IDs -> read IDs
-```
-
-- [ ] **Step 4: Update dogfood report template**
-
-In `docs/superpowers/templates/argos-discovery-dogfood-report.md`, use:
-
-```markdown
-- `argos_list_knowledge`:
-- `argos_find_knowledge`:
-- `argos_read_knowledge`:
-- `argos_cite_knowledge`:
-
-- Actual support:
-- Search status:
-- Missing needs:
-- Read status: `pass|fail`
-- Missing needs not cited: `pass|fail|not-applicable`
-```
-
-- [ ] **Step 5: Update active specs**
-
-Update active specs to refer to the new public vocabulary. Add a supersession note at the top of older active discovery specs:
-
-```markdown
-> Naming note: the approved public vocabulary is now list/find/read/cite,
-> support, missing_needs, usage, search_status, read_status, and next_steps.
-> Older terms in historical examples should be read as pre-audit vocabulary.
-```
-
-For the current active guidance sections, replace old names directly instead of relying only on the note.
-
-- [ ] **Step 6: Run adapter tests and docs scan**
+- [ ] **Step 5: Run adapter tests and docs guard**
 
 Run:
 
 ```bash
-go test ./internal/adapters -count=1
+go test ./internal/adapters ./internal/query -run 'TestRenderedAdapters|TestActiveSurfacesDoNotUseRetiredSharedKnowledgeNames' -count=1
 ```
 
-Expected: PASS.
+Expected: PASS after all active docs and adapter text are migrated.
 
-Run:
-
-```bash
-rg -n "argos_discover|argos_map|get_knowledge_item|coverage_gaps|action_policy|RecallState|Disclosure" internal testdata docs/superpowers/templates docs/superpowers/checklists
-```
-
-Expected: no matches. If a match is in a negative test helper that builds old terms from parts, keep it only if it does not contain the literal full old term.
-
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Commit docs and adapter migration**
 
 ```bash
-git add internal/adapters/adapters.go internal/adapters/adapters_test.go docs/superpowers/templates/argos-discovery-dogfood-report.md docs/superpowers/checklists/2026-04-30-argos-discovery-dogfood-checklist.md docs/superpowers/specs
-git commit -m "docs: update adapters and guidance naming"
+git add internal/adapters README.md docs/superpowers/templates docs/superpowers/checklists docs/superpowers/specs
+git commit -m "docs: teach renamed shared knowledge workflow"
 ```
 
 ---
 
-### Task 6: Final Verification And Retired Name Guard
+### Task 5: Final Verification And Retired-Name Scan
 
 **Files:**
-- Modify: tests only if final scan exposes missing guards.
+- Modify if needed: `internal/query/query_test.go`
+- Modify if needed: any active surface still failing the scan
 
-- [ ] **Step 1: Run the full test suite**
+- [ ] **Step 1: Run the full targeted suite**
+
+Run:
+
+```bash
+go test ./internal/discoverytest ./internal/query ./internal/cli ./internal/mcp ./internal/adapters ./cmd/argos -count=1
+```
+
+Expected: PASS.
+
+- [ ] **Step 2: Run the complete repository suite**
 
 Run:
 
@@ -1051,59 +891,33 @@ go test ./... -count=1
 
 Expected: PASS.
 
-- [ ] **Step 2: Run active-surface retired-name scan**
+- [ ] **Step 3: Run explicit retired-name scan**
 
 Run:
 
 ```bash
-rg -n "argos_discover|argos_map|get_knowledge_item|\\bcoverage\\b|coverage_gaps|CoverageGap|action_policy|ActionPolicy|\\bauthority\\b|\\brecall\\b|RecallState|\\bdisclosure\\b|Disclosure" internal testdata docs/superpowers/templates docs/superpowers/checklists
+rg -n "argos_map|argos_discover|get_knowledge_item|coverage_gaps|CoverageGap|action_policy|ActionPolicy|authority|recall|RecallState|disclosure|Disclosure|next_calls|RecommendedCall" README.md internal testdata docs/superpowers/templates docs/superpowers/checklists docs/superpowers/specs/2026-04-30-argos-discovery-layer-design.md docs/superpowers/specs/2026-04-30-argos-discovery-validation-harness-design.md docs/superpowers/specs/2026-04-30-argos-shared-knowledge-discovery-semantics-design.md
 ```
 
-Expected: no matches except:
+Expected: no matches.
 
-- `coverage` may appear in historical comments only if the comment explicitly explains old vocabulary; prefer removing it.
-- `authority` may appear only in a negative test helper built from parts, not as a literal user-visible term.
-- `cite_knowledge` may appear as part of the valid new tool name `argos_cite_knowledge`.
-
-If the scan reports valid new `argos_cite_knowledge` matches because of the substring `cite_knowledge`, do not add `cite_knowledge` to this regex. Reject only old standalone tool names in tests.
-
-- [ ] **Step 3: Run active specs scan**
+- [ ] **Step 4: Verify new public vocabulary exists**
 
 Run:
 
 ```bash
-rg -n "argos_discover|argos_map|get_knowledge_item|coverage_gaps|CoverageGap|action_policy|ActionPolicy|\\bauthority\\b|\\brecall\\b|RecallState|\\bdisclosure\\b|Disclosure" docs/superpowers/specs
+rg -n "argos_list_knowledge|argos_find_knowledge|argos_read_knowledge|argos_cite_knowledge|support|missing_needs|usage|search_status|read_status|next_steps" README.md internal testdata docs/superpowers/templates docs/superpowers/checklists docs/superpowers/specs/2026-04-30-argos-discovery-layer-design.md docs/superpowers/specs/2026-04-30-argos-discovery-validation-harness-design.md docs/superpowers/specs/2026-04-30-argos-shared-knowledge-discovery-semantics-design.md
 ```
 
-Expected: only historical/supersession notes, not current recommendations or examples. If old names appear in current examples, update the spec.
+Expected: matches in README, internal code/tests, fixtures, templates, checklists, and active specs.
 
-- [ ] **Step 4: Confirm no old tool names in MCP tools/list**
+- [ ] **Step 5: Commit final verification guards if changed**
 
-Run:
-
-```bash
-go test ./internal/mcp -run 'TestToolsList|TestRenamedMCPToolsRejectOldNames' -count=1
-```
-
-Expected: PASS.
-
-- [ ] **Step 5: Confirm JSON shape in one CLI path**
-
-Run:
+If verification required additional guard or wording fixes:
 
 ```bash
-go test ./internal/cli -run TestRunKnowledgeFindReturnsJSONItems -count=1
-```
-
-Expected: PASS and the test asserts `support.level`, `usage`, `search_status`, and `next_steps`.
-
-- [ ] **Step 6: Commit final guards if changed**
-
-If this task required test/doc guard changes, commit:
-
-```bash
-git add internal testdata docs/superpowers/templates docs/superpowers/checklists docs/superpowers/specs
-git commit -m "test: guard renamed knowledge surfaces"
+git add README.md internal testdata docs/superpowers/templates docs/superpowers/checklists docs/superpowers/specs
+git commit -m "test: verify renamed shared knowledge surfaces"
 ```
 
 If no files changed, do not create an empty commit.
@@ -1114,18 +928,18 @@ If no files changed, do not create an empty commit.
 
 ### Spec Coverage
 
-- Public tool names `argos_list_knowledge`, `argos_find_knowledge`, `argos_read_knowledge`, `argos_cite_knowledge`: Tasks 3, 4, and 5.
-- Response names `support`, `missing_needs`, `usage`, `search_status`, `next_steps`, `read_status`: Tasks 1, 2, 3, and 4.
-- Internal Go names: Task 2.
-- CLI names: Task 4.
-- Adapter language: Task 5.
-- Active guidance docs: Task 5.
-- Retired-name scans: Tasks 5 and 6.
-- Behavior unchanged: every task uses existing tests plus renamed golden expectations; full suite runs in Task 6.
+- Public MCP names `argos_list_knowledge`, `argos_find_knowledge`, `argos_read_knowledge`, `argos_cite_knowledge`: Tasks 1, 2, 4, and 5.
+- CLI names `argos knowledge list/find/read/cite`: Task 3 and README updates in Task 4.
+- JSON response names `support`, `missing_needs`, `usage`, `search_status`, `read_status`, `next_steps`: Tasks 1, 2, 3, 4, and 5.
+- Internal Go names: Task 1.
+- Adapter language: Task 4.
+- Active guidance docs: Task 4.
+- Retired-name guard before implementation and final scan after implementation: Tasks 0 and 5.
+- Behavior unchanged: query, golden, CLI, MCP, adapter, E2E, and full repository tests run before completion.
 
 ### Type Consistency
 
-The plan uses these final names consistently:
+The final names used by the plan are:
 
 - `FindKnowledgeRequest`
 - `FindKnowledgeResponse`
@@ -1139,7 +953,13 @@ The plan uses these final names consistently:
 - `KnowledgeSummary`
 - `ReadStatus`
 - `NextStep`
+- `ListGroup`
+
+The public tool and CLI names are:
+
+- MCP: `argos_list_knowledge`, `argos_find_knowledge`, `argos_read_knowledge`, `argos_cite_knowledge`
+- CLI: `argos knowledge list`, `argos knowledge find`, `argos knowledge read`, `argos knowledge cite`
 
 ### Scope Boundaries
 
-This plan does not add vector search, upload, capture, ranking changes, or storage changes. It is a naming migration plus verification guards.
+This plan intentionally does not add vector search, semantic provider wiring, upload flows, capture automation, storage changes, ranking changes, or new validation rules unrelated to naming. It is a complete public-language migration for the existing shared-knowledge discovery path.
