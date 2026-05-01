@@ -2,13 +2,181 @@ package query
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
 	"argos/internal/index"
 	"argos/internal/knowledge"
 )
+
+func TestActiveSurfacesDoNotUseRetiredSharedKnowledgeNames(t *testing.T) {
+	retired := []string{
+		"argos_map",
+		"argos_discover",
+		"get_knowledge_item",
+		"coverage_gaps",
+		"CoverageGap",
+		"action_policy",
+		"ActionPolicy",
+		"authority",
+		"recall",
+		"RecallState",
+		"disclosure",
+		"Disclosure",
+		"next_calls",
+		"RecommendedCall",
+	}
+	root := repoRootForActiveSurfaceTest(t)
+	activeRoots := []string{
+		"README.md",
+		"internal",
+		"testdata",
+		"docs/superpowers/templates",
+		"docs/superpowers/checklists",
+		"docs/superpowers/specs/2026-04-30-argos-discovery-layer-design.md",
+		"docs/superpowers/specs/2026-04-30-argos-discovery-validation-harness-design.md",
+		"docs/superpowers/specs/2026-04-30-argos-shared-knowledge-discovery-semantics-design.md",
+	}
+
+	for _, rel := range activeRoots {
+		if file, term, ok := firstRetiredNameMatch(t, root, rel, retired, activeSurfaceGuardFile(t)); ok {
+			t.Fatalf("active surface %s contains retired term %q", file, term)
+		}
+	}
+}
+
+func TestFirstRetiredNameMatchSkipsGuardFileAndReportsNestedPath(t *testing.T) {
+	root := t.TempDir()
+	guardFile := filepath.Join(root, "internal", "a_guard.go")
+	if err := os.MkdirAll(filepath.Dir(guardFile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(guardFile, []byte("action_policy"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	nestedFile := filepath.Join(root, "internal", "nested", "fixture.go")
+	if err := os.MkdirAll(filepath.Dir(nestedFile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(nestedFile, []byte("coverage_gaps"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	file, term, ok := firstRetiredNameMatch(t, root, "internal", []string{"action_policy", "coverage_gaps"}, guardFile)
+	if !ok {
+		t.Fatal("expected retired-name match")
+	}
+	if file != filepath.ToSlash(filepath.Join("internal", "nested", "fixture.go")) {
+		t.Fatalf("expected nested match path, got %q", file)
+	}
+	if term != "coverage_gaps" {
+		t.Fatalf("expected nested retired term, got %q", term)
+	}
+}
+
+func TestFirstRetiredNameMatchSkipsDirectExcludedFile(t *testing.T) {
+	root := t.TempDir()
+	guardFile := filepath.Join(root, "internal", "query", "query_test.go")
+	if err := os.MkdirAll(filepath.Dir(guardFile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(guardFile, []byte("action_policy"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	file, term, ok := firstRetiredNameMatch(t, root, filepath.Join("internal", "query", "query_test.go"), []string{"action_policy"}, guardFile)
+	if ok {
+		t.Fatalf("expected excluded direct file to have no match, got %s %q", file, term)
+	}
+}
+
+func repoRootForActiveSurfaceTest(t *testing.T) string {
+	t.Helper()
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("resolve test file path")
+	}
+	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
+}
+
+func firstRetiredNameMatch(t *testing.T, root, rel string, retired []string, excludeFiles ...string) (string, string, bool) {
+	t.Helper()
+	path := filepath.Join(root, rel)
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat active surface %s: %v", path, err)
+	}
+	if !info.IsDir() {
+		if isExcludedActiveSurfaceFile(path, excludeFiles) {
+			return "", "", false
+		}
+		return retiredNameMatchInFile(t, root, path, retired)
+	}
+	var matchFile string
+	var matchTerm string
+	err = filepath.WalkDir(path, func(file string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || isExcludedActiveSurfaceFile(file, excludeFiles) || !isActiveSurfaceFile(file) {
+			return nil
+		}
+		if relFile, term, ok := retiredNameMatchInFile(t, root, file, retired); ok {
+			matchFile = relFile
+			matchTerm = term
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk active surface %s: %v", path, err)
+	}
+	return matchFile, matchTerm, matchFile != ""
+}
+
+func isExcludedActiveSurfaceFile(file string, excludeFiles []string) bool {
+	for _, exclude := range excludeFiles {
+		if file == filepath.Clean(exclude) {
+			return true
+		}
+	}
+	return false
+}
+
+func activeSurfaceGuardFile(t *testing.T) string {
+	t.Helper()
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("resolve guard file path")
+	}
+	return filepath.Clean(file)
+}
+
+func isActiveSurfaceFile(file string) bool {
+	return strings.HasSuffix(file, ".md") || strings.HasSuffix(file, ".go") || strings.HasSuffix(file, ".json")
+}
+
+func retiredNameMatchInFile(t *testing.T, root, file string, retired []string) (string, string, bool) {
+	t.Helper()
+	data, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatalf("read active surface %s: %v", file, err)
+	}
+	body := string(data)
+	for _, term := range retired {
+		if strings.Contains(body, term) {
+			rel, err := filepath.Rel(root, file)
+			if err != nil {
+				t.Fatalf("resolve active surface path %s: %v", file, err)
+			}
+			return filepath.ToSlash(rel), term, true
+		}
+	}
+	return "", "", false
+}
 
 func TestStandardsReturnsActiveRulesWithMatchReason(t *testing.T) {
 	root := t.TempDir()
