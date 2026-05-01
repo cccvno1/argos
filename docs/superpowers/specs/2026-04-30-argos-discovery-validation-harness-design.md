@@ -18,8 +18,8 @@ It must answer four product questions:
 1. Can the agent know what the knowledge base contains?
 2. Can the agent connect current work to the right knowledge?
 3. Can the agent retrieve only the knowledge it needs?
-4. When knowledge is missing, does the agent avoid oversearching, overfull reading,
-   or making Argos-backed claims?
+4. When knowledge is missing, does the agent avoid oversearching, reading too
+   much into context, or making Argos-backed claims?
 
 This harness is not a replacement for unit tests. It is a golden workflow layer
 that combines deterministic regression checks with AI-executed dogfood reports.
@@ -49,7 +49,7 @@ The harness must test Discovery as a governed retrieval workflow.
 A passing result means more than "some item was found." It means:
 
 - inventory is visible through `argos_list_knowledge`
-- routing is justified through `argos_find_knowledge`
+- matches are justified through `argos_find_knowledge`
 - full bodies are read only through `argos_read_knowledge`
 - weak and none support do not recommend citation
 - final citations refer only to knowledge that was actually used
@@ -239,9 +239,9 @@ Required support:
 - package entrypoints appear as packages
 - package assets and internal files do not appear as standalone items
 
-### 2. Strong Routing
+### 2. Strong Matching
 
-These cases verify that clear tasks route to the right knowledge.
+These cases verify that clear tasks find the right knowledge.
 
 Required support:
 
@@ -252,7 +252,7 @@ Required support:
 - must or should priority ranks above lower priority when relevance is similar
 - matched IDs include the required rule, decision, runbook, or package
 
-### 3. Partial Routing
+### 3. Partial Matching
 
 These cases verify that Discovery can say "some relevant knowledge exists, but
 support is incomplete."
@@ -266,7 +266,7 @@ Required support:
 - response includes missing knowledge hints
 - next steps read only high-confidence IDs
 
-### 4. Weak Routing
+### 4. Weak Matching
 
 These cases verify that broad matches do not become Argos-backed guidance.
 
@@ -418,7 +418,7 @@ Expected behavior:
 
 - support is strong
 - results include refresh-token knowledge
-- the request does not require files to produce a useful route
+- the request does not require files to produce a useful match
 - no unrelated cache or payment knowledge is returned
 
 ### `strong_file_scope_beats_generic`
@@ -450,17 +450,17 @@ Purpose: verify partial support when only experience knowledge exists.
 Expected behavior:
 
 - support is partial
-- the lesson appears as a relevant route
+- the lesson appears as a relevant match
 - missing knowledge hints mention absent rule or runbook guidance
 - next steps recommend full reading the lesson and no absent rule or runbook IDs
 
 ### `partial_package_entrypoint_without_detail`
 
-Purpose: verify package-aware partial routing.
+Purpose: verify package-aware partial matching.
 
 Expected behavior:
 
-- package entrypoint appears as a route
+- package entrypoint appears as a relevant match
 - support is partial if package summary matches but detailed rule is absent
 - matched sections identify package entrypoint sections
 - package assets are not standalone results

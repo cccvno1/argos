@@ -323,7 +323,7 @@ func TestToolCallArgosStandardsExplicitLimitOutOfRangeReturnsToolError(t *testin
 	}
 }
 
-func TestToolCallArgosFindKnowledgeReturnsRoutes(t *testing.T) {
+func TestToolCallArgosFindKnowledgeReturnsResults(t *testing.T) {
 	store := buildMCPTestStore(t)
 	defer store.Close()
 	server := NewServerWithStore(store)

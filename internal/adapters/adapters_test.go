@@ -45,7 +45,7 @@ func TestRenderedAdaptersIncludeStableKnowledgeContract(t *testing.T) {
 				"Use argos_find_knowledge when available; otherwise use equivalent CLI JSON or adapter guidance to find shared knowledge for current work.",
 				"Before implementation or review, call argos_standards when available; otherwise follow equivalent adapter or Markdown guidance.",
 				"Follow next_steps returned by Argos.",
-				"Read full knowledge items only through argos_read_knowledge when available; otherwise use equivalent CLI JSON or adapter guidance when routed to specific IDs or paths.",
+				"Read full knowledge items only through argos_read_knowledge when available; otherwise use equivalent CLI JSON or adapter guidance when next_steps or usage guidance select specific IDs or paths.",
 				"Cite Argos knowledge IDs used in final responses only after reading and applying them.",
 				"Do not cite IDs returned only by argos_list_knowledge or argos_find_knowledge.",
 				"Cite only knowledge IDs whose full item was read with argos_read_knowledge or equivalent CLI JSON and actually applied.",

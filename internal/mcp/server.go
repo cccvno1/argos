@@ -441,7 +441,7 @@ func tools() []tool {
 	return []tool{
 		{
 			Name:        "argos_context",
-			Description: "Get workflow context and recommended next calls.",
+			Description: "Get workflow context and recommended next steps.",
 			InputSchema: objectSchema(map[string]any{
 				"project": stringProperty("Project identifier."),
 				"phase":   stringProperty("Workflow phase, such as implementation, review, debugging, or deployment."),

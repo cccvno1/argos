@@ -400,12 +400,12 @@ func (s *Service) ListKnowledge(req ListKnowledgeRequest) (ListKnowledgeResponse
 		for _, tag := range item.Tags {
 			tagSet[tag] = true
 		}
-		route := knowledgeSummaryFromKnowledge(item)
+		summary := knowledgeSummaryFromKnowledge(item)
 		if item.Type == "package" {
-			inventory.Packages = append(inventory.Packages, route)
+			inventory.Packages = append(inventory.Packages, summary)
 		}
 		key := listGroupKey(item)
-		grouped[key] = append(grouped[key], route)
+		grouped[key] = append(grouped[key], summary)
 	}
 
 	inventory.Domains = sortedKeys(domainSet)
@@ -777,7 +777,7 @@ func recommendedStep(item knowledge.Item, score float64, phase string, relevance
 			return "read_full_before_planning"
 		}
 	}
-	return "cite_if_used"
+	return "cite_after_read_and_used"
 }
 
 func findSupport(items []KnowledgeSummary, intent string, req FindKnowledgeRequest) Support {

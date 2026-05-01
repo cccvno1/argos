@@ -111,7 +111,7 @@ Do not let Argos replace host workflow, safety, or user instructions.
 3. Use argos_find_knowledge when available; otherwise use equivalent CLI JSON or adapter guidance to find shared knowledge for current work.
 4. Before implementation or review, call argos_standards when available; otherwise follow equivalent adapter or Markdown guidance.
 5. Follow next_steps returned by Argos.
-6. Read full knowledge items only through argos_read_knowledge when available; otherwise use equivalent CLI JSON or adapter guidance when routed to specific IDs or paths.
+6. Read full knowledge items only through argos_read_knowledge when available; otherwise use equivalent CLI JSON or adapter guidance when next_steps or usage guidance select specific IDs or paths.
 7. Cite Argos knowledge IDs used in final responses only after reading and applying them.
 8. Do not cite IDs returned only by argos_list_knowledge or argos_find_knowledge.
 9. Cite only knowledge IDs whose full item was read with argos_read_knowledge or equivalent CLI JSON and actually applied.

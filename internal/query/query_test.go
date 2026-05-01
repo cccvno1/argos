@@ -13,22 +13,6 @@ import (
 )
 
 func TestActiveSurfacesDoNotUseRetiredSharedKnowledgeNames(t *testing.T) {
-	retired := []string{
-		"argos_map",
-		"argos_discover",
-		"get_knowledge_item",
-		"coverage_gaps",
-		"CoverageGap",
-		"action_policy",
-		"ActionPolicy",
-		"authority",
-		"recall",
-		"RecallState",
-		"disclosure",
-		"Disclosure",
-		"next_calls",
-		"RecommendedCall",
-	}
 	root := repoRootForActiveSurfaceTest(t)
 	activeRoots := []string{
 		"README.md",
@@ -42,10 +26,34 @@ func TestActiveSurfacesDoNotUseRetiredSharedKnowledgeNames(t *testing.T) {
 	}
 
 	for _, rel := range activeRoots {
-		if file, term, ok := firstRetiredNameMatch(t, root, rel, retired, activeSurfaceGuardFile(t)); ok {
+		if file, term, ok := firstRetiredNameMatch(t, root, rel, retiredSharedKnowledgeNames(), activeSurfaceGuardFile(t)); ok {
 			t.Fatalf("active surface %s contains retired term %q", file, term)
 		}
 	}
+}
+
+func retiredSharedKnowledgeNames() []string {
+	parts := [][]string{
+		{"argos", "_", "map"},
+		{"argos", "_", "discover"},
+		{"get", "_", "knowledge", "_", "item"},
+		{"coverage", "_", "gaps"},
+		{"Coverage", "Gap"},
+		{"action", "_", "policy"},
+		{"Action", "Policy"},
+		{"author", "ity"},
+		{"rec", "all"},
+		{"Recall", "State"},
+		{"dis", "closure"},
+		{"Dis", "closure"},
+		{"next", "_", "calls"},
+		{"Recommended", "Call"},
+	}
+	retired := make([]string, 0, len(parts))
+	for _, term := range parts {
+		retired = append(retired, strings.Join(term, ""))
+	}
+	return retired
 }
 
 func TestFirstRetiredNameMatchSkipsGuardFileAndReportsNestedPath(t *testing.T) {
@@ -373,7 +381,7 @@ func TestStandardsPrefersFileScopedMatchBeforeApplyingLimit(t *testing.T) {
 	}
 }
 
-func TestFindKnowledgeReturnsStrongMatchedRoutesWithoutFullBodies(t *testing.T) {
+func TestFindKnowledgeReturnsStrongMatchedResultsWithoutFullBodies(t *testing.T) {
 	store := buildFindKnowledgeTestStore(t)
 	defer store.Close()
 	service := New(store)
@@ -403,7 +411,7 @@ func TestFindKnowledgeReturnsStrongMatchedRoutesWithoutFullBodies(t *testing.T) 
 		t.Fatalf("find must not return full body: %#v", first)
 	}
 	if first.ReadStatus.ReadTool != "argos_read_knowledge" || first.ReadStatus.Level != "summary" {
-		t.Fatalf("unexpected disclosure: %#v", first.ReadStatus)
+		t.Fatalf("unexpected read status: %#v", first.ReadStatus)
 	}
 	if len(first.WhyMatched) == 0 {
 		t.Fatalf("expected why_matched reasons")
@@ -633,10 +641,10 @@ func TestFindKnowledgeSearchStatusDefaultsSemanticDisabled(t *testing.T) {
 		t.Fatalf("FindKnowledge returned error: %v", err)
 	}
 	if result.SearchStatus.Semantic.Status != "disabled" {
-		t.Fatalf("expected semantic recall disabled, got %#v", result.SearchStatus)
+		t.Fatalf("expected semantic search disabled, got %#v", result.SearchStatus)
 	}
 	if result.SearchStatus.Semantic.Reason == "" {
-		t.Fatalf("expected semantic recall reason, got %#v", result.SearchStatus)
+		t.Fatalf("expected semantic search reason, got %#v", result.SearchStatus)
 	}
 }
 
@@ -820,7 +828,7 @@ func TestFindKnowledgeMissingNeedsReportCrossDomainMismatch(t *testing.T) {
 		Priority:        "must",
 		UpdatedAt:       "2026-04-29",
 		Tags:            []string{"warehouse"},
-		Body:            "Warehouse-only auth guidance must not route to Mall API tasks.",
+		Body:            "Warehouse-only auth guidance must not match Mall API tasks.",
 	}})
 	defer store.Close()
 	service := New(store)

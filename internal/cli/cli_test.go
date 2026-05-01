@@ -248,7 +248,7 @@ func TestRunIndexIncludesOfficialPackages(t *testing.T) {
 	}
 }
 
-func TestRunKnowledgeFindReturnsJSONRoutes(t *testing.T) {
+func TestRunKnowledgeFindReturnsJSONResults(t *testing.T) {
 	root := t.TempDir()
 	writeCLIDiscoveryWorkspace(t, root)
 	chdir(t, root)

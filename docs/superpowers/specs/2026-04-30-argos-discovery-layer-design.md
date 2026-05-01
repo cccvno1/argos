@@ -12,7 +12,7 @@ Discovery should help an AI coding agent answer four questions:
 
 1. What knowledge exists in this project knowledge base?
 2. Which knowledge corresponds to the current task, phase, and files?
-3. How should the agent retrieve the selected knowledge without overfull reading
+3. How should the agent retrieve the selected knowledge without overloading
    context?
 4. When the knowledge base has no strong match, how should the agent avoid
    overclaiming, oversearching, or inventing Argos-backed guidance?
@@ -45,7 +45,7 @@ results from the core SQLite path.
 
 ### Progressive Reading
 
-Discovery returns routes, summaries, explanations, and next steps. It does not
+`FindKnowledge` returns matches, summaries, explanations, and next steps. It does not
 return full Markdown bodies.
 
 Full knowledge bodies are read only through explicit second-stage tools such
@@ -98,7 +98,7 @@ that were actually used.
 Discovery is a harness around agent knowledge use:
 
 ```text
-Inventory -> Routing -> Read Planning -> Controlled Reading -> Citation
+Inventory -> Matching -> Read Planning -> Controlled Reading -> Citation
 ```
 
 ### `argos_context`: Workflow Gate
@@ -127,12 +127,12 @@ It does not return full Markdown bodies.
 
 This prevents agents from blindly guessing what to search for.
 
-### `argos_find_knowledge`: Routing Gate
+### `argos_find_knowledge`: Find Gate
 
 `argos_find_knowledge` maps the current task to relevant knowledge.
 
 It accepts project, phase, task, files, query text, and optional filters. It
-returns ranked knowledge routes with:
+returns ranked knowledge results with:
 
 - `id`
 - `type`
@@ -604,7 +604,7 @@ id asc
 
 The same request against the same index should produce stable ordering.
 
-## Phase-Aware Routing
+## Phase-Aware Matching
 
 `phase` informs type preference and recommended steps:
 
@@ -632,7 +632,7 @@ The chunker may index package entrypoint sections:
 - `Start Here`
 - `Load On Demand`
 
-If one or more package chunks match, discovery returns one package item with
+If one or more package chunks match, `FindKnowledge` returns one package item with
 `matched_sections`; it does not return chunk full text.
 
 Example:
@@ -711,7 +711,7 @@ Generated adapters should be updated after discovery exists.
 They should recommend:
 
 - `argos_context` before substantial work
-- `argos_find_knowledge` for task-specific knowledge routing
+- `argos_find_knowledge` for task-specific knowledge matches
 - `argos_list_knowledge` for broad orientation or unfamiliar project areas
 - `argos_read_knowledge` only for selected IDs
 - `argos_cite_knowledge` for knowledge used in final answers

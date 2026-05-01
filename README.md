@@ -51,7 +51,7 @@ MCP -> CLI JSON -> generated adapter files -> Markdown source
 
 Generated adapters define a minimum contract for tools that read project
 instruction files: preserve host workflow control, prefer MCP, fall back to CLI
-JSON or Markdown source, read full knowledge only when routed, and cite Argos
+JSON or Markdown source, read full knowledge only when selected by Argos guidance, and cite Argos
 knowledge IDs that informed final responses.
 
 Before substantial work, an agent should read relevant Argos context and
@@ -61,7 +61,7 @@ the knowledge IDs it used.
 ## Discovery
 
 Discovery is the agent-facing knowledge navigation layer. It helps agents
-inventory available knowledge, route current work to relevant knowledge, and
+inventory available knowledge, find relevant knowledge for current work, and
 avoid Argos-backed claims when no strong match exists.
 
 The default discovery path is local and lightweight: SQLite metadata, file
@@ -79,7 +79,7 @@ argos knowledge cite --json <id>...
 ```
 
 `argos knowledge list` returns inventory and orientation.
-`argos knowledge find` returns ranked routes, `why_matched`, `support`,
+`argos knowledge find` returns ranked knowledge results, `why_matched`, `support`,
 `usage`, `search_status`, `missing_needs`, and `next_steps`. Find and list do
 not return full Markdown bodies. Read selected full items with
 `argos knowledge read`; cite used IDs with `argos knowledge cite`.
@@ -178,7 +178,7 @@ argos mcp
 The server supports tool discovery with `tools/list`. The shared-knowledge
 `tools/call` entries are:
 
-- `argos_find_knowledge`: returns ranked knowledge routes, support, explanations,
+- `argos_find_knowledge`: returns ranked knowledge results, support, explanations,
   and next steps without full bodies. Arguments: `project`, `phase`, `task`,
   `query`, `files`, `types`, `tags`, `domains`, `status`,
   `include_deprecated`, `limit`.

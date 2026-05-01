@@ -196,36 +196,36 @@ scenario should carry the design.
 ### Complete Support
 
 The shared knowledge pool contains directly relevant implementation, business,
-or operational knowledge. Discovery returns `strong`, no `missing_needs`, and
+or operational knowledge. `FindKnowledge` returns `strong`, no `missing_needs`, and
 read/cite recommendations for concrete IDs.
 
 ### Partial Engineering Support
 
 The pool contains reusable engineering knowledge, such as language, database,
 testing, or deployment practices, but lacks the task-specific design knowledge.
-Discovery returns `partial`, routes the reusable knowledge, and marks uncovered
+`FindKnowledge` returns `partial`, identifies the reusable knowledge, and marks uncovered
 business or architecture needs.
 
 ### Partial Business Support
 
 The pool contains domain or workflow knowledge, but lacks implementation or
-operational details. Discovery returns `partial`, routes domain knowledge, and
+operational details. `FindKnowledge` returns `partial`, identifies domain knowledge, and
 marks technical needs as uncovered.
 
 ### Weak Generic Term Match
 
 The pool contains a broad term that overlaps with the task but does not support
-the requested work. Discovery returns `weak`, forbids read/cite, and reports a
+the requested work. `FindKnowledge` returns `weak`, forbids read/cite, and reports a
 `weak_match` missing need.
 
 ### No Support
 
-No relevant shared knowledge matches. Discovery returns `none`, no items or
+No relevant shared knowledge matches. `FindKnowledge` returns `none`, no items or
 next steps, and `missing_needs` from `not_found`.
 
 ### Filter-Excluded Support
 
-Relevant knowledge exists, but explicit filters exclude it. Discovery returns
+Relevant knowledge exists, but explicit filters exclude it. `FindKnowledge` returns
 `none` or `partial` depending on remaining matches and reports
 `filtered_out` gaps rather than bypassing the user's filter.
 
@@ -233,7 +233,7 @@ Relevant knowledge exists, but explicit filters exclude it. Discovery returns
 
 Multiple uploaded items match but provide incompatible recommendations.
 Discovery should not collapse them into one Argos-backed answer. It should
-route the conflicting items as appropriate and report
+identify the conflicting items as appropriate and report
 `conflict` gaps until conflict handling is designed.
 
 ### Low-Confidence Or Outdated Support
@@ -250,7 +250,7 @@ not apply. Discovery should avoid over-ranking it and report
 
 ## Data Flow
 
-1. Adapter or agent calls `argos_context` for broad routing.
+1. Adapter or agent calls `argos_context` for broad orientation.
 2. Agent calls `argos_find_knowledge` with task/query/files/filters.
 3. Discovery gathers candidates from metadata, file scope, and FTS.
 4. Optional semantic search may add score evidence if configured.
@@ -259,7 +259,7 @@ not apply. Discovery should avoid over-ranking it and report
 7. Discovery derives `missing_needs` from uncovered task needs, weak evidence,
    explicit filters, conflicts, or low-confidence matches.
 8. Agent follows `usage`.
-9. Agent reads only routed IDs when `usage.read` allows it.
+9. Agent reads only selected IDs when `usage.read` allows it.
 10. Agent cites only read-and-applied IDs.
 11. Agent states uncovered needs as non-Argos-backed when relevant.
 
@@ -289,8 +289,8 @@ This migration should update:
 
 ### Unit Tests
 
-- `Discover` returns no `missing_needs` for strong support.
-- `Discover` returns `missing_needs` for partial, weak, and none support.
+- `FindKnowledge` returns no `missing_needs` for strong support.
+- `FindKnowledge` returns `missing_needs` for partial, weak, and none support.
 - Every missing need has `argos_backed=false`, non-empty `need`, non-empty
   `reason`, valid `source`, and valid `severity`.
 - Weak/none still forbid read and citation.
@@ -332,7 +332,7 @@ Adapters should instruct agents to:
 Run a fresh-context dogfood round with varied scenarios. The runner should not
 receive expected outputs or prior reports. It should verify that agents:
 
-- use routed shared knowledge when allowed;
+- use selected shared knowledge when allowed;
 - state uncovered needs without treating them as knowledge;
 - continue normal work when support is none;
 - avoid capture/upload unless the user explicitly requests sharing knowledge.

@@ -12,4 +12,4 @@ tags: [auth, warehouse]
 ---
 # Warehouse Auth Rule
 
-Warehouse-only auth guidance must not route to Mall API tasks.
+Warehouse-only auth guidance must not match Mall API tasks.
