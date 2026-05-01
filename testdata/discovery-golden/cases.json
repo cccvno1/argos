@@ -396,6 +396,22 @@
       }
     },
     {
+      "id": "interface_cli_read_returns_body",
+      "operation": "cli-read",
+      "input": {"project": "mall-api"},
+      "expected": {
+        "load_ids": ["rule:backend.auth-refresh.v1"]
+      }
+    },
+    {
+      "id": "interface_cli_cite_returns_citation",
+      "operation": "cli-cite",
+      "input": {"project": "mall-api"},
+      "expected": {
+        "cite_ids": ["rule:backend.auth-refresh.v1"]
+      }
+    },
+    {
       "id": "interface_mcp_strict_schema",
       "operation": "mcp-schema",
       "input": {"project": "mall-api"},

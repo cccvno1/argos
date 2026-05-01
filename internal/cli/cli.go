@@ -117,104 +117,8 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			Task:    *task,
 		})
 		return printJSON(stdout, stderr, result)
-	case "discover":
-		flags := flag.NewFlagSet("discover", flag.ContinueOnError)
-		flags.SetOutput(stderr)
-		jsonOut := flags.Bool("json", false, "print JSON output")
-		project := flags.String("project", "", "project id")
-		phase := flags.String("phase", "", "workflow phase")
-		task := flags.String("task", "", "task description")
-		queryText := flags.String("query", "", "search query")
-		var files multiValueFlag
-		var types multiValueFlag
-		var tags multiValueFlag
-		var domains multiValueFlag
-		var statuses multiValueFlag
-		flags.Var(&files, "files", "file path to match; may be repeated")
-		flags.Var(&types, "types", "knowledge item type to include; may be repeated")
-		flags.Var(&tags, "tags", "tag to include; may be repeated")
-		flags.Var(&domains, "domains", "domain to include; may be repeated")
-		flags.Var(&statuses, "status", "status to include; may be repeated")
-		includeDeprecated := flags.Bool("include-deprecated", false, "include deprecated knowledge items")
-		limit := flags.Int("limit", 0, "maximum number of discovery items to return")
-		if err := flags.Parse(args[1:]); err != nil {
-			return 2
-		}
-		if !*jsonOut {
-			fmt.Fprintln(stderr, "discover: --json is required")
-			return 2
-		}
-		if strings.TrimSpace(*project) == "" {
-			fmt.Fprintln(stderr, "discover: --project is required")
-			return 2
-		}
-		if strings.TrimSpace(*task) == "" && strings.TrimSpace(*queryText) == "" {
-			fmt.Fprintln(stderr, "discover: --task or --query is required")
-			return 2
-		}
-		if flagProvided(flags, "limit") && (*limit < 1 || *limit > 20) {
-			fmt.Fprintln(stderr, "discover: --limit must be between 1 and 20")
-			return 2
-		}
-		store, closeStore, available := openIndexStore(stderr)
-		if !available {
-			return 1
-		}
-		defer closeStore()
-		result, err := query.New(store).Discover(query.DiscoverRequest{
-			Project:           *project,
-			Phase:             *phase,
-			Task:              *task,
-			Query:             *queryText,
-			Files:             files,
-			Types:             types,
-			Tags:              tags,
-			Domains:           domains,
-			Status:            statuses,
-			IncludeDeprecated: *includeDeprecated,
-			Limit:             *limit,
-		})
-		if err != nil {
-			fmt.Fprintf(stderr, "discover: %v\n", err)
-			return 1
-		}
-		return printJSON(stdout, stderr, result)
-	case "map":
-		flags := flag.NewFlagSet("map", flag.ContinueOnError)
-		flags.SetOutput(stderr)
-		jsonOut := flags.Bool("json", false, "print JSON output")
-		project := flags.String("project", "", "project id")
-		domain := flags.String("domain", "", "domain filter")
-		var types multiValueFlag
-		flags.Var(&types, "types", "knowledge item type to include; may be repeated")
-		includeDeprecated := flags.Bool("include-deprecated", false, "include deprecated knowledge items")
-		if err := flags.Parse(args[1:]); err != nil {
-			return 2
-		}
-		if !*jsonOut {
-			fmt.Fprintln(stderr, "map: --json is required")
-			return 2
-		}
-		if strings.TrimSpace(*project) == "" {
-			fmt.Fprintln(stderr, "map: --project is required")
-			return 2
-		}
-		store, closeStore, available := openIndexStore(stderr)
-		if !available {
-			return 1
-		}
-		defer closeStore()
-		result, err := query.New(store).Map(query.MapRequest{
-			Project:           *project,
-			Domain:            *domain,
-			Types:             types,
-			IncludeDeprecated: *includeDeprecated,
-		})
-		if err != nil {
-			fmt.Fprintf(stderr, "map: %v\n", err)
-			return 1
-		}
-		return printJSON(stdout, stderr, result)
+	case "knowledge":
+		return runKnowledge(args[1:], stdout, stderr)
 	case "mcp":
 		root, err := os.Getwd()
 		if err != nil {
@@ -260,6 +164,182 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		printUsage(stderr)
 		return 2
 	}
+}
+
+func runKnowledge(args []string, stdout io.Writer, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "knowledge: subcommand is required")
+		printUsage(stderr)
+		return 2
+	}
+	switch args[0] {
+	case "find":
+		return runKnowledgeFind(args[1:], stdout, stderr)
+	case "list":
+		return runKnowledgeList(args[1:], stdout, stderr)
+	case "read":
+		return runKnowledgeRead(args[1:], stdout, stderr)
+	case "cite":
+		return runKnowledgeCite(args[1:], stdout, stderr)
+	default:
+		fmt.Fprintf(stderr, "knowledge: unknown subcommand %q\n", args[0])
+		printUsage(stderr)
+		return 2
+	}
+}
+
+func runKnowledgeFind(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("knowledge find", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	jsonOut := flags.Bool("json", false, "print JSON output")
+	project := flags.String("project", "", "project id")
+	phase := flags.String("phase", "", "workflow phase")
+	task := flags.String("task", "", "task description")
+	queryText := flags.String("query", "", "search query")
+	var files multiValueFlag
+	var types multiValueFlag
+	var tags multiValueFlag
+	var domains multiValueFlag
+	var statuses multiValueFlag
+	flags.Var(&files, "files", "file path to match; may be repeated")
+	flags.Var(&types, "types", "knowledge item type to include; may be repeated")
+	flags.Var(&tags, "tags", "tag to include; may be repeated")
+	flags.Var(&domains, "domains", "domain to include; may be repeated")
+	flags.Var(&statuses, "status", "status to include; may be repeated")
+	includeDeprecated := flags.Bool("include-deprecated", false, "include deprecated knowledge items")
+	limit := flags.Int("limit", 0, "maximum number of knowledge items to return")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if !*jsonOut {
+		fmt.Fprintln(stderr, "knowledge find: --json is required")
+		return 2
+	}
+	if strings.TrimSpace(*project) == "" {
+		fmt.Fprintln(stderr, "knowledge find: --project is required")
+		return 2
+	}
+	if strings.TrimSpace(*task) == "" && strings.TrimSpace(*queryText) == "" {
+		fmt.Fprintln(stderr, "knowledge find: --task or --query is required")
+		return 2
+	}
+	if flagProvided(flags, "limit") && (*limit < 1 || *limit > 20) {
+		fmt.Fprintln(stderr, "knowledge find: --limit must be between 1 and 20")
+		return 2
+	}
+	store, closeStore, available := openIndexStore(stderr)
+	if !available {
+		return 1
+	}
+	defer closeStore()
+	result, err := query.New(store).FindKnowledge(query.FindKnowledgeRequest{
+		Project:           *project,
+		Phase:             *phase,
+		Task:              *task,
+		Query:             *queryText,
+		Files:             files,
+		Types:             types,
+		Tags:              tags,
+		Domains:           domains,
+		Status:            statuses,
+		IncludeDeprecated: *includeDeprecated,
+		Limit:             *limit,
+	})
+	if err != nil {
+		fmt.Fprintf(stderr, "knowledge find: %v\n", err)
+		return 1
+	}
+	return printJSON(stdout, stderr, result)
+}
+
+func runKnowledgeList(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("knowledge list", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	jsonOut := flags.Bool("json", false, "print JSON output")
+	project := flags.String("project", "", "project id")
+	domain := flags.String("domain", "", "domain filter")
+	var types multiValueFlag
+	flags.Var(&types, "types", "knowledge item type to include; may be repeated")
+	includeDeprecated := flags.Bool("include-deprecated", false, "include deprecated knowledge items")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if !*jsonOut {
+		fmt.Fprintln(stderr, "knowledge list: --json is required")
+		return 2
+	}
+	if strings.TrimSpace(*project) == "" {
+		fmt.Fprintln(stderr, "knowledge list: --project is required")
+		return 2
+	}
+	store, closeStore, available := openIndexStore(stderr)
+	if !available {
+		return 1
+	}
+	defer closeStore()
+	result, err := query.New(store).ListKnowledge(query.ListKnowledgeRequest{
+		Project:           *project,
+		Domain:            *domain,
+		Types:             types,
+		IncludeDeprecated: *includeDeprecated,
+	})
+	if err != nil {
+		fmt.Fprintf(stderr, "knowledge list: %v\n", err)
+		return 1
+	}
+	return printJSON(stdout, stderr, result)
+}
+
+func runKnowledgeRead(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("knowledge read", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	jsonOut := flags.Bool("json", false, "print JSON output")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if !*jsonOut {
+		fmt.Fprintln(stderr, "knowledge read: --json is required")
+		return 2
+	}
+	if flags.NArg() != 1 || strings.TrimSpace(flags.Arg(0)) == "" {
+		fmt.Fprintln(stderr, "knowledge read: id is required")
+		return 2
+	}
+	store, closeStore, available := openIndexStore(stderr)
+	if !available {
+		return 1
+	}
+	defer closeStore()
+	result, err := query.New(store).ReadKnowledge(flags.Arg(0))
+	if err != nil {
+		fmt.Fprintf(stderr, "knowledge read: %v\n", err)
+		return 1
+	}
+	return printJSON(stdout, stderr, result)
+}
+
+func runKnowledgeCite(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("knowledge cite", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	jsonOut := flags.Bool("json", false, "print JSON output")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if !*jsonOut {
+		fmt.Fprintln(stderr, "knowledge cite: --json is required")
+		return 2
+	}
+	if len(flags.Args()) == 0 {
+		fmt.Fprintln(stderr, "knowledge cite: at least one id is required")
+		return 2
+	}
+	store, closeStore, available := openIndexStore(stderr)
+	if !available {
+		return 1
+	}
+	defer closeStore()
+	result := query.New(store).CiteKnowledge(flags.Args())
+	return printJSON(stdout, stderr, result)
 }
 
 type multiValueFlag []string
@@ -444,8 +524,13 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  index")
 	fmt.Fprintln(w, "  install-adapters")
 	fmt.Fprintln(w, "  context")
-	fmt.Fprintln(w, "  discover")
-	fmt.Fprintln(w, "  map")
+	fmt.Fprintln(w, "  knowledge")
 	fmt.Fprintln(w, "  mcp")
 	fmt.Fprintln(w, "  promote")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Examples:")
+	fmt.Fprintln(w, "  argos knowledge list --json --project <project>")
+	fmt.Fprintln(w, "  argos knowledge find --json --project <project> --task <task>")
+	fmt.Fprintln(w, "  argos knowledge read --json <id>")
+	fmt.Fprintln(w, "  argos knowledge cite --json <id>...")
 }

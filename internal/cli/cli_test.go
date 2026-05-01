@@ -248,7 +248,7 @@ func TestRunIndexIncludesOfficialPackages(t *testing.T) {
 	}
 }
 
-func TestRunDiscoverReturnsJSONRoutes(t *testing.T) {
+func TestRunKnowledgeFindReturnsJSONRoutes(t *testing.T) {
 	root := t.TempDir()
 	writeCLIDiscoveryWorkspace(t, root)
 	chdir(t, root)
@@ -258,15 +258,15 @@ func TestRunDiscoverReturnsJSONRoutes(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	code := Run([]string{"discover", "--json", "--project", "mall-api", "--phase", "implementation", "--task", "add refresh token endpoint", "--query", "refresh token", "--files", "internal/auth/session.go"}, &stdout, &stderr)
+	code := Run([]string{"knowledge", "find", "--json", "--project", "mall-api", "--phase", "implementation", "--task", "add refresh token endpoint", "--query", "refresh token", "--files", "internal/auth/session.go"}, &stdout, &stderr)
 
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d stderr=%q", code, stderr.String())
 	}
 	var result struct {
-		Coverage struct {
-			Status string `json:"status"`
-		} `json:"coverage"`
+		Support struct {
+			Level string `json:"level"`
+		} `json:"support"`
 		Items []struct {
 			ID   string `json:"id"`
 			Body string `json:"body"`
@@ -275,18 +275,18 @@ func TestRunDiscoverReturnsJSONRoutes(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 		t.Fatalf("invalid JSON: %v\n%s", err, stdout.String())
 	}
-	if result.Coverage.Status != "strong" {
+	if result.Support.Level != "strong" {
 		t.Fatalf("expected strong coverage: %s", stdout.String())
 	}
 	if len(result.Items) == 0 || result.Items[0].ID != "rule:backend.auth.v1" {
 		t.Fatalf("expected auth rule: %s", stdout.String())
 	}
 	if strings.Contains(stdout.String(), "Full body implementation detail") {
-		t.Fatalf("discover should not print full body: %s", stdout.String())
+		t.Fatalf("knowledge find should not print full body: %s", stdout.String())
 	}
 }
 
-func TestRunDiscoverAcceptsRepeatedFiles(t *testing.T) {
+func TestRunKnowledgeFindAcceptsRepeatedFiles(t *testing.T) {
 	root := t.TempDir()
 	writeCLIDiscoveryWorkspace(t, root)
 	chdir(t, root)
@@ -296,7 +296,7 @@ func TestRunDiscoverAcceptsRepeatedFiles(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	code := Run([]string{"discover", "--json", "--project", "mall-api", "--phase", "implementation", "--task", "add auth middleware", "--query", "auth", "--files", "   ", "--files", " internal/auth/session.go "}, &stdout, &stderr)
+	code := Run([]string{"knowledge", "find", "--json", "--project", "mall-api", "--phase", "implementation", "--task", "add auth middleware", "--query", "auth", "--files", "   ", "--files", " internal/auth/session.go "}, &stdout, &stderr)
 
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d stderr=%q", code, stderr.String())
@@ -320,7 +320,7 @@ func TestRunDiscoverAcceptsRepeatedFiles(t *testing.T) {
 	}
 }
 
-func TestRunDiscoverAcceptsDiscoveryFiltersAndLimit(t *testing.T) {
+func TestRunKnowledgeFindAcceptsDiscoveryFiltersAndLimit(t *testing.T) {
 	root := t.TempDir()
 	writeCLIDiscoveryWorkspace(t, root)
 	chdir(t, root)
@@ -331,7 +331,7 @@ func TestRunDiscoverAcceptsDiscoveryFiltersAndLimit(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	code := Run([]string{
-		"discover", "--json",
+		"knowledge", "find", "--json",
 		"--project", "mall-api",
 		"--query", "auth",
 		"--types", "rule",
@@ -360,48 +360,48 @@ func TestRunDiscoverAcceptsDiscoveryFiltersAndLimit(t *testing.T) {
 	}
 }
 
-func TestRunDiscoverRejectsMissingProject(t *testing.T) {
+func TestRunKnowledgeFindRejectsMissingProject(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	code := Run([]string{"discover", "--json", "--query", "auth"}, &stdout, &stderr)
+	code := Run([]string{"knowledge", "find", "--json", "--query", "auth"}, &stdout, &stderr)
 
 	if code != 2 {
 		t.Fatalf("expected exit code 2, got %d", code)
 	}
-	if !strings.Contains(stderr.String(), "discover: --project is required") {
+	if !strings.Contains(stderr.String(), "knowledge find: --project is required") {
 		t.Fatalf("unexpected stderr: %q", stderr.String())
 	}
 }
 
-func TestRunDiscoverRejectsMissingTaskAndQuery(t *testing.T) {
+func TestRunKnowledgeFindRejectsMissingTaskAndQuery(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	code := Run([]string{"discover", "--json", "--project", "mall-api"}, &stdout, &stderr)
+	code := Run([]string{"knowledge", "find", "--json", "--project", "mall-api"}, &stdout, &stderr)
 
 	if code != 2 {
 		t.Fatalf("expected exit code 2, got %d", code)
 	}
-	if !strings.Contains(stderr.String(), "discover: --task or --query is required") {
+	if !strings.Contains(stderr.String(), "knowledge find: --task or --query is required") {
 		t.Fatalf("unexpected stderr: %q", stderr.String())
 	}
 }
 
-func TestRunDiscoverRejectsExplicitLimitOutOfRange(t *testing.T) {
+func TestRunKnowledgeFindRejectsExplicitLimitOutOfRange(t *testing.T) {
 	for _, limit := range []string{"0", "21"} {
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer
-		code := Run([]string{"discover", "--json", "--project", "mall-api", "--query", "auth", "--limit", limit}, &stdout, &stderr)
+		code := Run([]string{"knowledge", "find", "--json", "--project", "mall-api", "--query", "auth", "--limit", limit}, &stdout, &stderr)
 
 		if code != 2 {
 			t.Fatalf("expected exit code 2 for limit %s, got %d", limit, code)
 		}
-		if !strings.Contains(stderr.String(), "discover: --limit must be between 1 and 20") {
+		if !strings.Contains(stderr.String(), "knowledge find: --limit must be between 1 and 20") {
 			t.Fatalf("unexpected stderr for limit %s: %q", limit, stderr.String())
 		}
 	}
 }
 
-func TestRunMapReturnsJSONInventory(t *testing.T) {
+func TestRunKnowledgeListReturnsJSONInventory(t *testing.T) {
 	root := t.TempDir()
 	writeCLIDiscoveryWorkspace(t, root)
 	chdir(t, root)
@@ -411,7 +411,7 @@ func TestRunMapReturnsJSONInventory(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	code := Run([]string{"map", "--json", "--project", "mall-api", "--domain", "backend"}, &stdout, &stderr)
+	code := Run([]string{"knowledge", "list", "--json", "--project", "mall-api", "--domain", "backend"}, &stdout, &stderr)
 
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d stderr=%q", code, stderr.String())
@@ -420,11 +420,11 @@ func TestRunMapReturnsJSONInventory(t *testing.T) {
 		t.Fatalf("expected inventory JSON: %s", stdout.String())
 	}
 	if strings.Contains(stdout.String(), "Full body implementation detail") {
-		t.Fatalf("map should not print full body: %s", stdout.String())
+		t.Fatalf("knowledge list should not print full body: %s", stdout.String())
 	}
 }
 
-func TestRunMapAcceptsTypesAndIncludeDeprecated(t *testing.T) {
+func TestRunKnowledgeListAcceptsTypesAndIncludeDeprecated(t *testing.T) {
 	root := t.TempDir()
 	writeCLIDiscoveryWorkspace(t, root)
 	chdir(t, root)
@@ -434,40 +434,148 @@ func TestRunMapAcceptsTypesAndIncludeDeprecated(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	code := Run([]string{"map", "--json", "--project", "mall-api", "--domain", "backend", "--types", "package", "--include-deprecated"}, &stdout, &stderr)
+	code := Run([]string{"knowledge", "list", "--json", "--project", "mall-api", "--domain", "backend", "--types", "package", "--include-deprecated"}, &stdout, &stderr)
 
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d stderr=%q", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `"package": 1`) {
-		t.Fatalf("expected map to honor --types package: %s", stdout.String())
+		t.Fatalf("expected knowledge list to honor --types package: %s", stdout.String())
 	}
 	if strings.Contains(stdout.String(), `"rule"`) {
-		t.Fatalf("expected map to filter out rules: %s", stdout.String())
+		t.Fatalf("expected knowledge list to filter out rules: %s", stdout.String())
 	}
 }
 
-func TestRunMapRejectsMissingProject(t *testing.T) {
+func TestRunKnowledgeListRejectsMissingProject(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	code := Run([]string{"map", "--json", "--domain", "backend"}, &stdout, &stderr)
+	code := Run([]string{"knowledge", "list", "--json", "--domain", "backend"}, &stdout, &stderr)
 
 	if code != 2 {
 		t.Fatalf("expected exit code 2, got %d", code)
 	}
-	if !strings.Contains(stderr.String(), "map: --project is required") {
+	if !strings.Contains(stderr.String(), "knowledge list: --project is required") {
 		t.Fatalf("unexpected stderr: %q", stderr.String())
 	}
 }
 
-func TestRunDiscoverRequiresIndex(t *testing.T) {
+func TestRunKnowledgeReadReturnsFullBody(t *testing.T) {
+	root := t.TempDir()
+	writeCLIDiscoveryWorkspace(t, root)
+	chdir(t, root)
+	if code := Run([]string{"index"}, io.Discard, io.Discard); code != 0 {
+		t.Fatalf("index failed with code %d", code)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{"knowledge", "read", "--json", "rule:backend.auth.v1"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stderr=%q", code, stderr.String())
+	}
+	var result struct {
+		ID   string `json:"id"`
+		Body string `json:"body"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, stdout.String())
+	}
+	if result.ID != "rule:backend.auth.v1" || !strings.Contains(result.Body, "Full body implementation detail") {
+		t.Fatalf("expected full body for auth rule: %s", stdout.String())
+	}
+}
+
+func TestRunKnowledgeCiteReturnsCitations(t *testing.T) {
+	root := t.TempDir()
+	writeCLIDiscoveryWorkspace(t, root)
+	chdir(t, root)
+	if code := Run([]string{"index"}, io.Discard, io.Discard); code != 0 {
+		t.Fatalf("index failed with code %d", code)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{"knowledge", "cite", "--json", "rule:backend.auth.v1"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stderr=%q", code, stderr.String())
+	}
+	var result struct {
+		Citations []struct {
+			ID string `json:"id"`
+		} `json:"citations"`
+		Missing []string `json:"missing"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, stdout.String())
+	}
+	if len(result.Citations) != 1 || result.Citations[0].ID != "rule:backend.auth.v1" || len(result.Missing) != 0 {
+		t.Fatalf("expected auth rule citation: %s", stdout.String())
+	}
+}
+
+func TestRunKnowledgeReadAndCiteValidateRequiredFlags(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "read missing json", args: []string{"knowledge", "read", "rule:backend.auth.v1"}, want: "knowledge read: --json is required"},
+		{name: "read missing id", args: []string{"knowledge", "read", "--json"}, want: "knowledge read: id is required"},
+		{name: "read extra id", args: []string{"knowledge", "read", "--json", "rule:backend.auth.v1", "rule:backend.extra.v1"}, want: "knowledge read: id is required"},
+		{name: "cite missing json", args: []string{"knowledge", "cite", "rule:backend.auth.v1"}, want: "knowledge cite: --json is required"},
+		{name: "cite missing ids", args: []string{"knowledge", "cite", "--json"}, want: "knowledge cite: at least one id is required"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var stdout bytes.Buffer
+			var stderr bytes.Buffer
+			code := Run(tc.args, &stdout, &stderr)
+			if code != 2 {
+				t.Fatalf("expected exit code 2, got %d", code)
+			}
+			if !strings.Contains(stderr.String(), tc.want) {
+				t.Fatalf("expected stderr to contain %q, got %q", tc.want, stderr.String())
+			}
+		})
+	}
+}
+
+func TestRunKnowledgeRequiresSubcommand(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{"knowledge"}, &stdout, &stderr)
+
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d", code)
+	}
+	if !strings.Contains(stderr.String(), "knowledge: subcommand is required") {
+		t.Fatalf("unexpected stderr: %q", stderr.String())
+	}
+}
+
+func TestRunKnowledgeRejectsUnknownSubcommand(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{"knowledge", "missing"}, &stdout, &stderr)
+
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d", code)
+	}
+	if !strings.Contains(stderr.String(), `knowledge: unknown subcommand "missing"`) {
+		t.Fatalf("unexpected stderr: %q", stderr.String())
+	}
+}
+
+func TestRunKnowledgeFindRequiresIndex(t *testing.T) {
 	root := t.TempDir()
 	writeCLIDiscoveryWorkspace(t, root)
 	chdir(t, root)
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	code := Run([]string{"discover", "--json", "--project", "mall-api", "--query", "auth"}, &stdout, &stderr)
+	code := Run([]string{"knowledge", "find", "--json", "--project", "mall-api", "--query", "auth"}, &stdout, &stderr)
 
 	if code != 1 {
 		t.Fatalf("expected exit code 1, got %d", code)
@@ -683,10 +791,10 @@ func TestRunContextPrintsWorkflowContractJSON(t *testing.T) {
 
 	var result struct {
 		Project              string `json:"project"`
-		RecommendedNextCalls []struct {
+		RecommendedNextSteps []struct {
 			Tool   string `json:"tool"`
 			Reason string `json:"reason"`
-		} `json:"recommended_next_calls"`
+		} `json:"recommended_next_steps"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 		t.Fatalf("expected JSON output, got error %v and output %q", err, stdout.String())
@@ -694,8 +802,8 @@ func TestRunContextPrintsWorkflowContractJSON(t *testing.T) {
 	if result.Project != "mall-api" {
 		t.Fatalf("unexpected project: %s", result.Project)
 	}
-	if len(result.RecommendedNextCalls) == 0 {
-		t.Fatal("expected recommended next calls")
+	if len(result.RecommendedNextSteps) == 0 {
+		t.Fatal("expected recommended next steps")
 	}
 }
 

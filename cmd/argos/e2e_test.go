@@ -23,6 +23,10 @@ func TestCLIEndToEndValidWorkspace(t *testing.T) {
 
 	runCommand(t, workspace, binary, "validate")
 	runCommand(t, workspace, binary, "index")
+	runCommand(t, workspace, binary, "knowledge", "list", "--json", "--project", "mall-api")
+	runCommand(t, workspace, binary, "knowledge", "find", "--json", "--project", "mall-api", "--query", "auth")
+	runCommand(t, workspace, binary, "knowledge", "read", "--json", "rule:backend.auth.v1")
+	runCommand(t, workspace, binary, "knowledge", "cite", "--json", "rule:backend.auth.v1")
 	runCommand(t, workspace, binary, "install-adapters")
 
 	assertExists(t, filepath.Join(workspace, "argos", "index.db"))
