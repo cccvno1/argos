@@ -225,3 +225,222 @@ func TestBuildPacketRejectsAmbiguousPublicHandleCollision(t *testing.T) {
 		t.Fatalf("BuildPacket returned non-ambiguity error: %v", err)
 	}
 }
+
+func TestParseMarkdownReportExtractsStructuredFields(t *testing.T) {
+	report, err := ParseMarkdownReport([]byte(sampleStrongReport()))
+	if err != nil {
+		t.Fatalf("ParseMarkdownReport returned error: %v", err)
+	}
+
+	if report.CaseID != "progressive_read_status_and_citation_guard" {
+		t.Fatalf("CaseID = %q, want legacy evaluator-compatible case ID", report.CaseID)
+	}
+	if report.ActualSupport != "strong" {
+		t.Fatalf("ActualSupport = %q, want strong", report.ActualSupport)
+	}
+	if report.SearchStatus != "found exact backend auth refresh guidance" {
+		t.Fatalf("SearchStatus = %q, want normalized status", report.SearchStatus)
+	}
+	assertStringSetContains(t, report.DiscoveredIDs, "rule:backend.auth-refresh.v1")
+	assertStringSetContains(t, report.ReadIDs, "rule:backend.auth-refresh.v1")
+	assertStringSetContains(t, report.CitedIDs, "rule:backend.auth-refresh.v1")
+	if got := report.Guards["progressive reading"]; got != "pass" {
+		t.Fatalf("progressive reading guard = %q, want pass", got)
+	}
+	if report.Result != "pass" {
+		t.Fatalf("Result = %q, want pass", report.Result)
+	}
+	if len(report.MissingSections) != 0 {
+		t.Fatalf("MissingSections = %v, want none", report.MissingSections)
+	}
+	if len(report.MissingFields) != 0 {
+		t.Fatalf("MissingFields = %v, want none", report.MissingFields)
+	}
+}
+
+func TestParseMarkdownReportRecordsMissingSections(t *testing.T) {
+	report, err := ParseMarkdownReport([]byte("Case: `case-001`\n\n## Result\n\nResult: pass\n"))
+	if err != nil {
+		t.Fatalf("ParseMarkdownReport returned error: %v", err)
+	}
+
+	for _, want := range []string{"Inputs", "Tool Transcript Summary", "Observed Results", "Guards"} {
+		assertStringSetContains(t, report.MissingSections, want)
+	}
+	for _, want := range []string{"actual support", "progressive reading", "citation accountability", "usage guidance followed", "context contamination"} {
+		assertStringSetContains(t, report.MissingFields, want)
+	}
+}
+
+func TestParseMarkdownReportExtractsNestedIDBullets(t *testing.T) {
+	report, err := ParseMarkdownReport([]byte(`# Report
+
+Case: case-001
+
+## Inputs
+
+## Tool Transcript Summary
+
+## Observed Results
+
+- Actual support: strong
+- Discovered IDs:
+  - ` + "`rule:backend.auth-refresh.v1`" + `
+  - ` + "`decision:backend.session-renewal.v1`" + `
+- Read IDs included:
+  - ` + "`rule:backend.auth-refresh.v1`" + `
+- Cited IDs:
+  - ` + "`decision:backend.session-renewal.v1`" + `
+- Missing needs:
+  - follow-up owner
+
+## Guards
+
+- Progressive reading: pass
+- Citation accountability: pass
+- Usage guidance followed: pass
+- Context contamination: pass
+
+## Result
+
+Result: pass
+`))
+	if err != nil {
+		t.Fatalf("ParseMarkdownReport returned error: %v", err)
+	}
+
+	assertStringSetContains(t, report.DiscoveredIDs, "rule:backend.auth-refresh.v1")
+	assertStringSetContains(t, report.DiscoveredIDs, "decision:backend.session-renewal.v1")
+	assertStringSetContains(t, report.ReadIDs, "rule:backend.auth-refresh.v1")
+	assertStringSetContains(t, report.CitedIDs, "decision:backend.session-renewal.v1")
+	assertStringSetContains(t, report.MissingNeeds, "follow-up owner")
+}
+
+func TestParseMarkdownReportStopsNestedIDListAtUnlabeledTopLevelBullet(t *testing.T) {
+	report, err := ParseMarkdownReport([]byte(`# Report
+
+Case: case-001
+
+## Observed Results
+
+- Discovered IDs:
+  - ` + "`rule:backend.auth-refresh.v1`" + `
+- Note from runner
+  - ` + "`decision:backend.session-renewal.v1`" + `
+`))
+	if err != nil {
+		t.Fatalf("ParseMarkdownReport returned error: %v", err)
+	}
+
+	if got, want := len(report.DiscoveredIDs), 1; got != want {
+		t.Fatalf("len(DiscoveredIDs) = %d, want %d: %v", got, want, report.DiscoveredIDs)
+	}
+	assertStringSetContains(t, report.DiscoveredIDs, "rule:backend.auth-refresh.v1")
+}
+
+func TestParseMarkdownReportDedupesCommaSeparatedIDs(t *testing.T) {
+	report, err := ParseMarkdownReport([]byte(`# Report
+
+Case: case-001
+
+## Observed Results
+
+- Discovered IDs: ` + "`rule:backend.auth-refresh.v1`" + `, rule:backend.auth-refresh.v1, decision:backend.session-renewal.v1
+`))
+	if err != nil {
+		t.Fatalf("ParseMarkdownReport returned error: %v", err)
+	}
+
+	if got, want := len(report.DiscoveredIDs), 2; got != want {
+		t.Fatalf("len(DiscoveredIDs) = %d, want %d: %v", got, want, report.DiscoveredIDs)
+	}
+	assertStringSetContains(t, report.DiscoveredIDs, "rule:backend.auth-refresh.v1")
+	assertStringSetContains(t, report.DiscoveredIDs, "decision:backend.session-renewal.v1")
+}
+
+func TestParseMarkdownReportRecordsBlankResultField(t *testing.T) {
+	report, err := ParseMarkdownReport([]byte(`# Report
+
+Case: case-001
+
+## Inputs
+
+## Tool Transcript Summary
+
+## Observed Results
+
+- Actual support: strong
+
+## Guards
+
+- Progressive reading: pass
+- Citation accountability: pass
+- Usage guidance followed: pass
+- Context contamination: pass
+
+## Result
+
+Result:
+`))
+	if err != nil {
+		t.Fatalf("ParseMarkdownReport returned error: %v", err)
+	}
+
+	assertStringSetContains(t, report.MissingFields, "result")
+}
+
+func sampleStrongReport() string {
+	return `# Argos Dogfood Runner Report
+
+Case: ` + "`progressive_read_status_and_citation_guard`" + `
+
+## Inputs
+
+- Project: mall-api
+- Phase: implementation
+- Task: refresh backend auth tokens safely
+
+## Tool Transcript Summary
+
+- Ran ` + "`argos knowledge find --json --project mall-api --task \"refresh backend auth tokens safely\"`" + `
+- Ran ` + "`argos knowledge read --json rule:backend.auth-refresh.v1`" + `
+- Ran ` + "`argos knowledge cite --json rule:backend.auth-refresh.v1`" + `
+
+## Observed Results
+
+- Actual support: ` + "`strong`" + `
+- Usage guidance: Followed the auth-refresh runbook and kept findings scoped to the cited rule.
+- Search status: ` + "`FOUND exact backend auth refresh guidance.`" + `
+- Discovered IDs: ` + "`rule:backend.auth-refresh.v1`" + `
+- Read IDs: ` + "`rule:backend.auth-refresh.v1`" + `
+- Cited IDs: ` + "`rule:backend.auth-refresh.v1`" + `
+- Missing needs: none
+- Next steps: none
+
+## Guards
+
+- Progressive reading: PASS.
+- Weak/none no-overclaim: pass
+- Citation accountability: ` + "`PASS`" + `
+- Cited IDs subset of read-and-used IDs: pass
+- Missing needs not cited: pass
+- Attribution boundary: pass
+- No Discovery-triggered upload/capture: pass
+- Usage guidance followed: pass
+- Context contamination: pass
+
+## Result
+
+Result: ` + "`pass`" + `
+`
+}
+
+func assertStringSetContains(t *testing.T, got []string, want string) {
+	t.Helper()
+	for _, value := range got {
+		if value == want {
+			return
+		}
+	}
+	t.Fatalf("%v does not contain %q", got, want)
+}
