@@ -1,6 +1,9 @@
 package author
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestValidateProposalV2AcceptsCompleteMixedSourceDraft(t *testing.T) {
 	proposal := validProposalV2()
@@ -182,6 +185,76 @@ func TestValidateProposalV2ConstrainsSourceProfileClaimKindTrustAndSource(t *tes
 				t.Fatalf("expected finding containing %q, got %#v", tt.want, findings)
 			}
 		})
+	}
+}
+
+func TestValidateProposalV2RejectsUnknownContractEnums(t *testing.T) {
+	tests := []struct {
+		name string
+		edit func(*ProposalV2)
+		want string
+	}{
+		{
+			name: "audience primary",
+			edit: func(p *ProposalV2) { p.Audience.Primary = "writer_agent" },
+			want: "audience.primary must be",
+		},
+		{
+			name: "scope stability",
+			edit: func(p *ProposalV2) { p.Scope.Stability = "stable" },
+			want: "scope.stability",
+		},
+		{
+			name: "scope distribution",
+			edit: func(p *ProposalV2) { p.Scope.Distribution = "department" },
+			want: "scope.distribution",
+		},
+		{
+			name: "proposed shape kind",
+			edit: func(p *ProposalV2) { p.ProposedShape.Kind = "bundle" },
+			want: "proposed_shape.kind",
+		},
+		{
+			name: "proposed shape type",
+			edit: func(p *ProposalV2) { p.ProposedShape.Type = "guide" },
+			want: "proposed_shape.type",
+		},
+		{
+			name: "proposed shape entrypoint load",
+			edit: func(p *ProposalV2) { p.ProposedShape.EntrypointLoad = "always" },
+			want: "proposed_shape.entrypoint_load",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			proposal := validProposalV2()
+			tt.edit(&proposal)
+
+			findings := ValidateProposalV2(proposal)
+
+			if !hasFinding(findings, "fail", tt.want) {
+				t.Fatalf("expected enum failure containing %q, got %#v", tt.want, findings)
+			}
+		})
+	}
+}
+
+func TestValidateProposalV2ReportsPriorityMustOnce(t *testing.T) {
+	proposal := validProposalV2()
+	proposal.ProposedShape.Priority = "must"
+	proposal.Delivery.PriorityMustAuthorized = false
+
+	findings := ValidateProposalV2(proposal)
+
+	count := 0
+	for _, finding := range findings {
+		if finding.Severity == "fail" && strings.Contains(finding.Message, "priority: must") {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("expected exactly one priority: must finding, got %d in %#v", count, findings)
 	}
 }
 

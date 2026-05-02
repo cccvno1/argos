@@ -151,6 +151,8 @@ func ValidateProposalV2(proposal ProposalV2) []Finding {
 	}
 	if strings.TrimSpace(proposal.Audience.Primary) == "" {
 		addFail("audience.primary is required")
+	} else if !validAudiencePrimaryV2(proposal.Audience.Primary) {
+		addFail("audience.primary must be implementer_agent, maintainer_agent, reviewer_agent, consumer_agent, operator_agent, or cross_project_agent")
 	}
 	if len(nonEmpty(proposal.Audience.AgentActionsSupported)) == 0 {
 		addReview("audience.agent_actions_supported should describe future agent actions")
@@ -160,6 +162,11 @@ func ValidateProposalV2(proposal ProposalV2) []Finding {
 	}
 	if strings.TrimSpace(proposal.Scope.Stability) == "" {
 		addReview("scope.stability is required")
+	} else if !validScopeStabilityV2(proposal.Scope.Stability) {
+		addFail("scope.stability must be draft, experimental, reviewed, or official_candidate")
+	}
+	if strings.TrimSpace(proposal.Scope.Distribution) != "" && !validScopeDistributionV2(proposal.Scope.Distribution) {
+		addFail("scope.distribution must be personal, project, small_team, multi_project, organization, or public_consumer")
 	}
 	validateSourceProfileV2(proposal.SourceProfile, addFail, addReview)
 	validateProposedShapeV2(proposal.ProposedShape, proposal.Delivery, addFail, addReview)
@@ -168,7 +175,7 @@ func ValidateProposalV2(proposal ProposalV2) []Finding {
 		addReview("applicability must include when_to_use and when_not_to_use")
 	}
 	validateOverlapDecisionV2(proposal.OverlapDecision, addFail, addReview)
-	validateDeliveryV2(proposal.Delivery, proposal.ProposedShape, addFail)
+	validateDeliveryV2(proposal.Delivery, addFail)
 	validateCandidateAndPlanV2(proposal, addFail, addReview)
 	if len(nonEmpty(proposal.HumanReview.ReviewQuestions)) == 0 {
 		addReview("human_review.review_questions should include reviewer decisions")
@@ -237,14 +244,77 @@ func validateProposedShapeV2(shape ProposedShapeV2, delivery DeliveryV2, addFail
 	if strings.TrimSpace(shape.Kind) == "" || strings.TrimSpace(shape.Type) == "" || strings.TrimSpace(shape.ID) == "" || strings.TrimSpace(shape.Path) == "" {
 		addFail("proposed_shape must include kind, type, id, and path")
 	}
+	if strings.TrimSpace(shape.Kind) != "" && !validProposedShapeKindV2(shape.Kind) {
+		addFail("proposed_shape.kind must be item or package")
+	}
+	if strings.TrimSpace(shape.Type) != "" && !validProposedShapeTypeV2(shape.Type) {
+		addFail("proposed_shape.type must be rule, decision, lesson, runbook, reference, template, checklist, or package")
+	}
 	if strings.TrimSpace(shape.Status) == "" || strings.TrimSpace(shape.Priority) == "" {
 		addFail("proposed_shape must include status and priority")
 	}
 	if strings.TrimSpace(shape.Priority) == "must" && !delivery.PriorityMustAuthorized {
 		addFail("priority: must requires explicit authorization")
 	}
+	if strings.TrimSpace(shape.EntrypointLoad) != "" && !validEntrypointLoadV2(shape.EntrypointLoad) {
+		addFail("proposed_shape.entrypoint_load must be start_here, read_before_implementation, read_before_review, on_demand, or reference_only")
+	}
 	if strings.TrimSpace(shape.Rationale) == "" {
 		addReview("proposed_shape.rationale should explain item or package choice")
+	}
+}
+
+func validAudiencePrimaryV2(primary string) bool {
+	switch primary {
+	case "implementer_agent", "maintainer_agent", "reviewer_agent", "consumer_agent", "operator_agent", "cross_project_agent":
+		return true
+	default:
+		return false
+	}
+}
+
+func validScopeStabilityV2(stability string) bool {
+	switch stability {
+	case "draft", "experimental", "reviewed", "official_candidate":
+		return true
+	default:
+		return false
+	}
+}
+
+func validScopeDistributionV2(distribution string) bool {
+	switch distribution {
+	case "personal", "project", "small_team", "multi_project", "organization", "public_consumer":
+		return true
+	default:
+		return false
+	}
+}
+
+func validProposedShapeKindV2(kind string) bool {
+	switch kind {
+	case "item", "package":
+		return true
+	default:
+		return false
+	}
+}
+
+func validProposedShapeTypeV2(shapeType string) bool {
+	switch shapeType {
+	case "rule", "decision", "lesson", "runbook", "reference", "template", "checklist", "package":
+		return true
+	default:
+		return false
+	}
+}
+
+func validEntrypointLoadV2(load string) bool {
+	switch load {
+	case "start_here", "read_before_implementation", "read_before_review", "on_demand", "reference_only":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -273,7 +343,7 @@ func validateOverlapDecisionV2(overlap OverlapDecisionV2, addFail func(string), 
 	}
 }
 
-func validateDeliveryV2(delivery DeliveryV2, shape ProposedShapeV2, addFail func(string)) {
+func validateDeliveryV2(delivery DeliveryV2, addFail func(string)) {
 	if delivery.Path != "inbox" && delivery.Path != "official_review" {
 		addFail("delivery.path must be inbox or official_review")
 	}
@@ -285,9 +355,6 @@ func validateDeliveryV2(delivery DeliveryV2, shape ProposedShapeV2, addFail func
 	}
 	if delivery.Path == "official_review" && !delivery.OfficialMutationAuthorized {
 		addFail("official mutation requires explicit authorization")
-	}
-	if strings.TrimSpace(shape.Priority) == "must" && !delivery.PriorityMustAuthorized {
-		addFail("priority: must requires explicit authorization")
 	}
 }
 
