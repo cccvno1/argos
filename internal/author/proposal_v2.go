@@ -276,6 +276,11 @@ func validateCandidateAndPlanV2(proposal ProposalV2, addFail func(string), addRe
 	if len(proposal.VerificationPlan.FindabilityScenarios) == 0 {
 		addReview("verification_plan.findability_scenarios should include at least one scenario")
 	}
+	for i, scenario := range proposal.VerificationPlan.FindabilityScenarios {
+		if strings.TrimSpace(scenario.Project) == "" || (strings.TrimSpace(scenario.Task) == "" && strings.TrimSpace(scenario.Query) == "") {
+			addFail(fmt.Sprintf("verification_plan.findability_scenarios[%d] must include project and task or query", i))
+		}
+	}
 }
 
 func hasAnySourceV2(source SourceProfileV2) bool {

@@ -114,6 +114,68 @@ func TestValidateProposalV2MarksUnresolvedOverlapReviewNeeded(t *testing.T) {
 	}
 }
 
+func TestValidateProposalV2RejectsIncompleteCandidateFiles(t *testing.T) {
+	tests := []struct {
+		name string
+		file CandidateFile
+	}{
+		{
+			name: "missing path",
+			file: CandidateFile{Purpose: "entrypoint", Load: "start_here"},
+		},
+		{
+			name: "missing purpose",
+			file: CandidateFile{Path: "knowledge/.inbox/packages/backend/go-service-template/KNOWLEDGE.md", Load: "start_here"},
+		},
+		{
+			name: "missing load",
+			file: CandidateFile{Path: "knowledge/.inbox/packages/backend/go-service-template/KNOWLEDGE.md", Purpose: "entrypoint"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			proposal := validProposalV2()
+			proposal.CandidateFiles = []CandidateFile{tt.file}
+
+			findings := ValidateProposalV2(proposal)
+
+			if !hasFinding(findings, "fail", "candidate_files") {
+				t.Fatalf("expected candidate_files failure, got %#v", findings)
+			}
+		})
+	}
+}
+
+func TestValidateProposalV2RejectsIncompleteFindabilityScenarios(t *testing.T) {
+	tests := []struct {
+		name     string
+		scenario FindabilityScenario
+	}{
+		{
+			name:     "missing project",
+			scenario: FindabilityScenario{Task: "generate a Go service", Query: "go service template"},
+		},
+		{
+			name:     "missing task and query",
+			scenario: FindabilityScenario{Project: "mall-api"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			proposal := validProposalV2()
+			proposal.VerificationPlan.FindabilityScenarios = []FindabilityScenario{tt.scenario}
+
+			findings := ValidateProposalV2(proposal)
+
+			if !hasFinding(findings, "fail", "verification_plan.findability_scenarios") {
+				t.Fatalf("expected findability scenario failure, got %#v", findings)
+			}
+		})
+	}
+}
+
 func validProposalV2() ProposalV2 {
 	return ProposalV2{
 		SchemaVersion: "authoring.proposal.v2",
