@@ -779,6 +779,11 @@ func TestAuthoringReportTemplateMatchesParserContract(t *testing.T) {
 		report.HumanReview.PromoteAuthorized {
 		t.Fatalf("unfilled template parsed human review approvals: %#v", report.HumanReview)
 	}
+	for _, guard := range requiredAuthoringReportGuards {
+		if status := report.Guards[guard]; status == ResultPass {
+			t.Fatalf("unfilled template parsed guard %q as pass", guard)
+		}
+	}
 	for _, forbidden := range hiddenAuthoringProcessTokens() {
 		if strings.Contains(text, forbidden) {
 			t.Fatalf("report template leaked %q", forbidden)
