@@ -3,17 +3,20 @@ name: capture-knowledge
 description: Use when the user asks to remember, capture, save, document, preserve, or turn reusable project knowledge, standards, API contracts, templates, examples, practices, decisions, or lessons into Argos knowledge; also use before suggesting durable capture of reusable context.
 ---
 
-# Capture Knowledge
+# Agent Knowledge Authoring
 
 ## Overview
 
-Use this skill to turn natural user intent into deliberate Argos knowledge
-capture. The user should not need to know Argos paths or commands. Your job is
-to gather context, check for overlap, propose the capture, ask for the user's
-decisions, then use existing Argos files and CLI commands after approval.
+Use this skill to turn natural user intent into deliberate Argos engineering
+knowledge for future agents. This is not a memo workflow. The user should not
+need to know Argos paths or commands. Your job is to help design the knowledge,
+inspect existing Argos facts, produce a Knowledge Design Proposal, ask for the
+user's decisions, write inbox candidates only after approval, verify the
+candidate, and present a review packet.
 
 Argos is an agent-operated knowledge layer. Humans express knowledge intent in
-natural language; the agent operates Argos in the background.
+natural language and review knowledge design; the agent operates Argos in the
+background.
 
 ## Relationship To Workflow Systems
 
@@ -34,7 +37,7 @@ gates.
 
 Do not silently mutate official trusted knowledge.
 
-Before writing files, you must:
+Before writing candidate knowledge files, you must:
 
 1. Check existing Argos knowledge.
 2. Present a concrete proposal.
@@ -43,9 +46,26 @@ Before writing files, you must:
 5. Get explicit approval for the proposal and delivery path.
 
 Never run `argos promote` automatically. Never execute scripts from a knowledge
-package unless the validation plan names them and the user confirms execution.
+package unless the verification plan names them and the user confirms execution.
 Never set `priority: must` unless the user explicitly authorizes it.
-Never claim captured knowledge is official while it is still in inbox.
+Never claim authored knowledge is official while it is still in inbox.
+
+Before presenting the proposal, run or emulate:
+
+```bash
+argos author inspect --json --project mall-api --goal "create product-list cache engineering knowledge"
+```
+
+After approved candidate files are written, run:
+
+```bash
+argos author verify --json \
+  --proposal knowledge/.inbox/proposals/product-list-cache/proposal.json \
+  --path knowledge/.inbox/packages/backend/product-list-cache
+```
+
+Do not use `author inspect` output as permission to write. Do not use `author
+verify` output as permission to promote. Both still require human review.
 
 ## Language
 
@@ -67,16 +87,16 @@ language is genuinely unclear.
 
 ## Workflow
 
-### 1. Confirm Capture Intent
+### 1. Confirm Authoring Intent
 
 Use the skill immediately when the user explicitly asks to capture, preserve,
 standardize, or make project knowledge reusable. This applies across languages;
 the trigger is durable intent, not a specific phrase.
 
 When you notice reusable knowledge but the user did not ask to capture it, ask
-for permission in the user's language before starting this workflow.
+for permission in the user's language before starting this authoring workflow.
 
-If the user declines, stop the capture workflow.
+If the user declines, stop the authoring workflow.
 
 ### 2. Gather Context
 
@@ -90,7 +110,7 @@ Gather only the context needed to make a proposal:
 Keep facts and assumptions separate. Do not turn an inference into a fact.
 
 If the user provides source material intended to establish a practice, treat the
-capture as precision authoring rather than a quick note.
+request as precision authoring rather than a quick note.
 Read the material closely enough to explain what it proves and what it does not
 prove.
 
@@ -104,7 +124,7 @@ For precision authoring, classify source material as:
 
 Do not present inferred or unverified material as fact.
 
-### 3. Check Existing Knowledge
+### 3. Inspect Existing Knowledge
 
 Before proposing any write, search these locations when they exist:
 
@@ -128,7 +148,7 @@ Classify the result as one of:
 - check could not be completed, with the reason
 
 If overlap exists, ask whether the user wants to create new knowledge, update
-existing knowledge, or stop the capture.
+existing knowledge, or stop authoring.
 
 Do not merge, replace, or update existing knowledge until the user chooses.
 
@@ -155,8 +175,8 @@ disclosure:
 - supporting files under `references/`, `examples/`, `checklists/`, `scripts/`,
   or `assets/`
 
-For the first version of this skill, fully execute package capture. For item
-capture, propose the item shape and use the repository's existing manual Argos
+For the first version of this skill, fully execute package authoring. For item
+authoring, propose the item shape and use the repository's existing manual Argos
 workflow unless the user asks for a package instead.
 
 If the shape is unclear, ask one question about intended reuse or structure.
@@ -188,9 +208,9 @@ For examples, assign a trust level:
 If the knowledge is not ready to write, stop with a concise list of open
 questions or missing evidence instead of creating weak knowledge.
 
-### 6. Present The Proposal
+### 6. Present The Knowledge Design Proposal
 
-For package capture, present a proposal with these sections:
+For package authoring, present a Knowledge Design Proposal with these sections:
 
 ```text
 Title
@@ -206,7 +226,7 @@ Evidence And Trust
 Applicability Boundaries
 Counterexamples Or Trade-Offs
 Delivery Path
-Validation Plan
+Verification Plan
 Open Questions
 ```
 
@@ -264,15 +284,16 @@ Present the user with the two supported delivery paths and wait for a choice.
 Inbox candidate:
 
 ```text
-Write under knowledge/.inbox/packages/, validate the candidate, and leave it for
-later review or promotion.
+Write under knowledge/.inbox/items/ or knowledge/.inbox/packages/, verify the
+candidate, and leave it for later review or promotion.
 ```
 
 PR-style change:
 
 ```text
-Write under knowledge/packages/ on a review branch or the user's chosen current
-branch, validate the changed path, and commit only if the user confirms.
+Write under knowledge/items/ or knowledge/packages/ on a review branch or the
+user's chosen current branch, verify the changed path, and commit only if the
+user confirms.
 ```
 
 Do not infer the delivery path from context. The user owns that choice.
@@ -283,7 +304,10 @@ After proposal approval and delivery-path selection, write files only inside the
 chosen boundary:
 
 ```text
+knowledge/.inbox/proposals/
+knowledge/.inbox/items/
 knowledge/.inbox/packages/
+knowledge/items/
 knowledge/packages/
 ```
 
@@ -314,22 +338,22 @@ and in the package's `Load On Demand` guidance:
 - `tested`: has been compiled, linted, run, or otherwise verified as described.
 - `template`: intended to be copied or adapted by future work.
 
-### 9. Validate
+### 9. Verify
 
-After writing package files, run:
+After writing candidate files, run:
 
 ```bash
-argos validate --path TARGET_PATH
+argos author verify --json --proposal PROPOSAL_PATH --path TARGET_PATH
 ```
 
 If the local binary is not installed but the repo can run it, use:
 
 ```bash
-go run ./cmd/argos validate --path TARGET_PATH
+go run ./cmd/argos author verify --json --proposal PROPOSAL_PATH --path TARGET_PATH
 ```
 
-If validation fails because of protocol issues, fix the written files and run
-validation again. If validation fails because of an unresolved product or
+If verification fails because of protocol issues, fix the written files and run
+verification again. If verification fails because of an unresolved product or
 knowledge decision, stop and ask the user.
 
 ### 10. Publish Only After Review
@@ -340,7 +364,7 @@ summarize:
 - candidate path
 - proposed official target path
 - source context
-- validation result
+- verification result
 - unresolved assumptions
 - affected projects and domains
 - whether `argos index` and `argos install-adapters` should run afterward
@@ -359,7 +383,7 @@ After promotion, run `argos index` unless the user asks not to. Run
 End with:
 
 - changed files
-- validation commands and outcomes
+- verification commands and outcomes
 - whether the package is inbox candidate or PR-style official change
 - loaded or cited Argos knowledge IDs, when relevant
 - any remaining decisions

@@ -31,7 +31,7 @@ control flow.
 - Argos provides the project knowledge those workflows should remember:
   standards, decisions, lessons, examples, runbooks, references, and packages.
 - When both are available, workflow instructions stay in charge and call Argos
-  only to retrieve, capture, validate, or cite knowledge.
+  only to retrieve, author, validate, or cite knowledge.
 
 ## Agent Experience
 
@@ -123,7 +123,11 @@ instead of hand-copying inputs, and do not give runner agents expected IDs,
 expected support, prior transcripts, or design history. Evaluate saved reports
 separately against `testdata/discovery-golden/cases.json`.
 
-## Knowledge Authoring
+## Agent Knowledge Authoring
+
+Argos write-side UX is agent-operated. Humans describe the engineering
+knowledge they want future agents to have, then review a Knowledge Design
+Proposal and verification packet. Agents run the commands.
 
 Single knowledge items live under `knowledge/items/`.
 
@@ -131,44 +135,76 @@ Structured knowledge packages live under `knowledge/packages/` and use
 `KNOWLEDGE.md` as their indexed entrypoint. Optional package directories include
 `references/`, `examples/`, `checklists/`, `scripts/`, and `assets/`.
 
-Package candidates are created under `knowledge/.inbox/packages/` and reviewed
-before promotion.
+Authoring inboxes keep reviewed-but-unpromoted work separate:
 
-High-quality knowledge is expected to be refined. A typical authoring workflow
-is:
+- `knowledge/.inbox/proposals/` stores Knowledge Design Proposals.
+- `knowledge/.inbox/items/` stores item candidates.
+- `knowledge/.inbox/packages/` stores package candidates.
 
-1. The user gives the agent source material, a decision, or a lesson.
-2. The agent reads the relevant source context and checks existing Argos
-   knowledge.
-3. The agent separates observed facts, user-provided intent, assumptions,
-   open questions, examples, counterexamples, and verification evidence.
-4. The agent proposes an item or package shape and asks for approval.
-5. The agent writes an inbox candidate only after approval.
-6. The agent runs Argos validation and reports the result.
-7. The user reviews and decides whether to promote the candidate.
+The durable flow is:
+
+1. The human describes reusable engineering knowledge, source material, a
+   decision, or a lesson.
+2. The agent inspects existing knowledge and authoring policy:
+
+   ```bash
+   argos author inspect --json \
+     --project mall-api \
+     --goal "create product-list cache engineering knowledge" \
+     --mode synthesized \
+     --future-task "implement product list cache" \
+     --phase implementation \
+     --files internal/catalog/products.go
+   ```
+
+3. The agent turns that inspection output into a Knowledge Design Proposal under
+   `knowledge/.inbox/proposals/`.
+4. The human reviews the proposal and decides whether the agent should write an
+   inbox candidate.
+5. After approval, the agent writes candidate knowledge under
+   `knowledge/.inbox/items/` or `knowledge/.inbox/packages/`.
+6. The agent verifies the candidate against the approved proposal:
+
+   ```bash
+   argos author verify --json \
+     --proposal knowledge/.inbox/proposals/product-list-cache/proposal.json \
+     --path knowledge/.inbox/packages/backend/product-list-cache
+   ```
+
+7. The human reviews the verification packet. Verification checks the proposal
+   contract, candidate validation, policy gates, and discoverability through the
+   normal query path. It does not promote candidates or mutate the official
+   index.
 
 Official knowledge should not be mutated silently. Inbox candidates are the
-default path for AI-authored or imported knowledge.
+default path for AI-authored or imported knowledge. Promotion remains explicit:
 
-## Capture Knowledge Skill
+```bash
+argos promote --path knowledge/.inbox/packages/backend/product-list-cache
+argos index
+```
 
-Argos includes an installable `capture-knowledge` skill source at
-`skills/capture-knowledge/`.
+## Agent Knowledge Authoring Skill
 
-Use this skill when a user asks an agent to remember, preserve, document, or
-turn reusable project knowledge into Argos knowledge. The skill is
-proposal-first and agent-facing. It guides the agent to:
+Argos keeps the installable skill source at `skills/capture-knowledge/` with
+frontmatter name `capture-knowledge` for compatibility with existing skill
+triggers.
 
-- gather enough context to author accurate knowledge
+Use this skill when a user asks an agent to author durable reusable project
+knowledge. The skill is proposal-first and agent-facing. It guides the agent to:
+
+- understand authoring intent and gather enough context for accurate knowledge
+- run or emulate `argos author inspect --json`
 - check existing `knowledge/items/`, `knowledge/packages/`, and
   `knowledge/.inbox/` content
 - distinguish facts, assumptions, examples, counterexamples, and validation
   evidence
-- propose the knowledge shape before writing files
+- produce a Knowledge Design Proposal before writing files
 - ask whether overlap means create new, update existing, or stop
 - ask for an inbox candidate or PR-style delivery path
-- write package files only after approval
-- run `argos validate --path TARGET_PATH`
+- write inbox candidates only after approval
+- run `argos author verify --json --proposal <proposal.json> --path <candidate>`
+- present a review packet without promoting automatically
 
 Human-facing documentation written through the skill should match the user's
 language. Argos protocol fields stay stable: frontmatter keys, IDs, paths,
@@ -214,6 +250,8 @@ argos init
 argos validate
 argos validate --inbox
 argos validate --path <path>
+argos author inspect --json --project <project> --goal <goal>
+argos author verify --json --proposal <proposal.json> --path <candidate>
 argos promote --path <candidate>
 argos index
 argos install-adapters

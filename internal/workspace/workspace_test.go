@@ -20,6 +20,7 @@ func TestInitCreatesWorkspaceFiles(t *testing.T) {
 		"knowledge/types.yaml",
 		"knowledge/.inbox",
 		"knowledge/items",
+		"knowledge/packages",
 		"argos/generated",
 	}
 	for _, rel := range required {
@@ -36,6 +37,29 @@ func TestInitCreatesWorkspaceFiles(t *testing.T) {
 		!strings.Contains(string(typesBytes), "runbook") ||
 		!strings.Contains(string(typesBytes), "package") {
 		t.Fatalf("types.yaml missing default types: %s", string(typesBytes))
+	}
+}
+
+func TestInitCreatesAuthoringInboxDirectories(t *testing.T) {
+	root := t.TempDir()
+
+	if err := Init(root); err != nil {
+		t.Fatalf("Init returned error: %v", err)
+	}
+
+	required := []string{
+		"knowledge/.inbox/items",
+		"knowledge/.inbox/packages",
+		"knowledge/.inbox/proposals",
+	}
+	for _, rel := range required {
+		info, err := os.Stat(filepath.Join(root, rel))
+		if err != nil {
+			t.Fatalf("expected %s to exist: %v", rel, err)
+		}
+		if !info.IsDir() {
+			t.Fatalf("expected %s to be a directory", rel)
+		}
 	}
 }
 

@@ -9,8 +9,11 @@ import (
 
 func Init(root string) error {
 	dirs := []string{
-		"knowledge/.inbox",
+		"knowledge/.inbox/items",
+		"knowledge/.inbox/packages",
+		"knowledge/.inbox/proposals",
 		"knowledge/items",
+		"knowledge/packages",
 		"argos/generated",
 	}
 	for _, dir := range dirs {
