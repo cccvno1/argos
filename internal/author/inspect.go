@@ -231,7 +231,7 @@ func overlapTerms(req InspectRequest) []string {
 		return r == ' ' || r == '-' || r == '_' || r == '/' || r == ':' || r == ',' || r == '.'
 	}) {
 		field = strings.TrimSpace(field)
-		if len(field) >= 4 {
+		if len(field) >= 4 && !isAuthoringOverlapStopword(field) {
 			terms = append(terms, field)
 		}
 	}
@@ -242,6 +242,27 @@ func overlapTerms(req InspectRequest) []string {
 		terms = append(terms, strings.ToLower(domain))
 	}
 	return uniqueNonEmpty(terms)
+}
+
+func isAuthoringOverlapStopword(term string) bool {
+	switch strings.ToLower(strings.TrimSpace(term)) {
+	case "knowledge",
+		"future",
+		"agents",
+		"agent",
+		"project",
+		"reusable",
+		"create",
+		"turn",
+		"this",
+		"other",
+		"help",
+		"understand",
+		"into":
+		return true
+	default:
+		return false
+	}
 }
 
 func overlapReasons(item knowledge.Item, req InspectRequest, terms []string) []string {

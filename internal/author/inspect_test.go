@@ -104,6 +104,37 @@ func TestInspectFindsOfficialAndInboxOverlap(t *testing.T) {
 	}
 }
 
+func TestInspectIgnoresGenericAuthoringTermsForOverlap(t *testing.T) {
+	root := t.TempDir()
+	writeAuthorRegistry(t, root)
+	writeAuthorFile(t, root, "knowledge/items/backend/cache.md", authorItem("rule:backend.cache.v1", "active", "Product list cache TTL rule"))
+
+	generic, err := Inspect(root, InspectRequest{
+		Project: "mall-api",
+		Goal:    "Create reusable knowledge for this project so future agents can help other developers understand it.",
+	})
+	if err != nil {
+		t.Fatalf("Inspect returned error: %v", err)
+	}
+	if hasOverlap(generic.Overlap.Official, "official", "rule:backend.cache.v1") {
+		t.Fatalf("generic authoring request should not overlap cache item: %#v", generic.Overlap.Official)
+	}
+
+	redisCache, err := Inspect(root, InspectRequest{
+		Project:    "mall-api",
+		Goal:       "Design safe Redis cache draft practices for future agents.",
+		FutureTask: "design Redis cache practices",
+		Query:      "redis cache",
+		Tags:       []string{"redis", "cache"},
+	})
+	if err != nil {
+		t.Fatalf("Inspect returned error: %v", err)
+	}
+	if !hasOverlap(redisCache.Overlap.Official, "official", "rule:backend.cache.v1") {
+		t.Fatalf("redis cache request should overlap cache item: %#v", redisCache.Overlap.Official)
+	}
+}
+
 func TestInspectFindsIndexOverlapReadOnly(t *testing.T) {
 	root := t.TempDir()
 	writeAuthorRegistry(t, root)

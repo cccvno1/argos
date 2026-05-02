@@ -938,35 +938,42 @@ func TestAuthoringFixtureSeedSupportsPublicCases(t *testing.T) {
 		}
 	}
 
+	goTemplateCase, _, err := FindCase(cases, "case-001")
+	if err != nil {
+		t.Fatalf("FindCase returned error: %v", err)
+	}
 	goTemplate := inspectFixture(t, fixtureRoot, author.InspectRequest{
-		Project:    "mall-api",
-		Goal:       "Turn Go service template into future-agent guidance.",
+		Project:    goTemplateCase.Input.Project,
+		Goal:       goTemplateCase.Input.UserRequest,
 		FutureTask: "generate a Go service",
 		Phase:      "implementation",
-		Files:      []string{"templates/go-service/README.md"},
+		Files:      fixtureSourceFilesForCase(t, fixtureRoot, goTemplateCase),
 	})
 	assertFixtureRegistry(t, goTemplate)
 	assertNoOfficialOverlap(t, goTemplate, "rule:backend.cache-ttl.v1")
 
+	apiConsumerCase := fixtureCaseWithSourcePath(t, cases, "internal/api")
 	apiConsumer := inspectFixture(t, fixtureRoot, author.InspectRequest{
-		Project: "mall-api",
-		Goal:    "Help future agents understand the mall-api business interface for consumers.",
+		Project: apiConsumerCase.Input.Project,
+		Goal:    apiConsumerCase.Input.UserRequest,
 		Phase:   "implementation",
-		Files:   []string{"internal/api/README.md"},
+		Files:   fixtureSourceFilesForCase(t, fixtureRoot, apiConsumerCase),
 	})
 	assertNoOfficialOverlap(t, apiConsumer, "rule:backend.cache-ttl.v1")
 
+	retryPatternCase := fixtureCaseWithSourcePath(t, cases, "internal/retry")
 	retryPattern := inspectFixture(t, fixtureRoot, author.InspectRequest{
-		Project: "mall-api",
-		Goal:    "Turn the retry handling pattern into reusable guidance.",
+		Project: retryPatternCase.Input.Project,
+		Goal:    retryPatternCase.Input.UserRequest,
 		Phase:   "implementation",
-		Files:   []string{"internal/retry/README.md"},
+		Files:   fixtureSourceFilesForCase(t, fixtureRoot, retryPatternCase),
 	})
 	assertNoOfficialOverlap(t, retryPattern, "rule:backend.cache-ttl.v1")
 
+	redisCacheCase := fixtureCaseWithRequestText(t, cases, "Redis heavily")
 	redisCache := inspectFixture(t, fixtureRoot, author.InspectRequest{
-		Project:    "mall-api",
-		Goal:       "Design safe Redis cache draft practices for future agents.",
+		Project:    redisCacheCase.Input.Project,
+		Goal:       redisCacheCase.Input.UserRequest,
 		FutureTask: "design Redis cache practices",
 		Query:      "redis cache",
 		Tags:       []string{"redis", "cache"},
@@ -974,14 +981,102 @@ func TestAuthoringFixtureSeedSupportsPublicCases(t *testing.T) {
 	redisOverlap := assertOfficialOverlap(t, redisCache, "rule:backend.cache-ttl.v1")
 	assertOverlapReason(t, redisOverlap, "tag:redis")
 
+	cacheTTLCase := fixtureCaseWithRequestText(t, cases, "another cache TTL")
 	cacheTTL := inspectFixture(t, fixtureRoot, author.InspectRequest{
-		Project:    "mall-api",
-		Goal:       "Create another cache TTL rule that may overlap existing cache rules.",
+		Project:    cacheTTLCase.Input.Project,
+		Goal:       cacheTTLCase.Input.UserRequest,
 		FutureTask: "cache ttl",
 		Query:      "cache ttl",
 		Tags:       []string{"cache", "ttl"},
 	})
 	assertOfficialOverlap(t, cacheTTL, "rule:backend.cache-ttl.v1")
+}
+
+func fixtureCaseWithSourcePath(t *testing.T, cases []Case, sourcePath string) Case {
+	t.Helper()
+	for _, tc := range cases {
+		if tc.Fixture != "full" {
+			continue
+		}
+		for _, source := range tc.Input.AvailableSources {
+			if source.Path == sourcePath {
+				return tc
+			}
+		}
+	}
+	t.Fatalf("missing full fixture case with source path %s", sourcePath)
+	return Case{}
+}
+
+func fixtureCaseWithRequestText(t *testing.T, cases []Case, text string) Case {
+	t.Helper()
+	for _, tc := range cases {
+		if tc.Fixture == "full" && strings.Contains(tc.Input.UserRequest, text) {
+			return tc
+		}
+	}
+	t.Fatalf("missing full fixture case with request text %q", text)
+	return Case{}
+}
+
+func fixtureSourceFilesForCase(t *testing.T, fixtureRoot string, tc Case) []string {
+	t.Helper()
+	var files []string
+	for _, source := range tc.Input.AvailableSources {
+		if strings.TrimSpace(source.Path) == "" {
+			continue
+		}
+		files = append(files, fixtureSourceFiles(t, fixtureRoot, source.Path)...)
+	}
+	if len(files) == 0 {
+		t.Fatalf("case %s has no fixture source files", tc.ID)
+	}
+	sort.Strings(files)
+	return files
+}
+
+func fixtureSourceFiles(t *testing.T, fixtureRoot string, rel string) []string {
+	t.Helper()
+	path := filepath.Join(fixtureRoot, filepath.FromSlash(rel))
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("fixture source missing %s: %v", rel, err)
+	}
+	if !info.IsDir() {
+		if !info.Mode().IsRegular() {
+			t.Fatalf("fixture source %s is not a regular file or directory", rel)
+		}
+		return []string{filepath.ToSlash(filepath.Clean(rel))}
+	}
+
+	var files []string
+	if err := filepath.WalkDir(path, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return nil
+		}
+		sourceRel, err := filepath.Rel(fixtureRoot, path)
+		if err != nil {
+			return err
+		}
+		files = append(files, filepath.ToSlash(sourceRel))
+		return nil
+	}); err != nil {
+		t.Fatalf("walk fixture source %s: %v", rel, err)
+	}
+	if len(files) == 0 {
+		t.Fatalf("fixture source %s is a directory with no regular files", rel)
+	}
+	return files
 }
 
 func assertFixtureFilePublic(t *testing.T, fixtureRoot string, rel string) {
@@ -1002,46 +1097,8 @@ func assertFixtureFilePublic(t *testing.T, fixtureRoot string, rel string) {
 
 func assertFixtureSourcePathPublic(t *testing.T, fixtureRoot string, rel string) {
 	t.Helper()
-	path := filepath.Join(fixtureRoot, filepath.FromSlash(rel))
-	info, err := os.Stat(path)
-	if err != nil {
-		t.Fatalf("fixture source missing %s: %v", rel, err)
-	}
-	if !info.IsDir() {
-		if !info.Mode().IsRegular() {
-			t.Fatalf("fixture source %s is not a regular file or directory", rel)
-		}
-		assertFixtureContentPublic(t, path, rel)
-		return
-	}
-
-	regularFiles := 0
-	if err := filepath.WalkDir(path, func(path string, entry os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if entry.IsDir() {
-			return nil
-		}
-		info, err := entry.Info()
-		if err != nil {
-			return err
-		}
-		if !info.Mode().IsRegular() {
-			return nil
-		}
-		regularFiles++
-		sourceRel, err := filepath.Rel(fixtureRoot, path)
-		if err != nil {
-			return err
-		}
-		assertFixtureContentPublic(t, path, filepath.ToSlash(sourceRel))
-		return nil
-	}); err != nil {
-		t.Fatalf("walk fixture source %s: %v", rel, err)
-	}
-	if regularFiles == 0 {
-		t.Fatalf("fixture source %s is a directory with no regular files", rel)
+	for _, sourceRel := range fixtureSourceFiles(t, fixtureRoot, rel) {
+		assertFixtureContentPublic(t, filepath.Join(fixtureRoot, filepath.FromSlash(sourceRel)), sourceRel)
 	}
 }
 
