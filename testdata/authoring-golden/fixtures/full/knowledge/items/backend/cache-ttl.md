@@ -4,7 +4,7 @@ title: Cache TTL Rule
 type: rule
 tech_domains: [backend, database]
 business_domains: [catalog]
-tags: [cache, ttl]
+tags: [cache, ttl, redis]
 projects: [mall-api]
 status: active
 priority: should
@@ -14,5 +14,6 @@ applies_to:
     - internal/catalog/**
 ---
 
-Catalog cache TTL knowledge already exists for mall-api. New cache TTL
-authoring must check overlap before drafting another durable rule.
+Catalog Redis cache TTL rules already exist for this project. New Redis cache
+TTL drafts should compare scope with this active rule before creating another
+durable rule.

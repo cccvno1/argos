@@ -914,41 +914,208 @@ func TestAuthoringFixtureSeedSupportsPublicCases(t *testing.T) {
 		"knowledge/domains.yaml",
 		"knowledge/projects.yaml",
 		"knowledge/types.yaml",
-		"templates/go-service/README.md",
-		"internal/api/README.md",
-		"internal/retry/README.md",
 		"knowledge/items/backend/cache-ttl.md",
 	}
 	for _, rel := range requiredFiles {
-		path := filepath.Join(fixtureRoot, filepath.FromSlash(rel))
-		info, err := os.Stat(path)
-		if err != nil {
-			t.Fatalf("fixture missing %s: %v", rel, err)
+		assertFixtureFilePublic(t, fixtureRoot, rel)
+	}
+
+	cases, err := LoadCases(authoringCasesPath)
+	if err != nil {
+		t.Fatalf("LoadCases returned error: %v", err)
+	}
+	seenSources := map[string]bool{}
+	for _, tc := range cases {
+		if tc.Fixture != "full" {
+			continue
 		}
-		if info.IsDir() {
-			t.Fatalf("fixture path %s is a directory, want file", rel)
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read fixture %s: %v", rel, err)
-		}
-		text := string(data)
-		for _, forbidden := range authoringProcessDocumentHiddenTokens(t) {
-			if strings.Contains(text, forbidden) {
-				t.Fatalf("fixture %s leaked %q", rel, forbidden)
+		for _, source := range tc.Input.AvailableSources {
+			if strings.TrimSpace(source.Path) == "" || seenSources[source.Path] {
+				continue
 			}
+			seenSources[source.Path] = true
+			assertFixtureSourcePathPublic(t, fixtureRoot, source.Path)
 		}
 	}
 
-	if _, err := author.Inspect(fixtureRoot, author.InspectRequest{
+	goTemplate := inspectFixture(t, fixtureRoot, author.InspectRequest{
 		Project:    "mall-api",
-		Goal:       "Turn Go service template into future-agent knowledge.",
+		Goal:       "Turn Go service template into future-agent guidance.",
 		FutureTask: "generate a Go service",
 		Phase:      "implementation",
 		Files:      []string{"templates/go-service/README.md"},
+	})
+	assertFixtureRegistry(t, goTemplate)
+	assertNoOfficialOverlap(t, goTemplate, "rule:backend.cache-ttl.v1")
+
+	apiConsumer := inspectFixture(t, fixtureRoot, author.InspectRequest{
+		Project: "mall-api",
+		Goal:    "Help future agents understand the mall-api business interface for consumers.",
+		Phase:   "implementation",
+		Files:   []string{"internal/api/README.md"},
+	})
+	assertNoOfficialOverlap(t, apiConsumer, "rule:backend.cache-ttl.v1")
+
+	retryPattern := inspectFixture(t, fixtureRoot, author.InspectRequest{
+		Project: "mall-api",
+		Goal:    "Turn the retry handling pattern into reusable guidance.",
+		Phase:   "implementation",
+		Files:   []string{"internal/retry/README.md"},
+	})
+	assertNoOfficialOverlap(t, retryPattern, "rule:backend.cache-ttl.v1")
+
+	redisCache := inspectFixture(t, fixtureRoot, author.InspectRequest{
+		Project:    "mall-api",
+		Goal:       "Design safe Redis cache draft practices for future agents.",
+		FutureTask: "design Redis cache practices",
+		Query:      "redis cache",
+		Tags:       []string{"redis", "cache"},
+	})
+	redisOverlap := assertOfficialOverlap(t, redisCache, "rule:backend.cache-ttl.v1")
+	assertOverlapReason(t, redisOverlap, "tag:redis")
+
+	cacheTTL := inspectFixture(t, fixtureRoot, author.InspectRequest{
+		Project:    "mall-api",
+		Goal:       "Create another cache TTL rule that may overlap existing cache rules.",
+		FutureTask: "cache ttl",
+		Query:      "cache ttl",
+		Tags:       []string{"cache", "ttl"},
+	})
+	assertOfficialOverlap(t, cacheTTL, "rule:backend.cache-ttl.v1")
+}
+
+func assertFixtureFilePublic(t *testing.T, fixtureRoot string, rel string) {
+	t.Helper()
+	path := filepath.Join(fixtureRoot, filepath.FromSlash(rel))
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("fixture missing %s: %v", rel, err)
+	}
+	if info.IsDir() {
+		t.Fatalf("fixture path %s is a directory, want file", rel)
+	}
+	if !info.Mode().IsRegular() {
+		t.Fatalf("fixture path %s is not a regular file", rel)
+	}
+	assertFixtureContentPublic(t, path, rel)
+}
+
+func assertFixtureSourcePathPublic(t *testing.T, fixtureRoot string, rel string) {
+	t.Helper()
+	path := filepath.Join(fixtureRoot, filepath.FromSlash(rel))
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("fixture source missing %s: %v", rel, err)
+	}
+	if !info.IsDir() {
+		if !info.Mode().IsRegular() {
+			t.Fatalf("fixture source %s is not a regular file or directory", rel)
+		}
+		assertFixtureContentPublic(t, path, rel)
+		return
+	}
+
+	regularFiles := 0
+	if err := filepath.WalkDir(path, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return nil
+		}
+		regularFiles++
+		sourceRel, err := filepath.Rel(fixtureRoot, path)
+		if err != nil {
+			return err
+		}
+		assertFixtureContentPublic(t, path, filepath.ToSlash(sourceRel))
+		return nil
 	}); err != nil {
+		t.Fatalf("walk fixture source %s: %v", rel, err)
+	}
+	if regularFiles == 0 {
+		t.Fatalf("fixture source %s is a directory with no regular files", rel)
+	}
+}
+
+func assertFixtureContentPublic(t *testing.T, path string, label string) {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read fixture %s: %v", label, err)
+	}
+	text := string(data)
+	for _, forbidden := range fixtureHiddenTokens(t) {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("fixture %s leaked %q", label, forbidden)
+		}
+	}
+}
+
+func fixtureHiddenTokens(t *testing.T) []string {
+	t.Helper()
+	tokens := append([]string{}, authoringProcessDocumentHiddenTokens(t)...)
+	tokens = append(tokens, "oracle")
+	return tokens
+}
+
+func inspectFixture(t *testing.T, fixtureRoot string, req author.InspectRequest) author.InspectResponse {
+	t.Helper()
+	result, err := author.Inspect(fixtureRoot, req)
+	if err != nil {
 		t.Fatalf("fixture should support author inspect: %v", err)
 	}
+	return result
+}
+
+func assertFixtureRegistry(t *testing.T, result author.InspectResponse) {
+	t.Helper()
+	if !result.Registry.ProjectKnown {
+		t.Fatalf("expected known mall-api project: %#v", result.Registry)
+	}
+	if !reflect.DeepEqual(result.Registry.TechDomains, []string{"backend", "database"}) {
+		t.Fatalf("unexpected fixture tech domains: %#v", result.Registry.TechDomains)
+	}
+	if !reflect.DeepEqual(result.Registry.BusinessDomains, []string{"catalog", "platform"}) {
+		t.Fatalf("unexpected fixture business domains: %#v", result.Registry.BusinessDomains)
+	}
+}
+
+func assertOfficialOverlap(t *testing.T, result author.InspectResponse, id string) author.OverlapMatch {
+	t.Helper()
+	for _, match := range result.Overlap.Official {
+		if match.ID == id {
+			return match
+		}
+	}
+	t.Fatalf("expected official overlap %s, got %#v", id, result.Overlap.Official)
+	return author.OverlapMatch{}
+}
+
+func assertNoOfficialOverlap(t *testing.T, result author.InspectResponse, id string) {
+	t.Helper()
+	for _, match := range result.Overlap.Official {
+		if match.ID == id {
+			t.Fatalf("unexpected official overlap %s: %#v", id, match)
+		}
+	}
+}
+
+func assertOverlapReason(t *testing.T, match author.OverlapMatch, reason string) {
+	t.Helper()
+	for _, got := range match.Reasons {
+		if got == reason {
+			return
+		}
+	}
+	t.Fatalf("overlap %s missing reason %q: %#v", match.ID, reason, match.Reasons)
 }
 
 func assertAuthoringProcessDocOmitsHiddenTokens(t *testing.T, label, text string) {
