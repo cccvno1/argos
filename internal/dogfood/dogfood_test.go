@@ -389,6 +389,204 @@ Result:
 	assertStringSetContains(t, report.MissingFields, "result")
 }
 
+func TestEvaluateReportPassesStrongWorkflow(t *testing.T) {
+	cases, err := LoadCases(goldenCasesPath)
+	if err != nil {
+		t.Fatalf("LoadCases returned error: %v", err)
+	}
+	tc := discoverytest.CaseByID(t, cases, "progressive_read_status_and_citation_guard")
+	report, err := ParseMarkdownReport([]byte(sampleStrongReport()))
+	if err != nil {
+		t.Fatalf("ParseMarkdownReport returned error: %v", err)
+	}
+
+	evaluation := Evaluate(tc, report)
+
+	if evaluation.CaseID != tc.ID {
+		t.Fatalf("CaseID = %q, want %q", evaluation.CaseID, tc.ID)
+	}
+	if evaluation.Result != ResultPass {
+		t.Fatalf("Result = %q, want %q; findings: %#v", evaluation.Result, ResultPass, evaluation.Findings)
+	}
+	if len(evaluation.Findings) != 0 {
+		t.Fatalf("Findings = %#v, want none", evaluation.Findings)
+	}
+}
+
+func TestEvaluateReportFailsUnreadCitation(t *testing.T) {
+	cases, err := LoadCases(goldenCasesPath)
+	if err != nil {
+		t.Fatalf("LoadCases returned error: %v", err)
+	}
+	tc := discoverytest.CaseByID(t, cases, "progressive_read_status_and_citation_guard")
+	report, err := ParseMarkdownReport([]byte(strings.Replace(sampleStrongReport(), "- Read IDs: `rule:backend.auth-refresh.v1`", "- Read IDs: none", 1)))
+	if err != nil {
+		t.Fatalf("ParseMarkdownReport returned error: %v", err)
+	}
+
+	evaluation := Evaluate(tc, report)
+
+	if evaluation.Result != ResultFail {
+		t.Fatalf("Result = %q, want %q; findings: %#v", evaluation.Result, ResultFail, evaluation.Findings)
+	}
+	assertFindingContains(t, evaluation.Findings, "cited ID was not read")
+}
+
+func TestEvaluateReportReviewNeededForShapeDrift(t *testing.T) {
+	cases, err := LoadCases(goldenCasesPath)
+	if err != nil {
+		t.Fatalf("LoadCases returned error: %v", err)
+	}
+	tc := discoverytest.CaseByID(t, cases, "weak_single_generic_term")
+	report, err := ParseMarkdownReport([]byte("Case: weak_single_generic_term\n\n## Result\n\nResult: pass\n"))
+	if err != nil {
+		t.Fatalf("ParseMarkdownReport returned error: %v", err)
+	}
+
+	evaluation := Evaluate(tc, report)
+
+	if evaluation.Result != ResultReviewNeeded {
+		t.Fatalf("Result = %q, want %q; findings: %#v", evaluation.Result, ResultReviewNeeded, evaluation.Findings)
+	}
+	assertFindingContains(t, evaluation.Findings, "missing section")
+	assertFindingContains(t, evaluation.Findings, "missing field")
+}
+
+func TestEvaluateCaseAcceptsPublicCaseHandle(t *testing.T) {
+	cases, err := LoadCases(goldenCasesPath)
+	if err != nil {
+		t.Fatalf("LoadCases returned error: %v", err)
+	}
+	publicID, ok := PublicCaseID(cases, "progressive_read_status_and_citation_guard")
+	if !ok {
+		t.Fatal("missing public case handle")
+	}
+	report, err := ParseMarkdownReport([]byte(strings.Replace(sampleStrongReport(), "progressive_read_status_and_citation_guard", publicID, 1)))
+	if err != nil {
+		t.Fatalf("ParseMarkdownReport returned error: %v", err)
+	}
+
+	evaluation, err := EvaluateCase(cases, publicID, report)
+	if err != nil {
+		t.Fatalf("EvaluateCase returned error: %v", err)
+	}
+
+	if evaluation.CaseID != publicID {
+		t.Fatalf("CaseID = %q, want public handle %q", evaluation.CaseID, publicID)
+	}
+	if evaluation.Result != ResultPass {
+		t.Fatalf("Result = %q, want %q; findings: %#v", evaluation.Result, ResultPass, evaluation.Findings)
+	}
+}
+
+func TestEvaluateReportReviewNeededForMalformedStrongReport(t *testing.T) {
+	cases, err := LoadCases(goldenCasesPath)
+	if err != nil {
+		t.Fatalf("LoadCases returned error: %v", err)
+	}
+	tc := discoverytest.CaseByID(t, cases, "progressive_read_status_and_citation_guard")
+	report, err := ParseMarkdownReport([]byte("Case: progressive_read_status_and_citation_guard\n\n## Result\n\nResult: pass\n"))
+	if err != nil {
+		t.Fatalf("ParseMarkdownReport returned error: %v", err)
+	}
+
+	evaluation := Evaluate(tc, report)
+
+	if evaluation.Result != ResultReviewNeeded {
+		t.Fatalf("Result = %q, want %q; findings: %#v", evaluation.Result, ResultReviewNeeded, evaluation.Findings)
+	}
+	assertFindingContains(t, evaluation.Findings, "missing section")
+	for _, finding := range evaluation.Findings {
+		if strings.Contains(finding.Message, "expected ID was not reported") {
+			t.Fatalf("shape drift should not fail from absent ID evidence: %#v", evaluation.Findings)
+		}
+	}
+}
+
+func TestEvaluateReportReviewNeededForInvalidStatuses(t *testing.T) {
+	cases, err := LoadCases(goldenCasesPath)
+	if err != nil {
+		t.Fatalf("LoadCases returned error: %v", err)
+	}
+	tc := discoverytest.CaseByID(t, cases, "progressive_read_status_and_citation_guard")
+	text := strings.Replace(sampleStrongReport(), "Result: `pass`", "Result: `maybe`", 1)
+	text = strings.Replace(text, "- Progressive reading: PASS.", "- Progressive reading: maybe", 1)
+	report, err := ParseMarkdownReport([]byte(text))
+	if err != nil {
+		t.Fatalf("ParseMarkdownReport returned error: %v", err)
+	}
+
+	evaluation := Evaluate(tc, report)
+
+	if evaluation.Result != ResultReviewNeeded {
+		t.Fatalf("Result = %q, want %q; findings: %#v", evaluation.Result, ResultReviewNeeded, evaluation.Findings)
+	}
+	assertFindingContains(t, evaluation.Findings, "unknown result status")
+	assertFindingContains(t, evaluation.Findings, "unknown guard status")
+}
+
+func TestEvaluateReportFailDominatesReviewNeeded(t *testing.T) {
+	cases, err := LoadCases(goldenCasesPath)
+	if err != nil {
+		t.Fatalf("LoadCases returned error: %v", err)
+	}
+	tc := discoverytest.CaseByID(t, cases, "progressive_read_status_and_citation_guard")
+	text := strings.Replace(sampleStrongReport(), "- Read IDs: `rule:backend.auth-refresh.v1`", "- Read IDs: none", 1)
+	text = strings.Replace(text, "- Next steps: none\n", "", 1)
+	report, err := ParseMarkdownReport([]byte(text))
+	if err != nil {
+		t.Fatalf("ParseMarkdownReport returned error: %v", err)
+	}
+
+	evaluation := Evaluate(tc, report)
+
+	if evaluation.Result != ResultFail {
+		t.Fatalf("Result = %q, want %q; findings: %#v", evaluation.Result, ResultFail, evaluation.Findings)
+	}
+	assertFindingContains(t, evaluation.Findings, "missing field: next steps")
+	assertFindingContains(t, evaluation.Findings, "cited ID was not read")
+}
+
+func TestEvaluateReportFailsAnyGuardFailure(t *testing.T) {
+	cases, err := LoadCases(goldenCasesPath)
+	if err != nil {
+		t.Fatalf("LoadCases returned error: %v", err)
+	}
+	tc := discoverytest.CaseByID(t, cases, "progressive_read_status_and_citation_guard")
+	text := strings.Replace(sampleStrongReport(), "- Weak/none no-overclaim: pass", "- Weak/none no-overclaim: fail", 1)
+	report, err := ParseMarkdownReport([]byte(text))
+	if err != nil {
+		t.Fatalf("ParseMarkdownReport returned error: %v", err)
+	}
+
+	evaluation := Evaluate(tc, report)
+
+	if evaluation.Result != ResultFail {
+		t.Fatalf("Result = %q, want %q; findings: %#v", evaluation.Result, ResultFail, evaluation.Findings)
+	}
+	assertFindingContains(t, evaluation.Findings, "guard failed: weak/none no-overclaim")
+}
+
+func TestEvaluateReportFailsWhenRunnerReportsFail(t *testing.T) {
+	cases, err := LoadCases(goldenCasesPath)
+	if err != nil {
+		t.Fatalf("LoadCases returned error: %v", err)
+	}
+	tc := discoverytest.CaseByID(t, cases, "progressive_read_status_and_citation_guard")
+	text := strings.Replace(sampleStrongReport(), "Result: `pass`", "Result: `fail`", 1)
+	report, err := ParseMarkdownReport([]byte(text))
+	if err != nil {
+		t.Fatalf("ParseMarkdownReport returned error: %v", err)
+	}
+
+	evaluation := Evaluate(tc, report)
+
+	if evaluation.Result != ResultFail {
+		t.Fatalf("Result = %q, want %q; findings: %#v", evaluation.Result, ResultFail, evaluation.Findings)
+	}
+	assertFindingContains(t, evaluation.Findings, "runner reported result: fail")
+}
+
 func sampleStrongReport() string {
 	return `# Argos Dogfood Runner Report
 
@@ -415,6 +613,7 @@ Case: ` + "`progressive_read_status_and_citation_guard`" + `
 - Read IDs: ` + "`rule:backend.auth-refresh.v1`" + `
 - Cited IDs: ` + "`rule:backend.auth-refresh.v1`" + `
 - Missing needs: none
+- Argos-backed vs general reasoning: Argos-backed claim used only the cited rule; general reasoning stayed separate.
 - Next steps: none
 
 ## Guards
@@ -443,4 +642,14 @@ func assertStringSetContains(t *testing.T, got []string, want string) {
 		}
 	}
 	t.Fatalf("%v does not contain %q", got, want)
+}
+
+func assertFindingContains(t *testing.T, findings []Finding, want string) {
+	t.Helper()
+	for _, finding := range findings {
+		if strings.Contains(finding.Message, want) {
+			return
+		}
+	}
+	t.Fatalf("%#v does not contain finding message %q", findings, want)
 }

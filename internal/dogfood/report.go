@@ -19,6 +19,7 @@ type Report struct {
 	Result          string            `json:"result"`
 	MissingSections []string          `json:"missing_sections"`
 	MissingFields   []string          `json:"missing_fields"`
+	fieldPresence   map[string]bool
 }
 
 var reportIDPattern = regexp.MustCompile(`[a-z][a-z0-9-]*:[a-z0-9._-]+`)
@@ -34,9 +35,26 @@ var requiredReportSections = []struct {
 	{key: "result", heading: "Result"},
 }
 
-var criticalReportGuards = []string{
+var requiredReportFields = []string{
+	"actual support",
+	"usage guidance",
+	"search status",
+	"discovered ids",
+	"read ids",
+	"cited ids",
+	"missing needs",
+	"argos-backed vs general reasoning",
+	"next steps",
+}
+
+var requiredReportGuards = []string{
 	"progressive reading",
+	"weak/none no-overclaim",
 	"citation accountability",
+	"cited ids subset of read-and-used ids",
+	"missing needs not cited",
+	"attribution boundary",
+	"no discovery-triggered upload/capture",
 	"usage guidance followed",
 	"context contamination",
 }
@@ -60,6 +78,10 @@ func ParseMarkdownReport(data []byte) (Report, error) {
 		Guards:          map[string]string{},
 		MissingSections: []string{},
 		MissingFields:   []string{},
+		fieldPresence:   map[string]bool{},
+	}
+	if report.CaseID != "" {
+		report.fieldPresence["case"] = true
 	}
 	sections := parseReportSections(text)
 	for _, section := range requiredReportSections {
@@ -70,7 +92,7 @@ func ParseMarkdownReport(data []byte) (Report, error) {
 
 	parseObservedResults(sections["observed results"], &report)
 	parseReportGuards(sections["guards"], &report)
-	report.Result = parseReportResult(sections["result"])
+	report.Result = parseReportResult(sections["result"], &report)
 	report.MissingFields = missingReportFields(report)
 
 	return report, nil
@@ -139,24 +161,34 @@ func parseObservedResults(section string, report *Report) {
 		switch observedReportField(label) {
 		case "actual support":
 			report.ActualSupport = cleanReportStatus(value)
+			markReportField(report, "actual support", value)
 		case "usage guidance":
 			report.UsageGuidance = cleanReportValue(value)
+			markReportField(report, "usage guidance", value)
 		case "search status":
 			report.SearchStatus = cleanReportStatus(value)
+			markReportField(report, "search status", value)
 		case "discovered ids":
 			report.DiscoveredIDs = parseReportList(value)
+			markReportListField(report, "discovered ids", value)
 			activeList = "discovered ids"
 		case "read ids":
 			report.ReadIDs = parseReportList(value)
+			markReportListField(report, "read ids", value)
 			activeList = "read ids"
 		case "cited ids":
 			report.CitedIDs = parseReportList(value)
+			markReportListField(report, "cited ids", value)
 			activeList = "cited ids"
 		case "missing needs":
 			report.MissingNeeds = parseReportList(value)
+			markReportListField(report, "missing needs", value)
 			activeList = "missing needs"
+		case "argos-backed vs general reasoning":
+			markReportField(report, "argos-backed vs general reasoning", value)
 		case "next steps":
 			report.NextSteps = cleanReportValue(value)
+			markReportField(report, "next steps", value)
 		}
 	}
 }
@@ -169,14 +201,16 @@ func parseReportGuards(section string, report *Report) {
 		}
 		if guard, ok := knownReportGuards[normalizeReportLabel(label)]; ok {
 			report.Guards[guard] = cleanReportStatus(value)
+			markReportField(report, guard, value)
 		}
 	}
 }
 
-func parseReportResult(section string) string {
+func parseReportResult(section string, report *Report) string {
 	for _, line := range strings.Split(section, "\n") {
 		label, value, ok := splitReportLabel(line)
 		if ok && strings.EqualFold(label, "result") {
+			markReportField(report, "result", value)
 			return cleanReportStatus(value)
 		}
 	}
@@ -271,6 +305,7 @@ func observedReportField(label string) string {
 		"read ids",
 		"cited ids",
 		"missing needs",
+		"argos-backed vs general reasoning",
 		"next steps",
 	} {
 		if normalized == field || strings.HasPrefix(normalized, field+" ") {
@@ -282,6 +317,7 @@ func observedReportField(label string) string {
 
 func appendReportListValue(report *Report, field string, value string) {
 	values := parseReportList(value)
+	markReportListField(report, field, value)
 	switch field {
 	case "discovered ids":
 		report.DiscoveredIDs = uniqueStrings(append(report.DiscoveredIDs, values...))
@@ -296,21 +332,43 @@ func appendReportListValue(report *Report, field string, value string) {
 
 func missingReportFields(report Report) []string {
 	var missing []string
-	if report.CaseID == "" {
+	if !report.hasField("case") {
 		missing = append(missing, "case")
 	}
-	if report.ActualSupport == "" {
-		missing = append(missing, "actual support")
+	for _, field := range requiredReportFields {
+		if !report.hasField(field) {
+			missing = append(missing, field)
+		}
 	}
-	if report.Result == "" {
+	if !report.hasField("result") {
 		missing = append(missing, "result")
 	}
-	for _, guard := range criticalReportGuards {
-		if report.Guards[guard] == "" {
+	for _, guard := range requiredReportGuards {
+		if !report.hasField(guard) {
 			missing = append(missing, guard)
 		}
 	}
 	return missing
+}
+
+func markReportField(report *Report, field string, value string) {
+	if report.fieldPresence == nil {
+		return
+	}
+	if cleanReportValue(value) != "" {
+		report.fieldPresence[field] = true
+	}
+}
+
+func markReportListField(report *Report, field string, value string) {
+	markReportField(report, field, value)
+}
+
+func (report Report) hasField(field string) bool {
+	if report.fieldPresence == nil {
+		return true
+	}
+	return report.fieldPresence[field]
 }
 
 func uniqueStrings(values []string) []string {
