@@ -766,10 +766,26 @@ func TestAuthoringReportTemplateMatchesParserContract(t *testing.T) {
 	if len(report.MissingFields) != 0 {
 		t.Fatalf("template missing parser fields: %#v", report.MissingFields)
 	}
+	if report.VerifyResult == ResultPass {
+		t.Fatalf("unfilled template parsed verify result as pass")
+	}
+	if report.Result == ResultPass {
+		t.Fatalf("unfilled template parsed result as pass")
+	}
+	if report.HumanReview.ProposalApproved ||
+		report.HumanReview.CandidateWriteApproved ||
+		report.HumanReview.PriorityMustAuthorized ||
+		report.HumanReview.OfficialMutationAuthorized ||
+		report.HumanReview.PromoteAuthorized {
+		t.Fatalf("unfilled template parsed human review approvals: %#v", report.HumanReview)
+	}
 	for _, forbidden := range hiddenAuthoringProcessTokens() {
 		if strings.Contains(text, forbidden) {
 			t.Fatalf("report template leaked %q", forbidden)
 		}
+	}
+	if strings.Contains(text, "oracle") {
+		t.Fatalf("report template leaked %q", "oracle")
 	}
 }
 
@@ -786,6 +802,7 @@ func hiddenAuthoringProcessTokens() []string {
 		"observed_repo_lesson",
 		"overlap_requires_choice",
 		"candidate_not_findable",
+		"proposal_must_precede_candidate",
 		"unauthorized_" + "author" + "ity",
 		"personal_project_convention",
 	}
