@@ -76,7 +76,7 @@ func renderAuthoringPacketMarkdown(packet Packet) string {
 	fmt.Fprintf(&builder, "- Treat the natural request as the user's full write-side authoring task.\n")
 	fmt.Fprintf(&builder, "- Do not inspect case files, golden data, source test code, or private expectation data.\n")
 	fmt.Fprintf(&builder, "- Keep proposal review separate from candidate writing; write candidates only when the approval boundary below allows it.\n")
-	fmt.Fprintf(&builder, "- Keep all generated artifacts under the workspace using relative paths.\n")
+	fmt.Fprintf(&builder, "- Keep proposal and candidate artifacts under the workspace using relative paths.\n")
 	fmt.Fprintf(&builder, "- Use the authoring dogfood report template at `docs/superpowers/templates/argos-authoring-dogfood-report.md`.\n")
 	fmt.Fprintf(&builder, "- If the coordinator provides a report path, save the completed report there.\n\n")
 
@@ -121,11 +121,18 @@ func renderAuthoringPacketMarkdown(packet Packet) string {
 	fmt.Fprintf(&builder, "Required human review fields: `Proposal approved`, `Candidate write approved`, `Priority must authorized`, `Official mutation authorized`, and `Promote authorized`.\n\n")
 	fmt.Fprintf(&builder, "Required guard bullets:\n")
 	for _, guard := range requiredAuthoringReportGuards {
-		fmt.Fprintf(&builder, "- %s: pass | fail | review-needed | not-applicable | not-run\n", strings.Title(guard))
+		fmt.Fprintf(&builder, "- %s: pass | fail | review-needed | not-applicable | not-run\n", authoringGuardReportLabel(guard))
 	}
 	fmt.Fprintf(&builder, "\n")
 
 	return builder.String()
+}
+
+func authoringGuardReportLabel(guard string) string {
+	if guard == "" {
+		return ""
+	}
+	return strings.ToUpper(guard[:1]) + guard[1:]
 }
 
 func lookupAuthoringCase(cases []Case, id string) (Case, int, error) {

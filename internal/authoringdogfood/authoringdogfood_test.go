@@ -157,8 +157,11 @@ func TestBuildPacketIncludesNaturalRequestAndAuthoringCommands(t *testing.T) {
 		"`human_review`",
 		"/tmp/argos author inspect --json --project \"mall-api\" --goal",
 		"/tmp/argos author verify --json --proposal <proposal-path> --path <candidate-path>",
+		"Keep proposal and candidate artifacts under the workspace using relative paths.",
 		"docs/superpowers/templates/argos-authoring-dogfood-report.md",
 		"Use the authoring dogfood report template",
+		"If the coordinator provides a report path, save the completed report there.",
+		"Proposal reviewed before candidate write: pass | fail | review-needed | not-applicable | not-run",
 		"## Inputs",
 		"## Tool Transcript Summary",
 		"## Artifacts",
@@ -176,6 +179,8 @@ func TestBuildPacketIncludesNaturalRequestAndAuthoringCommands(t *testing.T) {
 		"required_guards",
 		"expected_result",
 		"proposal_must_precede_candidate",
+		"Keep all generated artifacts under the workspace using relative paths.",
+		"Proposal Reviewed Before Candidate Write",
 	} {
 		if strings.Contains(text, forbidden) {
 			t.Fatalf("packet leaked %q:\n%s", forbidden, text)
@@ -896,6 +901,7 @@ func TestREADMEExplainsAuthoringDogfoodRoundWorkflow(t *testing.T) {
 		"copy the fixture seed to a temp workspace",
 		"start a fresh runner",
 		"dogfood authoring evaluate",
+		"record the evaluated result in the round report",
 		"/tmp/argos-authoring-dogfood/packets/case-001.md",
 		"/tmp/argos-authoring-dogfood/reports/case-001.md",
 	} {

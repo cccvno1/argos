@@ -137,9 +137,9 @@ Use the authoring dogfood checklist and report template for counted runs:
 - `docs/superpowers/templates/argos-authoring-dogfood-report.md`
 
 For each case, copy the fixture seed to a temp workspace, generate a packet,
-start a fresh runner with the packet and template, save the runner report, then
-run `dogfood authoring evaluate`. The public fixture seed lives at
-`testdata/authoring-golden/fixtures/full`.
+start a fresh runner with the packet and template, save the runner report, run
+`dogfood authoring evaluate`, and record the evaluated result in the round report.
+The public fixture seed lives at `testdata/authoring-golden/fixtures/full`.
 
 The checklist is authoritative for exact packet and report paths. Counted runs
 save packet and report artifacts outside the repo under
