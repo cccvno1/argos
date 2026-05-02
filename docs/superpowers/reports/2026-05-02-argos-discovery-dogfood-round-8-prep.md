@@ -58,4 +58,6 @@ or design history to the runner.
 
 ## Current Status
 
-Prepared only. No runner reports have been produced or evaluated yet.
+Superseded by the completed round report:
+
+`docs/superpowers/reports/2026-05-02-argos-discovery-dogfood-round-8.md`

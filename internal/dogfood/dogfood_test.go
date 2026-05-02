@@ -152,6 +152,25 @@ func TestPacketAddsOperationSpecificNotes(t *testing.T) {
 	}
 }
 
+func TestCLIReadAndCitePacketsIncludeTaskOrQueryForFreshDiscovery(t *testing.T) {
+	cases, err := LoadCases(goldenCasesPath)
+	if err != nil {
+		t.Fatalf("LoadCases returned error: %v", err)
+	}
+
+	for _, id := range []string{"interface_cli_read_returns_body", "interface_cli_cite_returns_citation"} {
+		t.Run(id, func(t *testing.T) {
+			packet, err := BuildPacket(cases, PacketOptions{CaseID: id, Workspace: "/tmp/ws", ArgosBinary: "/tmp/argos"})
+			if err != nil {
+				t.Fatalf("BuildPacket returned error: %v", err)
+			}
+			if packet.Input.Task == "" && packet.Input.Query == "" {
+				t.Fatalf("packet %s has no task/query for fresh public discovery:\n%s", id, packet.Markdown)
+			}
+		})
+	}
+}
+
 func TestOperationNotesDoNotDependOnExpectedFields(t *testing.T) {
 	deprecatedCase := discoverytest.Case{
 		ID:        "list_hides_deprecated_by_default",
@@ -247,11 +266,95 @@ func TestParseMarkdownReportExtractsStructuredFields(t *testing.T) {
 	if got := report.Guards["progressive reading"]; got != "pass" {
 		t.Fatalf("progressive reading guard = %q, want pass", got)
 	}
+	if got := report.Guards["weak/none no-overclaim"]; got != "pass" {
+		t.Fatalf("weak/none no-overclaim guard = %q, want pass", got)
+	}
+	if got := report.Guards["citation accountability"]; got != "pass" {
+		t.Fatalf("citation accountability guard = %q, want pass", got)
+	}
+	if got := report.Guards["cited ids subset of read-and-used ids"]; got != "pass" {
+		t.Fatalf("cited ids subset guard = %q, want pass", got)
+	}
 	if report.Result != "pass" {
 		t.Fatalf("Result = %q, want pass", report.Result)
 	}
 	if len(report.MissingSections) != 0 {
 		t.Fatalf("MissingSections = %v, want none", report.MissingSections)
+	}
+	if len(report.MissingFields) != 0 {
+		t.Fatalf("MissingFields = %v, want none", report.MissingFields)
+	}
+}
+
+func TestParseMarkdownReportAcceptsFreshRunnerStyleReport(t *testing.T) {
+	report, err := ParseMarkdownReport([]byte(`# Case: case-001
+
+## Inputs
+
+- Packet: /tmp/packet.md
+
+## Tool Transcript Summary
+
+- Ran list only.
+
+## Observed Results
+
+- Actual support: Argos returned inventory for project mall-api.
+- Usage guidance: Argos reported read: forbidden, cite: forbidden, and claim: forbidden.
+- Search status: none; this was a list-only inventory case.
+- Discovered IDs: package:backend.auth-refresh.v1, rule:backend.auth-refresh.v1.
+- Read IDs: none; reads were forbidden for this case.
+- Cited IDs: none; citations were forbidden for this case.
+- Missing needs: none; no task/query was provided beyond inventory listing.
+- Argos-backed vs general reasoning: Argos-backed facts are limited to command output.
+- Next steps: none for this case.
+
+## Guards
+
+- Progressive reading: pass; no knowledge body was read because the packet required list only.
+- Weak/none no-overclaim: followed; no task claim was made from inventory alone.
+- Citation accountability: yes; no citations were emitted.
+- Cited IDs subset of read-and-used IDs: none; citation set is empty.
+- Missing needs not cited: pass; no missing needs were cited.
+- Attribution boundary: pass; observed facts are attributed to Argos command output.
+- No Discovery-triggered upload/capture: pass; no upload or capture command was run.
+- Usage guidance followed: pass; read, cite, and claim restrictions were followed.
+- Context contamination: pass; no forbidden sources were inspected.
+
+## Result
+
+pass
+`))
+	if err != nil {
+		t.Fatalf("ParseMarkdownReport returned error: %v", err)
+	}
+
+	if report.CaseID != "case-001" {
+		t.Fatalf("CaseID = %q, want case-001", report.CaseID)
+	}
+	if report.ActualSupport != "inventory" {
+		t.Fatalf("ActualSupport = %q, want inventory", report.ActualSupport)
+	}
+	if len(report.ReadIDs) != 0 {
+		t.Fatalf("ReadIDs = %v, want none", report.ReadIDs)
+	}
+	if len(report.CitedIDs) != 0 {
+		t.Fatalf("CitedIDs = %v, want none", report.CitedIDs)
+	}
+	if got := report.Guards["progressive reading"]; got != "pass" {
+		t.Fatalf("progressive reading guard = %q, want pass", got)
+	}
+	if got := report.Guards["weak/none no-overclaim"]; got != "pass" {
+		t.Fatalf("weak/none no-overclaim guard = %q, want pass", got)
+	}
+	if got := report.Guards["citation accountability"]; got != "pass" {
+		t.Fatalf("citation accountability guard = %q, want pass", got)
+	}
+	if got := report.Guards["cited ids subset of read-and-used ids"]; got != "pass" {
+		t.Fatalf("cited ids subset guard = %q, want pass", got)
+	}
+	if report.Result != "pass" {
+		t.Fatalf("Result = %q, want pass", report.Result)
 	}
 	if len(report.MissingFields) != 0 {
 		t.Fatalf("MissingFields = %v, want none", report.MissingFields)

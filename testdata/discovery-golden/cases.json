@@ -398,7 +398,12 @@
     {
       "id": "interface_cli_read_returns_body",
       "operation": "cli-read",
-      "input": {"project": "mall-api"},
+      "input": {
+        "project": "mall-api",
+        "phase": "implementation",
+        "task": "add refresh token endpoint",
+        "query": "refresh token session renewal"
+      },
       "expected": {
         "load_ids": ["rule:backend.auth-refresh.v1"]
       }
@@ -406,7 +411,12 @@
     {
       "id": "interface_cli_cite_returns_citation",
       "operation": "cli-cite",
-      "input": {"project": "mall-api"},
+      "input": {
+        "project": "mall-api",
+        "phase": "implementation",
+        "task": "add refresh token endpoint",
+        "query": "refresh token session renewal"
+      },
       "expected": {
         "cite_ids": ["rule:backend.auth-refresh.v1"]
       }

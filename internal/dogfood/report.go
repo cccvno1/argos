@@ -160,7 +160,7 @@ func parseObservedResults(section string, report *Report) {
 		activeList = ""
 		switch observedReportField(label) {
 		case "actual support":
-			report.ActualSupport = cleanReportStatus(value)
+			report.ActualSupport = cleanReportSupport(value)
 			markReportField(report, "actual support", value)
 		case "usage guidance":
 			report.UsageGuidance = cleanReportValue(value)
@@ -200,7 +200,7 @@ func parseReportGuards(section string, report *Report) {
 			continue
 		}
 		if guard, ok := knownReportGuards[normalizeReportLabel(label)]; ok {
-			report.Guards[guard] = cleanReportStatus(value)
+			report.Guards[guard] = cleanReportLeadingStatus(value)
 			markReportField(report, guard, value)
 		}
 	}
@@ -211,7 +211,12 @@ func parseReportResult(section string, report *Report) string {
 		label, value, ok := splitReportLabel(line)
 		if ok && strings.EqualFold(label, "result") {
 			markReportField(report, "result", value)
-			return cleanReportStatus(value)
+			return cleanReportLeadingStatus(value)
+		}
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" {
+			markReportField(report, "result", trimmed)
+			return cleanReportLeadingStatus(trimmed)
 		}
 	}
 	return ""
@@ -256,7 +261,7 @@ func splitReportLabel(line string) (string, string, bool) {
 	if !ok {
 		return "", "", false
 	}
-	label := strings.TrimSpace(before)
+	label := strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(before), "#"))
 	if label == "" {
 		return "", "", false
 	}
@@ -265,7 +270,7 @@ func splitReportLabel(line string) (string, string, bool) {
 
 func parseReportList(value string) []string {
 	cleaned := cleanReportValue(value)
-	if strings.EqualFold(cleaned, "none") || cleaned == "" {
+	if isNoneReportValue(cleaned) || cleaned == "" {
 		return nil
 	}
 	ids := reportIDPattern.FindAllString(cleaned, -1)
@@ -287,12 +292,70 @@ func cleanReportStatus(value string) string {
 	return strings.ToLower(cleanReportValue(value))
 }
 
+func cleanReportLeadingStatus(value string) string {
+	cleaned := cleanReportStatus(value)
+	for _, status := range []string{ResultReviewNeeded, "not-applicable", ResultPass, ResultFail, "partial"} {
+		if hasReportTokenPrefix(cleaned, status) {
+			return status
+		}
+	}
+	for _, synonym := range []string{"followed", "yes", "none", "ok"} {
+		if hasReportTokenPrefix(cleaned, synonym) {
+			return ResultPass
+		}
+	}
+	return cleaned
+}
+
+func cleanReportSupport(value string) string {
+	cleaned := cleanReportStatus(value)
+	for _, support := range []string{"strong", "partial", "weak", "inventory", "none"} {
+		if containsReportToken(cleaned, support) {
+			return support
+		}
+	}
+	return cleaned
+}
+
 func cleanReportValue(value string) string {
 	return strings.Trim(strings.TrimSpace(value), "` \t\r\n.,;:")
 }
 
 func normalizeReportLabel(label string) string {
 	return strings.ToLower(cleanReportValue(label))
+}
+
+func isNoneReportValue(value string) bool {
+	return hasReportTokenPrefix(strings.ToLower(cleanReportValue(value)), "none")
+}
+
+func hasReportTokenPrefix(value string, token string) bool {
+	if !strings.HasPrefix(value, token) {
+		return false
+	}
+	return len(value) == len(token) || isReportTokenBoundary(rune(value[len(token)]))
+}
+
+func containsReportToken(value string, token string) bool {
+	start := 0
+	for {
+		index := strings.Index(value[start:], token)
+		if index < 0 {
+			return false
+		}
+		index += start
+		beforeOK := index == 0 || isReportTokenBoundary(rune(value[index-1]))
+		after := index + len(token)
+		afterOK := after == len(value) || isReportTokenBoundary(rune(value[after]))
+		if beforeOK && afterOK {
+			return true
+		}
+		start = index + len(token)
+	}
+}
+
+func isReportTokenBoundary(r rune) bool {
+	return !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-')
 }
 
 func observedReportField(label string) string {
