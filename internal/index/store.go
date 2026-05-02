@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -98,6 +99,28 @@ func Open(dbPath string) (*Store, error) {
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("open index database: %w", err)
+	}
+	return &Store{db: db}, nil
+}
+
+func OpenReadOnly(dbPath string) (*Store, error) {
+	absPath, err := filepath.Abs(dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("resolve index database path: %w", err)
+	}
+	dsnURL := url.URL{
+		Scheme:   "file",
+		Path:     filepath.ToSlash(absPath),
+		RawQuery: url.Values{"mode": []string{"ro"}}.Encode(),
+	}
+	dsn := dsnURL.String()
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("open read-only index database: %w", err)
+	}
+	if err := db.Ping(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("open read-only index database: %w", err)
 	}
 	return &Store{db: db}, nil
 }

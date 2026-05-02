@@ -1,6 +1,7 @@
 package index
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -48,6 +49,74 @@ func TestCheckSchemaAcceptsRebuiltIndex(t *testing.T) {
 
 	if err := store.CheckSchema(); err != nil {
 		t.Fatalf("CheckSchema returned error: %v", err)
+	}
+}
+
+func TestOpenReadOnlyDoesNotCreateMissingDatabase(t *testing.T) {
+	root := t.TempDir()
+	dbPath := filepath.Join(root, "argos/index.db")
+
+	store, err := OpenReadOnly(dbPath)
+	if err == nil {
+		store.Close()
+		t.Fatal("expected OpenReadOnly to reject a missing database")
+	}
+	if _, statErr := os.Stat(dbPath); !os.IsNotExist(statErr) {
+		t.Fatalf("expected missing database to remain absent, stat error: %v", statErr)
+	}
+}
+
+func TestOpenReadOnlyRejectsWrites(t *testing.T) {
+	root := t.TempDir()
+	dbPath := filepath.Join(root, "argos/index.db")
+	if err := Rebuild(dbPath, []knowledge.Item{
+		testItem("backend.auth.jwt-refresh-token.v1", "JWT refresh token handling convention"),
+	}); err != nil {
+		t.Fatalf("Rebuild returned error: %v", err)
+	}
+
+	store, err := OpenReadOnly(dbPath)
+	if err != nil {
+		t.Fatalf("OpenReadOnly returned error: %v", err)
+	}
+	defer store.Close()
+
+	if err := store.InsertItem(testItem("rule:backend.new.v1", "New rule")); err == nil {
+		t.Fatal("expected read-only store to reject writes")
+	}
+}
+
+func TestOpenReadOnlyEscapesURIPathMetacharacters(t *testing.T) {
+	sourceDBPath := filepath.Join(t.TempDir(), "source", "argos/index.db")
+	item := testItem("rule:backend.cache.v1", "Product list cache rule")
+	if err := Rebuild(sourceDBPath, []knowledge.Item{item}); err != nil {
+		t.Fatalf("Rebuild returned error: %v", err)
+	}
+	data, err := os.ReadFile(sourceDBPath)
+	if err != nil {
+		t.Fatalf("read rebuilt index: %v", err)
+	}
+	root := filepath.Join(t.TempDir(), "workspace?with-query")
+	dbPath := filepath.Join(root, "argos/index.db")
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
+		t.Fatalf("mkdir metachar index dir: %v", err)
+	}
+	if err := os.WriteFile(dbPath, data, 0o644); err != nil {
+		t.Fatalf("write metachar index: %v", err)
+	}
+
+	store, err := OpenReadOnly(dbPath)
+	if err != nil {
+		t.Fatalf("OpenReadOnly returned error: %v", err)
+	}
+	defer store.Close()
+
+	got, err := store.GetItem(item.ID)
+	if err != nil {
+		t.Fatalf("GetItem returned error: %v", err)
+	}
+	if got.Title != item.Title {
+		t.Fatalf("expected title %q, got %q", item.Title, got.Title)
 	}
 }
 
