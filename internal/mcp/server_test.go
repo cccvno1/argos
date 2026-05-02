@@ -218,6 +218,18 @@ func TestToolCallArgosContextWorksWithoutIndex(t *testing.T) {
 	if !strings.Contains(text, `"project": "mall-api"`) {
 		t.Fatalf("expected project in context response: %s", text)
 	}
+	if !strings.Contains(text, `"phase": "implementation"`) {
+		t.Fatalf("expected phase in context response: %s", text)
+	}
+	if !strings.Contains(text, `"task": "add refresh token endpoint"`) {
+		t.Fatalf("expected task in context response: %s", text)
+	}
+	if !strings.Contains(text, `"files": [`) || !strings.Contains(text, `"internal/auth/session.go"`) {
+		t.Fatalf("expected files in context response: %s", text)
+	}
+	if !strings.Contains(text, `"arguments"`) || !strings.Contains(text, `"argos_find_knowledge"`) || !strings.Contains(text, `"argos_standards"`) {
+		t.Fatalf("expected argument-bearing next steps in context response: %s", text)
+	}
 	if !strings.Contains(text, "argos_standards") {
 		t.Fatalf("expected next call in context response: %s", text)
 	}

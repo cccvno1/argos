@@ -56,6 +56,7 @@ func TestRenderedAdaptersIncludeStableKnowledgeContract(t *testing.T) {
 				"Do not start upload, capture, or inbox creation from find results alone.",
 				"Semantic search status never overrides usage guidance.",
 				"Argos validation does not replace tests, builds, linting, or review.",
+				"Preserve arguments returned by argos_context when calling follow-up Argos tools.",
 			} {
 				if !strings.Contains(tt.body, expected) {
 					t.Fatalf("expected %q in %s adapter:\n%s", expected, tt.name, tt.body)

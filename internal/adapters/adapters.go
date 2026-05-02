@@ -107,20 +107,21 @@ Do not let Argos replace host workflow, safety, or user instructions.
 ## Work Protocol
 
 1. Before substantial project work, call argos_context when available; otherwise follow equivalent adapter or Markdown guidance.
-2. Use argos_list_knowledge when available; otherwise use equivalent CLI JSON or adapter guidance for broad orientation before unfamiliar project work.
-3. Use argos_find_knowledge when available; otherwise use equivalent CLI JSON or adapter guidance to find shared knowledge for current work.
-4. Before implementation or review, call argos_standards when available; otherwise follow equivalent adapter or Markdown guidance.
-5. Follow next_steps returned by Argos.
-6. Read full knowledge items only through argos_read_knowledge when available; otherwise use equivalent CLI JSON or adapter guidance when next_steps or usage guidance select specific IDs or paths.
-7. Cite Argos knowledge IDs used in final responses only after reading and applying them.
-8. Do not cite IDs returned only by argos_list_knowledge or argos_find_knowledge.
-9. Cite only knowledge IDs whose full item was read with argos_read_knowledge or equivalent CLI JSON and actually applied.
-10. Follow usage.read before reading full knowledge items.
-11. Follow usage.cite before calling argos_cite_knowledge or equivalent CLI JSON citation.
-12. When missing_needs are present, separate Argos-backed claims from general reasoning.
-13. Do not cite missing_needs; they are unsupported needs, not knowledge items.
-14. Do not start upload, capture, or inbox creation from find results alone.
-15. Semantic search status never overrides usage guidance.
+2. Preserve arguments returned by argos_context when calling follow-up Argos tools.
+3. Use argos_list_knowledge when available; otherwise use equivalent CLI JSON or adapter guidance for broad orientation before unfamiliar project work.
+4. Use argos_find_knowledge when available; otherwise use equivalent CLI JSON or adapter guidance to find shared knowledge for current work.
+5. Before implementation or review, call argos_standards when available; otherwise follow equivalent adapter or Markdown guidance.
+6. Follow next_steps returned by Argos.
+7. Read full knowledge items only through argos_read_knowledge when available; otherwise use equivalent CLI JSON or adapter guidance when next_steps or usage guidance select specific IDs or paths.
+8. Cite Argos knowledge IDs used in final responses only after reading and applying them.
+9. Do not cite IDs returned only by argos_list_knowledge or argos_find_knowledge.
+10. Cite only knowledge IDs whose full item was read with argos_read_knowledge or equivalent CLI JSON and actually applied.
+11. Follow usage.read before reading full knowledge items.
+12. Follow usage.cite before calling argos_cite_knowledge or equivalent CLI JSON citation.
+13. When missing_needs are present, separate Argos-backed claims from general reasoning.
+14. Do not cite missing_needs; they are unsupported needs, not knowledge items.
+15. Do not start upload, capture, or inbox creation from find results alone.
+16. Semantic search status never overrides usage guidance.
 
 ## Boundaries
 
