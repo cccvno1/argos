@@ -823,6 +823,10 @@ func TestAuthoringDogfoodChecklistDefinesFreshRunnerWorkflow(t *testing.T) {
 			t.Fatalf("checklist missing %q:\n%s", want, text)
 		}
 	}
+	assertTextOrder(t, "checklist", text,
+		"mkdir -p /tmp/argos-authoring-dogfood/packets /tmp/argos-authoring-dogfood/reports /tmp/argos-authoring-dogfood/case-001",
+		"go build -o /tmp/argos-authoring-dogfood/argos ./cmd/argos",
+	)
 	assertAuthoringProcessDocOmitsHiddenTokens(t, "checklist", text)
 }
 
@@ -860,6 +864,10 @@ func TestAuthoringDogfoodRound0RecordsEvaluationLoop(t *testing.T) {
 			t.Fatalf("round report missing %q:\n%s", want, text)
 		}
 	}
+	assertTextOrder(t, "round report", text,
+		"mkdir -p /tmp/argos-authoring-dogfood/packets /tmp/argos-authoring-dogfood/reports /tmp/argos-authoring-dogfood/case-001",
+		"go build -o /tmp/argos-authoring-dogfood/argos ./cmd/argos",
+	)
 	assertAuthoringProcessDocOmitsHiddenTokens(t, "round report", text)
 }
 
@@ -906,6 +914,21 @@ func assertAuthoringProcessDocOmitsHiddenTokens(t *testing.T, label, text string
 		if strings.Contains(text, forbidden) {
 			t.Fatalf("%s leaked %q", label, forbidden)
 		}
+	}
+}
+
+func assertTextOrder(t *testing.T, label, text string, before string, after string) {
+	t.Helper()
+	beforeIndex := strings.Index(text, before)
+	if beforeIndex < 0 {
+		t.Fatalf("%s missing %q", label, before)
+	}
+	afterIndex := strings.Index(text, after)
+	if afterIndex < 0 {
+		t.Fatalf("%s missing %q", label, after)
+	}
+	if beforeIndex > afterIndex {
+		t.Fatalf("%s has %q after %q", label, before, after)
 	}
 }
 

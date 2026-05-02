@@ -20,9 +20,9 @@ Use this checklist to run authoring dogfood without leaking hidden expectations 
 ## Coordinator Commands
 
 ```bash
+mkdir -p /tmp/argos-authoring-dogfood/packets /tmp/argos-authoring-dogfood/reports /tmp/argos-authoring-dogfood/case-001
 go build -o /tmp/argos-authoring-dogfood/argos ./cmd/argos
 /tmp/argos-authoring-dogfood/argos dogfood authoring cases --json
-mkdir -p /tmp/argos-authoring-dogfood/packets /tmp/argos-authoring-dogfood/reports /tmp/argos-authoring-dogfood/case-001
 cp -R testdata/authoring-golden/fixtures/full/. /tmp/argos-authoring-dogfood/case-001/
 /tmp/argos-authoring-dogfood/argos dogfood authoring packet --case case-001 --workspace /tmp/argos-authoring-dogfood/case-001 --argos-binary /tmp/argos-authoring-dogfood/argos > /tmp/argos-authoring-dogfood/packets/case-001.md
 /tmp/argos-authoring-dogfood/argos dogfood authoring evaluate --case case-001 --report /tmp/argos-authoring-dogfood/reports/case-001.md --workspace /tmp/argos-authoring-dogfood/case-001 --json
