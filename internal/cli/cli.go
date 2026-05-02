@@ -11,6 +11,7 @@ import (
 
 	"argos/internal/adapters"
 	"argos/internal/author"
+	"argos/internal/authoringdogfood"
 	"argos/internal/dogfood"
 	"argos/internal/index"
 	"argos/internal/knowledge"
@@ -20,7 +21,10 @@ import (
 	"argos/internal/workspace"
 )
 
-const defaultDogfoodCasesPath = "testdata/discovery-golden/cases.json"
+const (
+	defaultDogfoodCasesPath          = "testdata/discovery-golden/cases.json"
+	defaultAuthoringDogfoodCasesPath = "testdata/authoring-golden/cases.json"
+)
 
 func Run(args []string, stdout io.Writer, stderr io.Writer) int {
 	return run(args, os.Stdin, stdout, stderr)
@@ -313,6 +317,8 @@ func runDogfood(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 2
 	}
 	switch args[0] {
+	case "authoring":
+		return runDogfoodAuthoring(args[1:], stdout, stderr)
 	case "cases":
 		return runDogfoodCases(args[1:], stdout, stderr)
 	case "packet":
@@ -324,6 +330,129 @@ func runDogfood(args []string, stdout io.Writer, stderr io.Writer) int {
 		printUsage(stderr)
 		return 2
 	}
+}
+
+func runDogfoodAuthoring(args []string, stdout io.Writer, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "dogfood authoring: subcommand is required")
+		printUsage(stderr)
+		return 2
+	}
+	switch args[0] {
+	case "cases":
+		return runDogfoodAuthoringCases(args[1:], stdout, stderr)
+	case "packet":
+		return runDogfoodAuthoringPacket(args[1:], stdout, stderr)
+	case "evaluate":
+		return runDogfoodAuthoringEvaluate(args[1:], stdout, stderr)
+	default:
+		fmt.Fprintf(stderr, "dogfood authoring: unknown subcommand %q\n", args[0])
+		printUsage(stderr)
+		return 2
+	}
+}
+
+func runDogfoodAuthoringCases(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("dogfood authoring cases", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	jsonOut := flags.Bool("json", false, "print JSON output")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if !*jsonOut {
+		fmt.Fprintln(stderr, "dogfood authoring cases: --json is required")
+		return 2
+	}
+	cases, err := authoringdogfood.LoadCases(defaultAuthoringDogfoodCasesPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "dogfood authoring cases: %v\n", err)
+		return 1
+	}
+	return printJSON(stdout, stderr, authoringdogfood.Summaries(cases))
+}
+
+func runDogfoodAuthoringPacket(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("dogfood authoring packet", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	jsonOut := flags.Bool("json", false, "print JSON output")
+	caseID := flags.String("case", "", "authoring dogfood case id or public handle")
+	workspacePath := flags.String("workspace", "", "fixture workspace path")
+	argosBinary := flags.String("argos-binary", "", "argos binary path")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if strings.TrimSpace(*caseID) == "" {
+		fmt.Fprintln(stderr, "dogfood authoring packet: --case is required")
+		return 2
+	}
+	cases, err := authoringdogfood.LoadCases(defaultAuthoringDogfoodCasesPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "dogfood authoring packet: %v\n", err)
+		return 1
+	}
+	packet, err := authoringdogfood.BuildPacket(cases, authoringdogfood.PacketOptions{
+		CaseID:      *caseID,
+		Workspace:   *workspacePath,
+		ArgosBinary: *argosBinary,
+	})
+	if err != nil {
+		fmt.Fprintf(stderr, "dogfood authoring packet: %v\n", err)
+		return 2
+	}
+	if *jsonOut {
+		return printJSON(stdout, stderr, packet)
+	}
+	fmt.Fprint(stdout, packet.Markdown)
+	return 0
+}
+
+func runDogfoodAuthoringEvaluate(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("dogfood authoring evaluate", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	jsonOut := flags.Bool("json", false, "print JSON output")
+	caseID := flags.String("case", "", "authoring dogfood case id or public handle")
+	reportPath := flags.String("report", "", "markdown report path")
+	workspacePath := flags.String("workspace", "", "workspace path")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if !*jsonOut {
+		fmt.Fprintln(stderr, "dogfood authoring evaluate: --json is required")
+		return 2
+	}
+	if strings.TrimSpace(*caseID) == "" {
+		fmt.Fprintln(stderr, "dogfood authoring evaluate: --case is required")
+		return 2
+	}
+	if strings.TrimSpace(*reportPath) == "" {
+		fmt.Fprintln(stderr, "dogfood authoring evaluate: --report is required")
+		return 2
+	}
+	if strings.TrimSpace(*workspacePath) == "" {
+		fmt.Fprintln(stderr, "dogfood authoring evaluate: --workspace is required")
+		return 2
+	}
+	cases, err := authoringdogfood.LoadCases(defaultAuthoringDogfoodCasesPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "dogfood authoring evaluate: %v\n", err)
+		return 1
+	}
+	data, err := os.ReadFile(*reportPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "dogfood authoring evaluate: read report: %v\n", err)
+		return 1
+	}
+	report, err := authoringdogfood.ParseMarkdownReport(data)
+	if err != nil {
+		fmt.Fprintf(stderr, "dogfood authoring evaluate: parse report: %v\n", err)
+		return 1
+	}
+	evaluation, err := authoringdogfood.EvaluateCase(cases, *caseID, *workspacePath, report)
+	if err != nil {
+		fmt.Fprintf(stderr, "dogfood authoring evaluate: %v\n", err)
+		return 2
+	}
+	return printJSON(stdout, stderr, evaluation)
 }
 
 func runDogfoodCases(args []string, stdout io.Writer, stderr io.Writer) int {

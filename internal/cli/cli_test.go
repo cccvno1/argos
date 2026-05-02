@@ -578,6 +578,219 @@ func TestRunDogfoodEvaluateMismatchDoesNotEchoHiddenReportCaseID(t *testing.T) {
 	}
 }
 
+func TestRunDogfoodAuthoringCasesReturnsNaturalPublicInput(t *testing.T) {
+	chdir(t, repoRootForCLITest(t))
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{"dogfood", "authoring", "cases", "--json"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stderr=%q stdout=%q", code, stderr.String(), stdout.String())
+	}
+	if stderr.String() != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+	var cases []struct {
+		ID    string `json:"id"`
+		Input struct {
+			UserRequest string `json:"user_request"`
+		} `json:"input"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &cases); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, stdout.String())
+	}
+	if len(cases) == 0 || cases[0].ID != "case-001" {
+		t.Fatalf("expected public case handles, got: %s", stdout.String())
+	}
+	if !strings.Contains(cases[0].Input.UserRequest, "I designed a Go service template") {
+		t.Fatalf("expected natural authoring request, got: %s", stdout.String())
+	}
+	for _, forbidden := range hiddenAuthoringDogfoodTokens() {
+		if strings.Contains(stdout.String(), forbidden) {
+			t.Fatalf("authoring cases leaked %q in output: %s", forbidden, stdout.String())
+		}
+	}
+}
+
+func TestRunDogfoodAuthoringPacketReturnsMarkdownWithoutHiddenData(t *testing.T) {
+	chdir(t, repoRootForCLITest(t))
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{
+		"dogfood", "authoring", "packet",
+		"--case", "case-001",
+		"--workspace", "/tmp/argos-authoring",
+		"--argos-binary", "/tmp/argos",
+	}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stderr=%q stdout=%q", code, stderr.String(), stdout.String())
+	}
+	if stderr.String() != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+	output := stdout.String()
+	for _, want := range []string{
+		"# Argos Authoring Dogfood Runner Packet",
+		"author inspect --json",
+		"author verify --json",
+		"I designed a Go service template",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("expected packet markdown to contain %q, got: %s", want, output)
+		}
+	}
+	for _, forbidden := range hiddenAuthoringDogfoodTokens() {
+		if strings.Contains(output, forbidden) {
+			t.Fatalf("authoring packet leaked %q in output: %s", forbidden, output)
+		}
+	}
+}
+
+func TestRunDogfoodAuthoringEvaluateRequiresWorkspaceBackedArtifacts(t *testing.T) {
+	workspace := t.TempDir()
+	reportPath := filepath.Join(t.TempDir(), "report.md")
+	writeCLIFile(t, filepath.Dir(reportPath), filepath.Base(reportPath), sampleCLIAuthoringMissingProposalReport())
+	chdir(t, repoRootForCLITest(t))
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{
+		"dogfood", "authoring", "evaluate",
+		"--case", "case-001",
+		"--report", reportPath,
+		"--workspace", workspace,
+		"--json",
+	}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stderr=%q stdout=%q", code, stderr.String(), stdout.String())
+	}
+	if stderr.String() != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+	var evaluation struct {
+		CaseID   string `json:"case_id"`
+		Result   string `json:"result"`
+		Findings []struct {
+			Severity string `json:"severity"`
+			Message  string `json:"message"`
+		} `json:"findings"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &evaluation); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, stdout.String())
+	}
+	if evaluation.CaseID != "case-001" || evaluation.Result != "fail" {
+		t.Fatalf("expected case-001 failure, got: %s", stdout.String())
+	}
+	foundMissingProposal := false
+	for _, finding := range evaluation.Findings {
+		if finding.Severity == "fail" && strings.Contains(finding.Message, "proposal artifact missing") {
+			foundMissingProposal = true
+		}
+	}
+	if !foundMissingProposal {
+		t.Fatalf("expected missing proposal artifact failure, got: %s", stdout.String())
+	}
+}
+
+func TestRunDogfoodAuthoringRequiresFlags(t *testing.T) {
+	chdir(t, repoRootForCLITest(t))
+
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "cases json", args: []string{"dogfood", "authoring", "cases"}, want: "dogfood authoring cases: --json is required"},
+		{name: "packet case", args: []string{"dogfood", "authoring", "packet", "--workspace", "/tmp/ws", "--argos-binary", "/tmp/argos"}, want: "dogfood authoring packet: --case is required"},
+		{name: "evaluate json", args: []string{"dogfood", "authoring", "evaluate", "--case", "case-001", "--report", "report.md", "--workspace", "/tmp/ws"}, want: "dogfood authoring evaluate: --json is required"},
+		{name: "evaluate case", args: []string{"dogfood", "authoring", "evaluate", "--json", "--report", "report.md", "--workspace", "/tmp/ws"}, want: "dogfood authoring evaluate: --case is required"},
+		{name: "evaluate report", args: []string{"dogfood", "authoring", "evaluate", "--json", "--case", "case-001", "--workspace", "/tmp/ws"}, want: "dogfood authoring evaluate: --report is required"},
+		{name: "evaluate workspace", args: []string{"dogfood", "authoring", "evaluate", "--json", "--case", "case-001", "--report", "report.md"}, want: "dogfood authoring evaluate: --workspace is required"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout bytes.Buffer
+			var stderr bytes.Buffer
+			code := Run(tt.args, &stdout, &stderr)
+			if code != 2 {
+				t.Fatalf("expected exit code 2, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+			}
+			if !strings.Contains(stderr.String(), tt.want) {
+				t.Fatalf("expected stderr to contain %q, got %q", tt.want, stderr.String())
+			}
+		})
+	}
+}
+
+func hiddenAuthoringDogfoodTokens() []string {
+	return []string{
+		"oracle",
+		"expected_result",
+		"required_guards",
+		"required_proposal_properties",
+		"forbidden_mutations",
+		"required_evidence_categories",
+		"go_template_standard",
+		"redis_best_practices",
+		"api_consumer_knowledge",
+		"observed_repo_lesson",
+		"overlap_requires_choice",
+		"candidate_not_findable",
+		"unauthorized_" + "author" + "ity",
+		"personal_project_convention",
+	}
+}
+
+func sampleCLIAuthoringMissingProposalReport() string {
+	return `# Argos Authoring Dogfood Runner Report
+
+Case: case-001
+
+## Inputs
+
+- Workspace: /tmp/argos-authoring
+- Argos binary: /tmp/argos
+- User request: I designed a Go service template.
+
+## Tool Transcript Summary
+
+- Ran author inspect to shape the proposal.
+- Recorded that the proposal artifact should exist in the workspace.
+
+## Artifacts
+
+- Proposal path: knowledge/.inbox/proposals/go-service-template/proposal.json
+- Candidate path: knowledge/.inbox/packages/backend/go-service-template
+- Author Verify result: pass
+
+## Human Review Decisions
+
+- Proposal approved: true
+- Candidate write approved: true
+- Priority must authorized: false
+- Official mutation authorized: false
+- Promote authorized: false
+
+## Guards
+
+- Proposal reviewed before candidate write: pass
+- Source and scope documented: pass
+- Future use documented: pass
+- Candidate stayed in approved area: pass
+- Official knowledge unchanged: pass
+- Promotion not run: pass
+- Verification run: pass
+
+## Result
+
+Result: pass
+`
+}
+
 func TestRunKnowledgeFindAcceptsDiscoveryFiltersAndLimit(t *testing.T) {
 	root := t.TempDir()
 	writeCLIDiscoveryWorkspace(t, root)
