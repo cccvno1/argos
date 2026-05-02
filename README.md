@@ -131,8 +131,21 @@ argos dogfood authoring packet --case <case-handle> --workspace <fixture> --argo
 argos dogfood authoring evaluate --case <case-handle> --report <report.md> --workspace <fixture> --json
 ```
 
-Authoring dogfood packets define their own report shape and evaluate saved
-reports against `testdata/authoring-golden/cases.json`.
+Use the authoring dogfood checklist and report template for counted runs:
+
+- `docs/superpowers/checklists/2026-05-03-argos-authoring-dogfood-checklist.md`
+- `docs/superpowers/templates/argos-authoring-dogfood-report.md`
+
+For each case, copy the fixture seed to a temp workspace, generate a packet,
+start a fresh runner with the packet and template, save the runner report, then
+run `dogfood authoring evaluate`. The public fixture seed lives at
+`testdata/authoring-golden/fixtures/full`.
+
+The checklist is authoritative for exact packet and report paths. Counted runs
+save packet and report artifacts outside the repo under
+`/tmp/argos-authoring-dogfood/`, including
+`/tmp/argos-authoring-dogfood/packets/case-001.md` and
+`/tmp/argos-authoring-dogfood/reports/case-001.md`.
 
 ## Agent Knowledge Authoring
 

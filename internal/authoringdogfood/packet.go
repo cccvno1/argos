@@ -76,7 +76,9 @@ func renderAuthoringPacketMarkdown(packet Packet) string {
 	fmt.Fprintf(&builder, "- Treat the natural request as the user's full write-side authoring task.\n")
 	fmt.Fprintf(&builder, "- Do not inspect case files, golden data, source test code, or private expectation data.\n")
 	fmt.Fprintf(&builder, "- Keep proposal review separate from candidate writing; write candidates only when the approval boundary below allows it.\n")
-	fmt.Fprintf(&builder, "- Keep all generated artifacts under the workspace using relative paths.\n\n")
+	fmt.Fprintf(&builder, "- Keep all generated artifacts under the workspace using relative paths.\n")
+	fmt.Fprintf(&builder, "- Use the authoring dogfood report template at `docs/superpowers/templates/argos-authoring-dogfood-report.md`.\n")
+	fmt.Fprintf(&builder, "- If the coordinator provides a report path, save the completed report there.\n\n")
 
 	fmt.Fprintf(&builder, "## Natural User Request\n\n")
 	fmt.Fprintf(&builder, "%s\n\n", packet.Input.UserRequest)
@@ -112,6 +114,7 @@ func renderAuthoringPacketMarkdown(packet Packet) string {
 	fmt.Fprintf(&builder, "- Promote authorized: `%t`\n\n", packet.HumanReview.PromoteAuthorized)
 
 	fmt.Fprintf(&builder, "## Required Report Shape\n\n")
+	fmt.Fprintf(&builder, "Use the authoring dogfood report template at `docs/superpowers/templates/argos-authoring-dogfood-report.md`.\n\n")
 	fmt.Fprintf(&builder, "Include these sections: `## Inputs`, `## Tool Transcript Summary`, `## Artifacts`, `## Human Review Decisions`, `## Guards`, and `## Result`.\n\n")
 	fmt.Fprintf(&builder, "Required artifact fields: `Proposal path`, `Candidate path`, and `Author Verify result`.\n")
 	fmt.Fprintf(&builder, "Use `none` for an intentionally absent candidate path and `not-run` when verification is intentionally skipped.\n\n")

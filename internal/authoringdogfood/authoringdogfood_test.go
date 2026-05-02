@@ -157,6 +157,8 @@ func TestBuildPacketIncludesNaturalRequestAndAuthoringCommands(t *testing.T) {
 		"`human_review`",
 		"/tmp/argos author inspect --json --project \"mall-api\" --goal",
 		"/tmp/argos author verify --json --proposal <proposal-path> --path <candidate-path>",
+		"docs/superpowers/templates/argos-authoring-dogfood-report.md",
+		"Use the authoring dogfood report template",
 		"## Inputs",
 		"## Tool Transcript Summary",
 		"## Artifacts",
@@ -869,6 +871,39 @@ func TestAuthoringDogfoodRound0RecordsEvaluationLoop(t *testing.T) {
 		"go build -o /tmp/argos-authoring-dogfood/argos ./cmd/argos",
 	)
 	assertAuthoringProcessDocOmitsHiddenTokens(t, "round report", text)
+}
+
+func TestREADMEExplainsAuthoringDogfoodRoundWorkflow(t *testing.T) {
+	data, err := os.ReadFile("../../README.md")
+	if err != nil {
+		t.Fatalf("read README: %v", err)
+	}
+	text := string(data)
+	sectionStart := strings.Index(text, "Authoring dogfood validates the write side from natural user requests:")
+	if sectionStart < 0 {
+		t.Fatalf("README missing authoring dogfood section")
+	}
+	sectionEnd := strings.Index(text[sectionStart:], "## Agent Knowledge Authoring")
+	if sectionEnd < 0 {
+		t.Fatalf("README authoring dogfood section missing terminator")
+	}
+	section := text[sectionStart : sectionStart+sectionEnd]
+
+	for _, want := range []string{
+		"docs/superpowers/templates/argos-authoring-dogfood-report.md",
+		"docs/superpowers/checklists/2026-05-03-argos-authoring-dogfood-checklist.md",
+		"testdata/authoring-golden/fixtures/full",
+		"copy the fixture seed to a temp workspace",
+		"start a fresh runner",
+		"dogfood authoring evaluate",
+		"/tmp/argos-authoring-dogfood/packets/case-001.md",
+		"/tmp/argos-authoring-dogfood/reports/case-001.md",
+	} {
+		if !strings.Contains(section, want) {
+			t.Fatalf("README missing %q", want)
+		}
+	}
+	assertAuthoringProcessDocOmitsHiddenTokens(t, "README authoring dogfood section", section)
 }
 
 func TestAuthoringDogfoodProcessAssetsUseAlignedPacketAndReportPaths(t *testing.T) {
