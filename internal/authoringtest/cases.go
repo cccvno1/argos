@@ -3,7 +3,9 @@ package authoringtest
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
+	"strings"
 )
 
 type CaseFile struct {
@@ -35,13 +37,27 @@ type Summary struct {
 }
 
 func LoadCases(path string) ([]Case, error) {
-	data, err := os.ReadFile(path)
+	fileHandle, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("read authoring cases %q: %w", path, err)
 	}
+	defer fileHandle.Close()
+
 	var file CaseFile
-	if err := json.Unmarshal(data, &file); err != nil {
+	decoder := json.NewDecoder(fileHandle)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&file); err != nil {
 		return nil, fmt.Errorf("parse authoring cases %q: %w", path, err)
+	}
+	var extra struct{}
+	if err := decoder.Decode(&extra); err != io.EOF {
+		if err != nil {
+			return nil, fmt.Errorf("parse authoring cases %q: %w", path, err)
+		}
+		return nil, fmt.Errorf("parse authoring cases %q: multiple JSON values", path)
+	}
+	if err := validateCaseFile(file); err != nil {
+		return nil, fmt.Errorf("validate authoring cases %q: %w", path, err)
 	}
 	return file.Cases, nil
 }
@@ -58,10 +74,44 @@ func Summaries(cases []Case) []Summary {
 	return summaries
 }
 
-func stringifySummaries(summaries []Summary) string {
-	data, err := json.Marshal(summaries)
-	if err != nil {
-		return ""
+func validateCaseFile(file CaseFile) error {
+	if len(file.Cases) == 0 {
+		return fmt.Errorf("cases list is empty")
 	}
-	return string(data)
+	for i, tc := range file.Cases {
+		context := caseContext(i, tc.ID)
+		if isBlank(tc.ID) {
+			return fmt.Errorf("%s: id is required", context)
+		}
+		if isBlank(tc.Kind) {
+			return fmt.Errorf("%s: kind is required", context)
+		}
+		if isBlank(tc.Input.Project) {
+			return fmt.Errorf("%s: input.project is required", context)
+		}
+		if isBlank(tc.Input.Goal) {
+			return fmt.Errorf("%s: input.goal is required", context)
+		}
+		if isBlank(tc.Input.Mode) {
+			return fmt.Errorf("%s: input.mode is required", context)
+		}
+		if len(tc.RequiredGuards) == 0 {
+			return fmt.Errorf("%s: required_guards is required", context)
+		}
+		if isBlank(tc.Expected.Result) {
+			return fmt.Errorf("%s: expected.result is required", context)
+		}
+	}
+	return nil
+}
+
+func caseContext(index int, id string) string {
+	if !isBlank(id) {
+		return fmt.Sprintf("case[%d] id %q", index, id)
+	}
+	return fmt.Sprintf("case[%d]", index)
+}
+
+func isBlank(value string) bool {
+	return strings.TrimSpace(value) == ""
 }
