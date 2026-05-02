@@ -1,6 +1,7 @@
 # Argos Authoring Dogfood Round 0
 
 Date: 2026-05-03
+Argos Commit: `record-before-run`
 Status: `not-run`
 
 ## Purpose
@@ -15,22 +16,26 @@ Record the first fresh-runner authoring dogfood round after the process assets a
 
 ## Fixture Preparation
 
+Packet output: `/tmp/argos-authoring-dogfood/packets/case-001.md`
+Runner report output: `/tmp/argos-authoring-dogfood/reports/case-001.md`
+
 ```bash
 go build -o /tmp/argos-authoring-dogfood/argos ./cmd/argos
-mkdir -p /tmp/argos-authoring-dogfood/case-001
+mkdir -p /tmp/argos-authoring-dogfood/packets /tmp/argos-authoring-dogfood/reports /tmp/argos-authoring-dogfood/case-001
 cp -R testdata/authoring-golden/fixtures/full/. /tmp/argos-authoring-dogfood/case-001/
+/tmp/argos-authoring-dogfood/argos dogfood authoring packet --case case-001 --workspace /tmp/argos-authoring-dogfood/case-001 --argos-binary /tmp/argos-authoring-dogfood/argos > /tmp/argos-authoring-dogfood/packets/case-001.md
 ```
 
 ## Case Matrix
 
-| Case | Status | Runner Report | Evaluation |
-| --- | --- | --- | --- |
-| `case-001` | `not-run` | `docs/superpowers/reports/authoring-round-0-case-001.md` | `not-run` |
+| Case | Status | Packet | Runner Report | Evaluation |
+| --- | --- | --- | --- | --- |
+| `case-001` | `not-run` | `/tmp/argos-authoring-dogfood/packets/case-001.md` | `/tmp/argos-authoring-dogfood/reports/case-001.md` | `not-run` |
 
 ## Evaluation Commands
 
 ```bash
-/tmp/argos-authoring-dogfood/argos dogfood authoring evaluate --case case-001 --report docs/superpowers/reports/authoring-round-0-case-001.md --workspace /tmp/argos-authoring-dogfood/case-001 --json
+/tmp/argos-authoring-dogfood/argos dogfood authoring evaluate --case case-001 --report /tmp/argos-authoring-dogfood/reports/case-001.md --workspace /tmp/argos-authoring-dogfood/case-001 --json
 ```
 
 ## Results

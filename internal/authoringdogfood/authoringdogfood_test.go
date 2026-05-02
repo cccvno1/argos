@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 
@@ -808,21 +809,21 @@ func TestAuthoringDogfoodChecklistDefinesFreshRunnerWorkflow(t *testing.T) {
 		"docs/superpowers/templates/argos-authoring-dogfood-report.md",
 		"dogfood authoring cases --json",
 		"dogfood authoring packet --case case-001",
+		"> /tmp/argos-authoring-dogfood/packets/case-001.md",
 		"dogfood authoring evaluate --case case-001",
-		"mkdir -p /tmp/argos-authoring-dogfood/case-001",
+		"mkdir -p /tmp/argos-authoring-dogfood/packets /tmp/argos-authoring-dogfood/reports /tmp/argos-authoring-dogfood/case-001",
+		"/tmp/argos-authoring-dogfood/reports/case-001.md",
 		"cp -R testdata/authoring-golden/fixtures/full/.",
+		"Start a fresh runner with `/tmp/argos-authoring-dogfood/packets/case-001.md`",
+		"Fresh runner saves the completed report at `/tmp/argos-authoring-dogfood/reports/case-001.md`.",
 		"authoring.proposal.v2",
-		"author verify --json",
+		"author verify --json --proposal <proposal-path> --path <candidate-path>",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("checklist missing %q:\n%s", want, text)
 		}
 	}
-	for _, forbidden := range hiddenAuthoringProcessTokens() {
-		if strings.Contains(text, forbidden) {
-			t.Fatalf("checklist leaked %q", forbidden)
-		}
-	}
+	assertAuthoringProcessDocOmitsHiddenTokens(t, "checklist", text)
 }
 
 func TestAuthoringDogfoodRound0RecordsEvaluationLoop(t *testing.T) {
@@ -835,10 +836,16 @@ func TestAuthoringDogfoodRound0RecordsEvaluationLoop(t *testing.T) {
 
 	for _, want := range []string{
 		"# Argos Authoring Dogfood Round 0",
+		"Argos Commit: `record-before-run`",
 		"Status: `not-run`",
 		"## Runner Isolation",
 		"## Fixture Preparation",
 		"## Case Matrix",
+		"| Case | Status | Packet | Runner Report | Evaluation |",
+		"/tmp/argos-authoring-dogfood/packets/case-001.md",
+		"/tmp/argos-authoring-dogfood/reports/case-001.md",
+		"dogfood authoring packet --case case-001",
+		"> /tmp/argos-authoring-dogfood/packets/case-001.md",
 		"## Evaluation Commands",
 		"## Results",
 		"## Failure Classification",
@@ -853,11 +860,85 @@ func TestAuthoringDogfoodRound0RecordsEvaluationLoop(t *testing.T) {
 			t.Fatalf("round report missing %q:\n%s", want, text)
 		}
 	}
-	for _, forbidden := range hiddenAuthoringProcessTokens() {
-		if strings.Contains(text, forbidden) {
-			t.Fatalf("round report leaked %q", forbidden)
+	assertAuthoringProcessDocOmitsHiddenTokens(t, "round report", text)
+}
+
+func TestAuthoringDogfoodProcessAssetsUseAlignedPacketAndReportPaths(t *testing.T) {
+	checklistPath := "../../docs/superpowers/checklists/2026-05-03-argos-authoring-dogfood-checklist.md"
+	checklistData, err := os.ReadFile(checklistPath)
+	if err != nil {
+		t.Fatalf("read checklist: %v", err)
+	}
+	roundReportPath := "../../docs/superpowers/reports/2026-05-03-argos-authoring-dogfood-round-0.md"
+	roundReportData, err := os.ReadFile(roundReportPath)
+	if err != nil {
+		t.Fatalf("read round report: %v", err)
+	}
+
+	checklist := string(checklistData)
+	roundReport := string(roundReportData)
+	for _, path := range []string{
+		"/tmp/argos-authoring-dogfood/packets/case-001.md",
+		"/tmp/argos-authoring-dogfood/reports/case-001.md",
+	} {
+		if !strings.Contains(checklist, path) {
+			t.Fatalf("checklist missing aligned path %q:\n%s", path, checklist)
+		}
+		if !strings.Contains(roundReport, path) {
+			t.Fatalf("round report missing aligned path %q:\n%s", path, roundReport)
 		}
 	}
+
+	oldRunnerReportPath := "docs/superpowers/reports/authoring-round-0-case-001.md"
+	for label, text := range map[string]string{
+		"checklist":    checklist,
+		"round report": roundReport,
+	} {
+		if strings.Contains(text, oldRunnerReportPath) {
+			t.Fatalf("%s contains old runner report path %q", label, oldRunnerReportPath)
+		}
+	}
+}
+
+func assertAuthoringProcessDocOmitsHiddenTokens(t *testing.T, label, text string) {
+	t.Helper()
+	for _, forbidden := range authoringProcessDocumentHiddenTokens(t) {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("%s leaked %q", label, forbidden)
+		}
+	}
+}
+
+func authoringProcessDocumentHiddenTokens(t *testing.T) []string {
+	t.Helper()
+	tokens := map[string]bool{}
+	for _, token := range hiddenAuthoringProcessTokens() {
+		if token != "" {
+			tokens[token] = true
+		}
+	}
+	cases, err := LoadCases(authoringCasesPath)
+	if err != nil {
+		t.Fatalf("load authoring cases for hidden token checks: %v", err)
+	}
+	for _, tc := range cases {
+		for _, token := range []string{tc.ID, tc.Kind} {
+			if strings.TrimSpace(token) != "" {
+				tokens[token] = true
+			}
+		}
+		for _, token := range appendHiddenValues(tc.Oracle.RequiredGuards, tc.Oracle.RequiredProposalProperties, tc.Oracle.ForbiddenMutations, tc.Oracle.RequiredEvidenceCategories) {
+			if hiddenStructuredToken(token) {
+				tokens[token] = true
+			}
+		}
+	}
+	values := make([]string, 0, len(tokens))
+	for token := range tokens {
+		values = append(values, token)
+	}
+	sort.Strings(values)
+	return values
 }
 
 func hiddenAuthoringProcessTokens() []string {
