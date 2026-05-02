@@ -2269,9 +2269,10 @@ Expected: PASS.
 Run:
 
 ```bash
-tmpdir=$(mktemp -d)
-go build -o "$tmpdir/argos" ./cmd/argos
-(cd "$tmpdir" && "$tmpdir/argos" init)
+tmpbase=$(mktemp -d)
+mkdir -p "$tmpbase/bin" "$tmpbase/ws"
+go build -o "$tmpbase/bin/argos" ./cmd/argos
+(cd "$tmpbase/ws" && "$tmpbase/bin/argos" init)
 ```
 
 Expected stdout:
@@ -2283,7 +2284,7 @@ initialized Argos workspace
 Then run:
 
 ```bash
-(cd "$tmpdir" && "$tmpdir/argos" author inspect --json --project mall-api --goal "create product-list cache engineering knowledge")
+(cd "$tmpbase/ws" && "$tmpbase/bin/argos" author inspect --json --project mall-api --goal "create product-list cache engineering knowledge")
 ```
 
 Expected: exit code 0 with JSON containing `"policy"` and `"proposal_requirements"`. The project may be unknown in a blank initialized workspace, and that is acceptable because registry project configuration is user-owned.
