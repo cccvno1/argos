@@ -106,11 +106,29 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	case "context":
 		flags := flag.NewFlagSet("context", flag.ContinueOnError)
 		flags.SetOutput(stderr)
-		flags.Bool("json", false, "print JSON output")
+		jsonOut := flags.Bool("json", false, "print JSON output")
 		project := flags.String("project", "", "project id")
-		phase := flags.String("phase", "planning", "workflow phase")
+		phase := flags.String("phase", "", "workflow phase")
 		task := flags.String("task", "", "task description")
+		var files multiValueFlag
+		flags.Var(&files, "files", "file path relevant to the current task; may be repeated")
 		if err := flags.Parse(args[1:]); err != nil {
+			return 2
+		}
+		if !*jsonOut {
+			fmt.Fprintln(stderr, "context: --json is required")
+			return 2
+		}
+		if strings.TrimSpace(*project) == "" {
+			fmt.Fprintln(stderr, "context: --project is required")
+			return 2
+		}
+		if strings.TrimSpace(*phase) == "" {
+			fmt.Fprintln(stderr, "context: --phase is required")
+			return 2
+		}
+		if strings.TrimSpace(*task) == "" {
+			fmt.Fprintln(stderr, "context: --task is required")
 			return 2
 		}
 
@@ -118,6 +136,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			Project: *project,
 			Phase:   *phase,
 			Task:    *task,
+			Files:   files,
 		})
 		return printJSON(stdout, stderr, result)
 	case "knowledge":

@@ -1037,7 +1037,13 @@ broken
 func TestRunContextPrintsWorkflowContractJSON(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	code := Run([]string{"context", "--json", "--project", "mall-api"}, &stdout, &stderr)
+	code := Run([]string{
+		"context",
+		"--json",
+		"--project", "mall-api",
+		"--phase", "planning",
+		"--task", "understand auth refresh token flow",
+	}, &stdout, &stderr)
 
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr: %q", code, stderr.String())
@@ -1048,6 +1054,8 @@ func TestRunContextPrintsWorkflowContractJSON(t *testing.T) {
 
 	var result struct {
 		Project              string `json:"project"`
+		Phase                string `json:"phase"`
+		Task                 string `json:"task"`
 		RecommendedNextSteps []struct {
 			Tool   string `json:"tool"`
 			Reason string `json:"reason"`
@@ -1059,9 +1067,102 @@ func TestRunContextPrintsWorkflowContractJSON(t *testing.T) {
 	if result.Project != "mall-api" {
 		t.Fatalf("unexpected project: %s", result.Project)
 	}
+	if result.Phase != "planning" {
+		t.Fatalf("unexpected phase: %s", result.Phase)
+	}
+	if result.Task != "understand auth refresh token flow" {
+		t.Fatalf("unexpected task: %s", result.Task)
+	}
 	if len(result.RecommendedNextSteps) == 0 {
 		t.Fatal("expected recommended next steps")
 	}
+}
+
+func TestRunContextRequiresJSONAndTaskContext(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "missing json", args: []string{"context", "--project", "mall-api", "--phase", "implementation", "--task", "add refresh token endpoint"}, want: "context: --json is required"},
+		{name: "missing project", args: []string{"context", "--json", "--phase", "implementation", "--task", "add refresh token endpoint"}, want: "context: --project is required"},
+		{name: "missing phase", args: []string{"context", "--json", "--project", "mall-api", "--task", "add refresh token endpoint"}, want: "context: --phase is required"},
+		{name: "missing task", args: []string{"context", "--json", "--project", "mall-api", "--phase", "implementation"}, want: "context: --task is required"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout bytes.Buffer
+			var stderr bytes.Buffer
+			code := Run(tt.args, &stdout, &stderr)
+
+			if code != 2 {
+				t.Fatalf("expected exit code 2, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+			}
+			if !strings.Contains(stderr.String(), tt.want) {
+				t.Fatalf("stderr = %q, want %q", stderr.String(), tt.want)
+			}
+		})
+	}
+}
+
+func TestRunContextAcceptsRepeatedFilesAndReturnsStepArguments(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{
+		"context",
+		"--json",
+		"--project", "mall-api",
+		"--phase", "implementation",
+		"--task", "add refresh token endpoint",
+		"--files", " internal/auth/session.go ",
+		"--files", "",
+		"--files", "internal/auth/session_test.go",
+	}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stderr=%q stdout=%q", code, stderr.String(), stdout.String())
+	}
+	if stderr.String() != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+
+	var result struct {
+		Project string   `json:"project"`
+		Phase   string   `json:"phase"`
+		Task    string   `json:"task"`
+		Files   []string `json:"files"`
+		Steps   []struct {
+			Tool      string         `json:"tool"`
+			Arguments map[string]any `json:"arguments"`
+		} `json:"recommended_next_steps"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("expected JSON output, got error %v and output %q", err, stdout.String())
+	}
+	if result.Project != "mall-api" || result.Phase != "implementation" || result.Task != "add refresh token endpoint" {
+		t.Fatalf("context echo mismatch: %#v", result)
+	}
+	if got, want := result.Files, []string{"internal/auth/session.go", "internal/auth/session_test.go"}; !sameCLIStrings(got, want) {
+		t.Fatalf("files = %#v, want %#v", got, want)
+	}
+	if len(result.Steps) == 0 || result.Steps[0].Tool != "argos_find_knowledge" {
+		t.Fatalf("expected find as first step, got %#v", result.Steps)
+	}
+	if result.Steps[0].Arguments["project"] != "mall-api" || result.Steps[0].Arguments["phase"] != "implementation" || result.Steps[0].Arguments["task"] != "add refresh token endpoint" {
+		t.Fatalf("find arguments did not preserve context: %#v", result.Steps[0].Arguments)
+	}
+}
+
+func sameCLIStrings(left []string, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if left[i] != right[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func TestRunMCPHandlesToolsList(t *testing.T) {
