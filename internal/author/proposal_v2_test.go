@@ -340,6 +340,63 @@ func TestValidateProposalV2RejectsIncompleteCandidateFiles(t *testing.T) {
 	}
 }
 
+func TestValidateProposalV2RejectsCandidateFilePathBoundaryViolations(t *testing.T) {
+	tests := []struct {
+		name string
+		edit func(*ProposalV2)
+		want string
+	}{
+		{
+			name: "absolute candidate file path",
+			edit: func(p *ProposalV2) {
+				p.CandidateFiles[0].Path = "/tmp/KNOWLEDGE.md"
+			},
+			want: "candidate_files[0].path must be relative",
+		},
+		{
+			name: "parent candidate file path",
+			edit: func(p *ProposalV2) {
+				p.CandidateFiles[0].Path = "knowledge/.inbox/packages/backend/go-service-template/../other/KNOWLEDGE.md"
+			},
+			want: "candidate_files[0].path must stay inside workspace",
+		},
+		{
+			name: "official file for inbox delivery",
+			edit: func(p *ProposalV2) {
+				p.CandidateFiles[0].Path = "knowledge/packages/backend/go-service-template/KNOWLEDGE.md"
+			},
+			want: "candidate_files[0].path is outside inbox delivery boundary",
+		},
+		{
+			name: "file outside proposed path",
+			edit: func(p *ProposalV2) {
+				p.CandidateFiles[0].Path = "knowledge/.inbox/packages/backend/other-template/KNOWLEDGE.md"
+			},
+			want: "candidate_files[0].path must stay under proposed_shape.path",
+		},
+		{
+			name: "verification path mismatch",
+			edit: func(p *ProposalV2) {
+				p.VerificationPlan.ValidatePath = "knowledge/.inbox/packages/backend/other-template"
+			},
+			want: "verification_plan.validate_path must match proposed_shape.path",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			proposal := validProposalV2()
+			tt.edit(&proposal)
+
+			findings := ValidateProposalV2(proposal)
+
+			if !hasFinding(findings, "fail", tt.want) {
+				t.Fatalf("expected finding containing %q, got %#v", tt.want, findings)
+			}
+		})
+	}
+}
+
 func TestValidateProposalV2RequiresVerificationPlanValidatePath(t *testing.T) {
 	proposal := validProposalV2()
 	proposal.VerificationPlan.ValidatePath = ""

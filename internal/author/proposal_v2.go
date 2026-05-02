@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -359,12 +360,34 @@ func validateDeliveryV2(delivery DeliveryV2, addFail func(string)) {
 }
 
 func validateCandidateAndPlanV2(proposal ProposalV2, addFail func(string), addReview func(string)) {
+	proposedPath, proposedPathOK := cleanAuthoringPathV2("proposed_shape.path", proposal.ProposedShape.Path, addFail)
+	validatePath, validatePathOK := cleanAuthoringPathV2("verification_plan.validate_path", proposal.VerificationPlan.ValidatePath, addFail)
+	if proposedPathOK {
+		validateDeliveryPathBoundaryV2("proposed_shape.path", proposedPath, proposal.Delivery.Path, addFail)
+	}
+	if validatePathOK {
+		validateDeliveryPathBoundaryV2("verification_plan.validate_path", validatePath, proposal.Delivery.Path, addFail)
+	}
+	if proposedPathOK && validatePathOK && proposedPath != validatePath {
+		addFail("verification_plan.validate_path must match proposed_shape.path")
+	}
+
 	if len(proposal.CandidateFiles) == 0 {
 		addFail("candidate_files must include at least one file")
 	}
 	for i, file := range proposal.CandidateFiles {
 		if strings.TrimSpace(file.Path) == "" || strings.TrimSpace(file.Purpose) == "" || strings.TrimSpace(file.Load) == "" {
 			addFail(fmt.Sprintf("candidate_files[%d] must include path, purpose, and load", i))
+			continue
+		}
+		field := fmt.Sprintf("candidate_files[%d].path", i)
+		candidatePath, candidatePathOK := cleanAuthoringPathV2(field, file.Path, addFail)
+		if !candidatePathOK {
+			continue
+		}
+		validateDeliveryPathBoundaryV2(field, candidatePath, proposal.Delivery.Path, addFail)
+		if proposedPathOK && !pathWithinAuthoringRootV2(candidatePath, proposedPath) {
+			addFail(fmt.Sprintf("candidate_files[%d].path must stay under proposed_shape.path", i))
 		}
 	}
 	if strings.TrimSpace(proposal.VerificationPlan.ValidatePath) == "" {
@@ -378,6 +401,48 @@ func validateCandidateAndPlanV2(proposal ProposalV2, addFail func(string), addRe
 			addFail(fmt.Sprintf("verification_plan.findability_scenarios[%d] must include project and task or query", i))
 		}
 	}
+}
+
+func cleanAuthoringPathV2(field string, path string, addFail func(string)) (string, bool) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "", false
+	}
+	if filepath.IsAbs(path) {
+		addFail(field + " must be relative")
+		return "", false
+	}
+	slash := strings.ReplaceAll(path, "\\", "/")
+	for _, part := range strings.Split(slash, "/") {
+		if part == ".." {
+			addFail(field + " must stay inside workspace")
+			return "", false
+		}
+	}
+	clean := filepath.ToSlash(filepath.Clean(filepath.FromSlash(slash)))
+	if clean == "." {
+		return "", false
+	}
+	return clean, true
+}
+
+func validateDeliveryPathBoundaryV2(field string, path string, delivery string, addFail func(string)) {
+	switch delivery {
+	case "inbox":
+		if !isInboxCandidatePath(path) {
+			addFail(field + " is outside inbox delivery boundary")
+		}
+	case "official_review":
+		if !isOfficialCandidatePath(path) {
+			addFail(field + " is outside official_review delivery boundary")
+		}
+	}
+}
+
+func pathWithinAuthoringRootV2(path string, root string) bool {
+	path = filepath.ToSlash(strings.TrimSpace(path))
+	root = strings.TrimSuffix(filepath.ToSlash(strings.TrimSpace(root)), "/")
+	return path == root || strings.HasPrefix(path, root+"/")
 }
 
 func hasAnySourceV2(source SourceProfileV2) bool {

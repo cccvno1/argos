@@ -49,11 +49,17 @@ func TestInspectReportsRegistryPolicyAndNoIndex(t *testing.T) {
 		t.Fatalf("unexpected policy: %#v", result.Policy)
 	}
 	wantRequirements := []string{
-		"future_retrieval_contract",
-		"source_and_trust",
+		"schema_version:authoring.proposal.v2",
+		"user_request",
+		"future_agent_audience",
+		"source_profile",
+		"future_use",
 		"applicability",
 		"overlap_decision",
+		"delivery",
+		"candidate_files",
 		"verification_plan",
+		"human_review",
 	}
 	if !reflect.DeepEqual(result.ProposalRequirements, wantRequirements) {
 		t.Fatalf("unexpected proposal requirements: %#v", result.ProposalRequirements)

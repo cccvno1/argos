@@ -95,6 +95,12 @@ func renderAuthoringPacketMarkdown(packet Packet) string {
 	fmt.Fprintf(&builder, "%s author verify --json --proposal <proposal-path> --path <candidate-path>\n", packet.ArgosBinary)
 	fmt.Fprintf(&builder, "```\n\n")
 
+	fmt.Fprintf(&builder, "## Proposal Contract\n\n")
+	fmt.Fprintf(&builder, "- schema_version: `authoring.proposal.v2`\n")
+	fmt.Fprintf(&builder, "- Include `user_request`, `knowledge_goal`, `audience`, `scope`, `source_profile`, `proposed_shape`, `future_use`, `applicability`, `overlap_decision`, `delivery`, `candidate_files`, `verification_plan`, and `human_review`.\n")
+	fmt.Fprintf(&builder, "- Set `delivery.write_requires_human_approval` and `delivery.review_packet_required` to true.\n")
+	fmt.Fprintf(&builder, "- Keep `candidate_files` under the approved candidate path and delivery boundary.\n\n")
+
 	fmt.Fprintf(&builder, "## Public Input JSON\n\n")
 	fmt.Fprintf(&builder, "```json\n%s\n```\n\n", input)
 
