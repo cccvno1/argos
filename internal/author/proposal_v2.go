@@ -194,6 +194,9 @@ func validateSourceProfileV2(source SourceProfileV2, addFail func(string), addRe
 		if claim.Trust == "user_confirmed" && len(nonEmpty(source.UserConfirmed)) == 0 {
 			addReview("user_confirmed claim requires user_confirmed source")
 		}
+		if claim.Trust == "user_confirmed" && len(nonEmpty(claim.Source)) == 0 {
+			addReview("user_confirmed claim requires source")
+		}
 		if claim.Trust == "observed" && len(nonEmpty(source.Observed)) == 0 {
 			addReview("observed claim requires observed source")
 		}

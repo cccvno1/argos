@@ -65,6 +65,19 @@ func TestValidateProposalV2RequiresUserConfirmedSourceForDecisions(t *testing.T)
 	}
 }
 
+func TestValidateProposalV2RequiresClaimSourceForUserConfirmedClaims(t *testing.T) {
+	proposal := validProposalV2()
+	proposal.SourceProfile.Claims = []SourceClaimV2{
+		{Claim: "All generated services use the standard layout.", Kind: "decision", Trust: "user_confirmed"},
+	}
+
+	findings := ValidateProposalV2(proposal)
+
+	if !hasFinding(findings, "review-needed", "user_confirmed claim requires source") {
+		t.Fatalf("expected user-confirmed claim source finding, got %#v", findings)
+	}
+}
+
 func TestValidateProposalV2RejectsUnauthorizedPriorityMustAndOfficialMutation(t *testing.T) {
 	tests := []struct {
 		name string
