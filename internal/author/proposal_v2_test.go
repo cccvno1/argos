@@ -78,6 +78,66 @@ func TestValidateProposalV2RequiresClaimSourceForUserConfirmedClaims(t *testing.
 	}
 }
 
+func TestValidateProposalV2ReviewsIncompleteSourceProfile(t *testing.T) {
+	tests := []struct {
+		name string
+		edit func(*ProposalV2)
+		want string
+	}{
+		{
+			name: "no source buckets",
+			edit: func(p *ProposalV2) {
+				p.SourceProfile = SourceProfileV2{
+					Claims: []SourceClaimV2{
+						{Claim: "Future Go services should use the template layout.", Kind: "decision", Trust: "synthesized", RequiresReview: true},
+					},
+				}
+			},
+			want: "source_profile must include at least one source bucket",
+		},
+		{
+			name: "no claims",
+			edit: func(p *ProposalV2) {
+				p.SourceProfile.Claims = nil
+			},
+			want: "source_profile.claims should include claim-level trust",
+		},
+		{
+			name: "observed claim without observed bucket",
+			edit: func(p *ProposalV2) {
+				p.SourceProfile.Observed = nil
+				p.SourceProfile.Claims = []SourceClaimV2{
+					{Claim: "The directory layout comes from templates/go-service.", Kind: "fact", Trust: "observed", Source: []string{"templates/go-service"}},
+				}
+			},
+			want: "observed claim requires observed source",
+		},
+		{
+			name: "imported claim without imported bucket",
+			edit: func(p *ProposalV2) {
+				p.SourceProfile.Imported = nil
+				p.SourceProfile.Claims = []SourceClaimV2{
+					{Claim: "Use the imported service baseline.", Kind: "fact", Trust: "imported", Source: []string{"external template"}},
+				}
+			},
+			want: "imported claim requires imported source",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			proposal := validProposalV2()
+			tt.edit(&proposal)
+
+			findings := ValidateProposalV2(proposal)
+
+			if !hasFinding(findings, "review-needed", tt.want) {
+				t.Fatalf("expected finding containing %q, got %#v", tt.want, findings)
+			}
+		})
+	}
+}
+
 func TestValidateProposalV2RejectsUnauthorizedPriorityMustAndOfficialMutation(t *testing.T) {
 	tests := []struct {
 		name string
@@ -157,6 +217,17 @@ func TestValidateProposalV2RejectsIncompleteCandidateFiles(t *testing.T) {
 				t.Fatalf("expected candidate_files failure, got %#v", findings)
 			}
 		})
+	}
+}
+
+func TestValidateProposalV2RequiresVerificationPlanValidatePath(t *testing.T) {
+	proposal := validProposalV2()
+	proposal.VerificationPlan.ValidatePath = ""
+
+	findings := ValidateProposalV2(proposal)
+
+	if !hasFinding(findings, "fail", "verification_plan.validate_path is required") {
+		t.Fatalf("expected verification validate path failure, got %#v", findings)
 	}
 }
 
