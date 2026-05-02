@@ -908,6 +908,49 @@ func TestAuthoringDogfoodProcessAssetsUseAlignedPacketAndReportPaths(t *testing.
 	}
 }
 
+func TestAuthoringFixtureSeedSupportsPublicCases(t *testing.T) {
+	fixtureRoot := "../../testdata/authoring-golden/fixtures/full"
+	requiredFiles := []string{
+		"knowledge/domains.yaml",
+		"knowledge/projects.yaml",
+		"knowledge/types.yaml",
+		"templates/go-service/README.md",
+		"internal/api/README.md",
+		"internal/retry/README.md",
+		"knowledge/items/backend/cache-ttl.md",
+	}
+	for _, rel := range requiredFiles {
+		path := filepath.Join(fixtureRoot, filepath.FromSlash(rel))
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("fixture missing %s: %v", rel, err)
+		}
+		if info.IsDir() {
+			t.Fatalf("fixture path %s is a directory, want file", rel)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read fixture %s: %v", rel, err)
+		}
+		text := string(data)
+		for _, forbidden := range authoringProcessDocumentHiddenTokens(t) {
+			if strings.Contains(text, forbidden) {
+				t.Fatalf("fixture %s leaked %q", rel, forbidden)
+			}
+		}
+	}
+
+	if _, err := author.Inspect(fixtureRoot, author.InspectRequest{
+		Project:    "mall-api",
+		Goal:       "Turn Go service template into future-agent knowledge.",
+		FutureTask: "generate a Go service",
+		Phase:      "implementation",
+		Files:      []string{"templates/go-service/README.md"},
+	}); err != nil {
+		t.Fatalf("fixture should support author inspect: %v", err)
+	}
+}
+
 func assertAuthoringProcessDocOmitsHiddenTokens(t *testing.T, label, text string) {
 	t.Helper()
 	for _, forbidden := range authoringProcessDocumentHiddenTokens(t) {

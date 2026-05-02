@@ -1,0 +1,6 @@
+projects:
+  - id: mall-api
+    name: Mall API
+    path: .
+    tech_domains: [backend]
+    business_domains: [catalog]
