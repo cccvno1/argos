@@ -106,14 +106,22 @@ The golden corpus and `cases.json` verify inventory, strong/partial/weak/none
 support, progressive reading, citation guardrails, and entrypoint
 consistency.
 
-AI dogfood validation uses:
+AI dogfood validation uses productized harness commands plus the review
+checklist and report template:
+
+```bash
+argos dogfood cases --json
+argos dogfood packet --case <case-handle> --workspace <fixture> --argos-binary <argos>
+argos dogfood evaluate --case <case-handle> --report <report.md> --json
+```
 
 - `docs/superpowers/checklists/2026-04-30-argos-discovery-dogfood-checklist.md`
 - `docs/superpowers/templates/argos-discovery-dogfood-report.md`
 
-Dogfood runners must use fresh minimal context per case. Do not give runner
-agents expected IDs, expected support, prior transcripts, or design history.
-Evaluate reports separately against `testdata/discovery-golden/cases.json`.
+Dogfood runners use fresh minimal context per case. Generate runner packets
+instead of hand-copying inputs, and do not give runner agents expected IDs,
+expected support, prior transcripts, or design history. Evaluate saved reports
+separately against `testdata/discovery-golden/cases.json`.
 
 ## Knowledge Authoring
 

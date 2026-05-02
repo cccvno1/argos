@@ -22,6 +22,17 @@ golden expectations into the runner context.
 - Fail the run if the runner mentions, reads, or cites a knowledge ID that did
   not appear in its tool transcript.
 
+Prefer generated runner packets:
+
+```bash
+argos dogfood cases --json
+argos dogfood packet --case <case-handle> --workspace <fixture> --argos-binary <argos>
+argos dogfood evaluate --case <case-handle> --report <report.md> --json
+```
+
+The manual template below is fallback when the productized harness is
+unavailable.
+
 ## Runner Prompt Template
 
 You are validating one Argos Discovery case in a fresh context.
