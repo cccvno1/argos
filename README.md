@@ -106,7 +106,7 @@ The golden corpus and `cases.json` verify inventory, strong/partial/weak/none
 support, progressive reading, citation guardrails, and entrypoint
 consistency.
 
-AI dogfood validation uses productized harness commands plus the review
+Discovery dogfood validation uses productized harness commands plus the review
 checklist and report template:
 
 ```bash
@@ -118,16 +118,32 @@ argos dogfood evaluate --case <case-handle> --report <report.md> --json
 - `docs/superpowers/checklists/2026-04-30-argos-discovery-dogfood-checklist.md`
 - `docs/superpowers/templates/argos-discovery-dogfood-report.md`
 
-Dogfood runners use fresh minimal context per case. Generate runner packets
-instead of hand-copying inputs, and do not give runner agents expected IDs,
-expected support, prior transcripts, or design history. Evaluate saved reports
-separately against `testdata/discovery-golden/cases.json`.
+Discovery dogfood runners use fresh minimal context per case. Generate runner
+packets instead of hand-copying inputs, and do not give runner agents expected
+IDs, expected support, prior transcripts, or design history. Evaluate saved
+reports separately against `testdata/discovery-golden/cases.json`.
+
+Authoring dogfood validates the write side from natural user requests:
+
+```bash
+argos dogfood authoring cases --json
+argos dogfood authoring packet --case <case-handle> --workspace <fixture> --argos-binary <argos>
+argos dogfood authoring evaluate --case <case-handle> --report <report.md> --workspace <fixture> --json
+```
+
+Authoring dogfood packets define their own report shape and evaluate saved
+reports against `testdata/authoring-golden/cases.json`.
 
 ## Agent Knowledge Authoring
 
 Argos write-side UX is agent-operated. Humans describe the engineering
 knowledge they want future agents to have, then review a Knowledge Design
 Proposal and verification packet. Agents run the commands.
+
+Authoring v2 proposals describe mixed source and trust through `source_profile`
+instead of forcing a single authoring mode. A proposal should name the future
+agent audience, scope, future-use triggers, negative triggers, source profile,
+applicability boundaries, delivery path, and human review decisions.
 
 Single knowledge items live under `knowledge/items/`.
 
@@ -151,7 +167,6 @@ The durable flow is:
    argos author inspect --json \
      --project mall-api \
      --goal "create product-list cache engineering knowledge" \
-     --mode synthesized \
      --future-task "implement product list cache" \
      --phase implementation \
      --files internal/catalog/products.go

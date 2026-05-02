@@ -50,6 +50,11 @@ package unless the verification plan names them and the user confirms execution.
 Never set `priority: must` unless the user explicitly authorizes it.
 Never claim authored knowledge is official while it is still in inbox.
 
+Treat `source_profile` as multi-source. Do not force the request into one mode
+when it combines user-confirmed standards, observed files, imported references,
+templates, examples, synthesized recommendations, assumptions, and open
+questions.
+
 Before presenting the proposal, run or emulate:
 
 ```bash
@@ -210,72 +215,120 @@ questions or missing evidence instead of creating weak knowledge.
 
 ### 6. Present The Knowledge Design Proposal
 
-For package authoring, present a Knowledge Design Proposal with these sections:
+Present a Knowledge Design Proposal with these sections:
 
 ```text
-Title
-Why This Is Durable Knowledge
-Why This Should Be A Package
+User Request
+Knowledge Goal
+Future Agent Audience
 Scope
-Entrypoint
-Proposed Structure
-Omitted Structure
-Existing Knowledge Check
-Source Context
-Evidence And Trust
+Source Profile
+Proposed Shape
+Future Use
 Applicability Boundaries
-Counterexamples Or Trade-Offs
-Delivery Path
+Overlap Decision
+Delivery
+Candidate Files
 Verification Plan
-Open Questions
+Human Review Decisions
 ```
 
-The `Entrypoint` section must include:
+The review text is not the persisted proposal artifact. When the user approves
+the proposal shape, write a canonical JSON proposal to
+`knowledge/.inbox/proposals/.../proposal.json` or the chosen proposal path
+before writing candidate knowledge. The JSON must use
+`schema_version: authoring.proposal.v2` and the snake_case fields that
+`argos author verify` validates:
 
 ```text
+user_request
+knowledge_goal
+audience
+scope
+source_profile
+proposed_shape
+future_use
+applicability
+overlap_decision
+delivery
+candidate_files
+verification_plan
+human_review
+```
+
+Set `delivery.write_requires_human_approval` and
+`delivery.review_packet_required` to true. Keep the JSON proposal and the
+human-facing proposal summary synchronized; do not write a Markdown-only
+proposal.
+
+The `Source Profile` section must group claim sources and trust levels as:
+
+```text
+User-Confirmed
+Observed
+Imported
+Synthesized
+Templates
+Examples
+Assumptions
+Open Questions
+Claim-Level Trust
+```
+
+Do not collapse the source profile into one mode. A Redis best-practice draft
+may combine synthesized recommendations, assumptions, and open questions. A Go
+template package may combine user-confirmed intent, observed files, and
+template evidence.
+
+The `Proposed Shape` section must include:
+
+```text
+kind
+type
 title
 proposed ID
 proposed path
 status
 priority
-tags
-projects
-tech domains
-business domains
+rationale
+entrypoint load
 ```
 
-Default new package metadata:
+Default new candidate metadata:
 
 ```yaml
 status: draft
 priority: should
 ```
 
-The `Source Context` section must group claims as:
+The `Future Use` section must name:
 
 ```text
-User-Provided
-Observed From Repository
-Inferred
-Existing Knowledge
-Assumptions
+trigger requests
+negative triggers
+phases
+query phrases
+expected use
+citation policy
 ```
 
-Any assumption that affects correctness or trust must also appear in `Open
-Questions`.
-
-The `Evidence And Trust` section must name the files, examples, tests, command
-outputs, or user statements that support the proposed knowledge. If evidence is
-missing, say so.
-
 The `Applicability Boundaries` section must explain when the knowledge should be
-used and when it should not be used.
+used, when it should not be used, and the trade-offs.
 
-The `Counterexamples Or Trade-Offs` section may be brief, but it must not be
-omitted for precision-authored packages.
+The `Overlap Decision` section must name related official or inbox knowledge and
+say whether to create new, update existing, merge, stop, or ask for human choice.
 
-The `Omitted Structure` section must name optional directories that will not be
-created and explain why.
+The `Delivery` section must state whether the candidate stays in inbox or needs
+an explicit review path for official mutation. `priority: must`, official
+mutation, and promotion require explicit authorization.
+
+The `Candidate Files` section must list each planned file, purpose, and load
+behavior. For packages, `KNOWLEDGE.md` is the indexed entrypoint; optional
+directories are created only when useful.
+
+The `Human Review Decisions` section must list proposal approval, candidate
+write approval, priority escalation, official mutation, promotion, requested
+edits, and unresolved blockers.
 
 ### 7. Require A Delivery Path
 
