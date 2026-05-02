@@ -138,6 +138,53 @@ func TestValidateProposalV2ReviewsIncompleteSourceProfile(t *testing.T) {
 	}
 }
 
+func TestValidateProposalV2ConstrainsSourceProfileClaimKindTrustAndSource(t *testing.T) {
+	tests := []struct {
+		name     string
+		claim    SourceClaimV2
+		severity string
+		want     string
+	}{
+		{
+			name:     "unknown kind",
+			claim:    SourceClaimV2{Claim: "The template uses generated handlers.", Kind: "rule", Trust: "observed", Source: []string{"templates/go-service"}},
+			severity: "fail",
+			want:     "unknown source_profile.claims kind",
+		},
+		{
+			name:     "unknown trust",
+			claim:    SourceClaimV2{Claim: "The template uses generated handlers.", Kind: "fact", Trust: "manual", Source: []string{"templates/go-service"}},
+			severity: "fail",
+			want:     "unknown source_profile.claims trust",
+		},
+		{
+			name:     "observed claim missing source",
+			claim:    SourceClaimV2{Claim: "The template uses generated handlers.", Kind: "fact", Trust: "observed"},
+			severity: "review-needed",
+			want:     "source_profile.claims source is required",
+		},
+		{
+			name:     "synthesized claim missing source",
+			claim:    SourceClaimV2{Claim: "Use Redis locks for stampede protection.", Kind: "recommendation", Trust: "synthesized", RequiresReview: true},
+			severity: "review-needed",
+			want:     "source_profile.claims source is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			proposal := validProposalV2()
+			proposal.SourceProfile.Claims = []SourceClaimV2{tt.claim}
+
+			findings := ValidateProposalV2(proposal)
+
+			if !hasFinding(findings, tt.severity, tt.want) {
+				t.Fatalf("expected finding containing %q, got %#v", tt.want, findings)
+			}
+		})
+	}
+}
+
 func TestValidateProposalV2RejectsUnauthorizedPriorityMustAndOfficialMutation(t *testing.T) {
 	tests := []struct {
 		name string

@@ -188,6 +188,15 @@ func validateSourceProfileV2(source SourceProfileV2, addFail func(string), addRe
 			addFail(fmt.Sprintf("source_profile.claims[%d] must include claim, kind, and trust", i))
 			continue
 		}
+		if !validSourceClaimKindV2(claim.Kind) {
+			addFail(fmt.Sprintf("unknown source_profile.claims kind at index %d", i))
+		}
+		if !validSourceClaimTrustV2(claim.Trust) {
+			addFail(fmt.Sprintf("unknown source_profile.claims trust at index %d", i))
+		}
+		if claim.Kind != "question" && len(nonEmpty(claim.Source)) == 0 {
+			addReview(fmt.Sprintf("source_profile.claims source is required at index %d", i))
+		}
 		if claim.Trust == "synthesized" && len(nonEmpty(source.Assumptions)) == 0 && !claim.RequiresReview {
 			addReview("synthesized claim requires assumptions or review")
 		}
@@ -203,6 +212,24 @@ func validateSourceProfileV2(source SourceProfileV2, addFail func(string), addRe
 		if claim.Trust == "imported" && len(nonEmpty(source.Imported)) == 0 {
 			addReview("imported claim requires imported source")
 		}
+	}
+}
+
+func validSourceClaimKindV2(kind string) bool {
+	switch kind {
+	case "fact", "decision", "recommendation", "example", "template", "assumption", "question":
+		return true
+	default:
+		return false
+	}
+}
+
+func validSourceClaimTrustV2(trust string) bool {
+	switch trust {
+	case "observed", "user_confirmed", "imported", "synthesized", "illustrative", "unknown":
+		return true
+	default:
+		return false
 	}
 }
 
