@@ -8,8 +8,8 @@ import (
 
 func TestLoadCasesReadsGoldenCases(t *testing.T) {
 	cases := LoadCases(t)
-	if len(cases) != 23 {
-		t.Fatalf("expected 23 golden cases, got %d", len(cases))
+	if len(cases) != 24 {
+		t.Fatalf("expected 24 golden cases, got %d", len(cases))
 	}
 	if CaseByID(t, cases, "strong_auth_refresh_full_signal").Expected.Support != "strong" {
 		t.Fatalf("expected strong_auth_refresh_full_signal to expect strong coverage")
@@ -23,7 +23,7 @@ func TestLoadCasesReadsGoldenCases(t *testing.T) {
 			if tc.Expected.SupportLevel != "inventory" {
 				t.Fatalf("expected %s case %s to use inventory support level, got %q", tc.Operation, tc.ID, tc.Expected.SupportLevel)
 			}
-		case "find", "workflow", "cli-find":
+		case "find", "workflow", "context-workflow", "cli-find":
 			if tc.Expected.SupportLevel != "" && !validFindSupportLevel(tc.Expected.SupportLevel) {
 				t.Fatalf("expected %s case %s to use find support level, got %q", tc.Operation, tc.ID, tc.Expected.SupportLevel)
 			}
