@@ -65,6 +65,7 @@ func TestPacketMarkdownOmitsExpectedAndIncludesCLIEquivalents(t *testing.T) {
 		"Case: `" + publicID + "`",
 		"Workspace: `/tmp/argos-dogfood/full`",
 		"Argos binary: `/tmp/argos`",
+		"/tmp/argos context --json --project <project> --phase <phase> --task \"<task>\" [--files <path>]",
 		"/tmp/argos knowledge find --json --project <project>",
 		"/tmp/argos knowledge read --json <id>",
 		"/tmp/argos knowledge cite --json <id>...",
@@ -83,6 +84,34 @@ func TestPacketMarkdownOmitsExpectedAndIncludesCLIEquivalents(t *testing.T) {
 		if strings.Contains(text, forbidden) {
 			t.Fatalf("packet leaked %q:\n%s", forbidden, text)
 		}
+	}
+}
+
+func TestPublishedCaseHandlesStayStable(t *testing.T) {
+	cases, err := LoadCases(goldenCasesPath)
+	if err != nil {
+		t.Fatalf("LoadCases returned error: %v", err)
+	}
+
+	tests := []struct {
+		goldenID string
+		want     string
+	}{
+		{goldenID: "interface_cli_read_returns_body", want: "case-020"},
+		{goldenID: "interface_cli_cite_returns_citation", want: "case-021"},
+		{goldenID: "interface_mcp_strict_schema", want: "case-022"},
+		{goldenID: "adapter_flow_recommendations", want: "case-023"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.goldenID, func(t *testing.T) {
+			got, ok := PublicCaseID(cases, tt.goldenID)
+			if !ok {
+				t.Fatalf("missing public case handle for %s", tt.goldenID)
+			}
+			if got != tt.want {
+				t.Fatalf("PublicCaseID(%s) = %q, want %q", tt.goldenID, got, tt.want)
+			}
+		})
 	}
 }
 

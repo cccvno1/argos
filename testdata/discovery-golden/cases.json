@@ -422,6 +422,25 @@
       }
     },
     {
+      "id": "interface_mcp_strict_schema",
+      "operation": "mcp-schema",
+      "input": {"project": "mall-api"},
+      "expected": {
+        "reject_unknown_arguments": true,
+        "reject_missing_task_and_query": true,
+        "reject_out_of_range_limit": true
+      }
+    },
+    {
+      "id": "adapter_flow_recommendations",
+      "operation": "adapter",
+      "input": {"project": "mall-api"},
+      "expected": {
+        "include_text": ["MCP", "CLI JSON", "generated adapter files", "Markdown source"],
+        "exclude_text": ["query SQLite", "query vector"]
+      }
+    },
+    {
       "id": "context_entrypoint_carries_task_arguments",
       "operation": "context-workflow",
       "input": {
@@ -443,25 +462,6 @@
         "load_ids": ["rule:backend.auth-refresh.v1"],
         "cite_ids": ["rule:backend.auth-refresh.v1"],
         "no_bodies": true
-      }
-    },
-    {
-      "id": "interface_mcp_strict_schema",
-      "operation": "mcp-schema",
-      "input": {"project": "mall-api"},
-      "expected": {
-        "reject_unknown_arguments": true,
-        "reject_missing_task_and_query": true,
-        "reject_out_of_range_limit": true
-      }
-    },
-    {
-      "id": "adapter_flow_recommendations",
-      "operation": "adapter",
-      "input": {"project": "mall-api"},
-      "expected": {
-        "include_text": ["MCP", "CLI JSON", "generated adapter files", "Markdown source"],
-        "exclude_text": ["query SQLite", "query vector"]
       }
     }
   ]

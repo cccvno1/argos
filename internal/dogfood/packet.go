@@ -83,7 +83,7 @@ func renderMarkdown(packet Packet, notes []string) string {
 	fmt.Fprintf(&builder, "## CLI Equivalents\n\n")
 	fmt.Fprintf(&builder, "Use current CLI vocabulary. MCP tool names are conceptual only; do not call MCP-style names directly as CLI subcommands.\n\n")
 	fmt.Fprintf(&builder, "```bash\n")
-	fmt.Fprintf(&builder, "%s context --json --project <project> --phase <phase> --task \"<task>\"\n", packet.ArgosBinary)
+	fmt.Fprintf(&builder, "%s context --json --project <project> --phase <phase> --task \"<task>\" [--files <path>]\n", packet.ArgosBinary)
 	fmt.Fprintf(&builder, "%s knowledge list --json --project <project> [--domain <domain>] [--types <type>] [--include-deprecated]\n", packet.ArgosBinary)
 	fmt.Fprintf(&builder, "%s knowledge find --json --project <project> [--phase <phase>] [--task \"<task>\"] [--query \"<query>\"] [--files <path>] [--types <type>] [--tags <tag>] [--domains <domain>] [--status <status>] [--include-deprecated] [--limit <n>]\n", packet.ArgosBinary)
 	fmt.Fprintf(&builder, "%s knowledge read --json <id>\n", packet.ArgosBinary)
