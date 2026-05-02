@@ -68,7 +68,7 @@ func Verify(root string, req VerifyRequest) (VerifyResponse, error) {
 		return VerifyResponse{}, err
 	}
 
-	proposal, proposalFindings, _, err := loadProposalForVerify(filepath.Join(root, proposalPath))
+	proposal, proposalFindings, schemaVersion, err := loadProposalForVerify(filepath.Join(root, proposalPath))
 	if err != nil {
 		return VerifyResponse{}, err
 	}
@@ -90,6 +90,12 @@ func Verify(root string, req VerifyRequest) (VerifyResponse, error) {
 	response.Proposal.Validation = statusFromFindings(proposalFindings)
 	response.Findings = append(response.Findings, proposalFindings...)
 	response.Result = aggregateResult(response.Findings)
+	if schemaVersion != ProposalSchemaVersion && schemaVersion != ProposalV2SchemaVersion {
+		response.Candidate.Validation = "not-run"
+		response.Policy.Result = "not-run"
+		response.Findability.Result = "not-run"
+		return response, nil
+	}
 
 	reg, err := registry.Load(root)
 	if err != nil {
@@ -146,25 +152,26 @@ func loadProposalForVerify(path string) (Proposal, []Finding, string, error) {
 	if err := json.Unmarshal(data, &header); err != nil {
 		return Proposal{}, nil, "", fmt.Errorf("parse proposal JSON: %w", err)
 	}
+	schemaVersion := strings.TrimSpace(header.SchemaVersion)
 
-	switch header.SchemaVersion {
+	switch schemaVersion {
 	case ProposalSchemaVersion:
 		var proposal Proposal
 		if err := json.Unmarshal(data, &proposal); err != nil {
-			return Proposal{}, nil, header.SchemaVersion, fmt.Errorf("parse proposal JSON: %w", err)
+			return Proposal{}, nil, schemaVersion, fmt.Errorf("parse proposal JSON: %w", err)
 		}
-		return proposal, ValidateProposal(proposal), header.SchemaVersion, nil
+		return proposal, ValidateProposal(proposal), schemaVersion, nil
 	case ProposalV2SchemaVersion:
 		var proposal ProposalV2
 		if err := json.Unmarshal(data, &proposal); err != nil {
-			return Proposal{}, nil, header.SchemaVersion, fmt.Errorf("parse proposal JSON: %w", err)
+			return Proposal{}, nil, schemaVersion, fmt.Errorf("parse proposal JSON: %w", err)
 		}
-		return NormalizeProposalV2(proposal), ValidateProposalV2(proposal), header.SchemaVersion, nil
+		return NormalizeProposalV2(proposal), ValidateProposalV2(proposal), schemaVersion, nil
 	default:
 		return Proposal{}, []Finding{{
 			Severity: "fail",
 			Message:  "schema_version must be authoring.proposal.v1 or authoring.proposal.v2",
-		}}, header.SchemaVersion, nil
+		}}, schemaVersion, nil
 	}
 }
 

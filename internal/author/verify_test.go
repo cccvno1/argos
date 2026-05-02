@@ -549,6 +549,84 @@ func TestVerifyV2RejectsUnauthorizedPriorityMust(t *testing.T) {
 	}
 }
 
+func TestVerifySchemaV1AllowsWhitespace(t *testing.T) {
+	root := t.TempDir()
+	writeAuthorRegistry(t, root)
+
+	candidatePath := "knowledge/.inbox/items/backend/cache.md"
+	writeAuthorFile(t, root, candidatePath, authorItem("rule:backend.cache.v1", "draft", "Product list cache TTL rule"))
+	proposalPath := "authoring/proposals/cache.json"
+	proposal := validVerifyProposal(candidatePath, "product list cache ttl")
+	proposal.SchemaVersion = "  " + ProposalSchemaVersion + "  "
+	writeProposal(t, root, proposalPath, proposal)
+
+	result, err := Verify(root, VerifyRequest{ProposalPath: proposalPath, CandidatePath: candidatePath})
+	if err != nil {
+		t.Fatalf("Verify returned error: %v", err)
+	}
+	if result.Result != "pass" {
+		t.Fatalf("expected pass result, got %#v", result)
+	}
+	if result.Proposal.Validation != "pass" {
+		t.Fatalf("expected proposal pass, got %#v", result.Proposal)
+	}
+}
+
+func TestVerifyV2SubjectDomainsMapToBusinessDomains(t *testing.T) {
+	root := t.TempDir()
+	writeAuthorRegistry(t, root)
+
+	candidatePath := "knowledge/.inbox/packages/backend/go-service-template"
+	writeAuthorFile(t, root, "knowledge/.inbox/packages/backend/go-service-template/KNOWLEDGE.md", verifyAuthorPackageWithoutCatalogTag("package:backend.go-service-template.v1", "draft", "Go Service Template Knowledge"))
+	proposalPath := "knowledge/.inbox/proposals/go-service-template/proposal.json"
+	proposal := validVerifyProposalV2(candidatePath)
+	proposal.Scope.SubjectDomains = []string{"catalog"}
+	writeProposalV2(t, root, proposalPath, proposal)
+
+	result, err := Verify(root, VerifyRequest{ProposalPath: proposalPath, CandidatePath: candidatePath})
+	if err != nil {
+		t.Fatalf("Verify returned error: %v", err)
+	}
+	if result.Result != "pass" {
+		t.Fatalf("expected pass result, got %#v", result)
+	}
+	if hasVerifyFinding(result.Findings, "review-needed", "catalog") {
+		t.Fatalf("did not expect missing catalog tag/domain finding, got %#v", result.Findings)
+	}
+}
+
+func TestVerifyUnknownSchemaReturnsStructuredFailure(t *testing.T) {
+	root := t.TempDir()
+	writeAuthorRegistry(t, root)
+
+	candidatePath := "knowledge/.inbox/items/backend/cache.md"
+	writeAuthorFile(t, root, candidatePath, authorItem("rule:backend.cache.v1", "draft", "Product list cache TTL rule"))
+	proposalPath := "authoring/proposals/cache.json"
+	proposal := validVerifyProposal(candidatePath, "product list cache ttl")
+	proposal.SchemaVersion = "authoring.proposal.v999"
+	writeProposal(t, root, proposalPath, proposal)
+
+	result, err := Verify(root, VerifyRequest{ProposalPath: proposalPath, CandidatePath: candidatePath})
+	if err != nil {
+		t.Fatalf("Verify returned error: %v", err)
+	}
+	if result.Result != "fail" {
+		t.Fatalf("expected fail result, got %#v", result)
+	}
+	if result.Proposal.Validation != "fail" {
+		t.Fatalf("expected proposal fail, got %#v", result.Proposal)
+	}
+	if result.Policy.Result != "not-run" {
+		t.Fatalf("expected policy not-run, got %#v", result.Policy)
+	}
+	if result.Findability.Result != "not-run" {
+		t.Fatalf("expected findability not-run, got %#v", result.Findability)
+	}
+	if !hasVerifyFinding(result.Findings, "fail", "schema_version must be authoring.proposal.v1 or authoring.proposal.v2") {
+		t.Fatalf("expected unknown schema finding, got %#v", result.Findings)
+	}
+}
+
 func validVerifyProposal(candidatePath string, findQuery string) Proposal {
 	return Proposal{
 		SchemaVersion:  ProposalSchemaVersion,
@@ -659,6 +737,7 @@ func writeProposalV2(t *testing.T, root, rel string, proposal ProposalV2) {
 
 func validVerifyProposalV2(candidatePath string) ProposalV2 {
 	proposal := validProposalV2()
+	proposal.Scope.SubjectDomains = []string{"catalog"}
 	proposal.ProposedShape.Path = candidatePath
 	proposal.VerificationPlan.ValidatePath = candidatePath
 	proposal.CandidateFiles = []CandidateFile{{Path: candidatePath + "/KNOWLEDGE.md", Purpose: "entrypoint", Load: "start_here"}}
@@ -666,6 +745,40 @@ func validVerifyProposalV2(candidatePath string) ProposalV2 {
 }
 
 func verifyAuthorPackage(id, status, title string) string {
+	return `---
+id: ` + id + `
+title: ` + title + `
+type: package
+tech_domains: [backend]
+business_domains: [catalog]
+tags: [service-template]
+projects: [mall-api]
+status: ` + status + `
+priority: should
+updated_at: 2026-05-02
+applies_to:
+  files:
+    - templates/go-service/**
+---
+## Purpose
+
+Guide future agents when generating Go services.
+
+## When To Use
+
+Use when creating a new Go service from the standard template.
+
+## Start Here
+
+Use this package before creating a new Go service.
+
+## Load On Demand
+
+- examples/template.md
+`
+}
+
+func verifyAuthorPackageWithoutCatalogTag(id, status, title string) string {
 	return `---
 id: ` + id + `
 title: ` + title + `
