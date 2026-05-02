@@ -152,6 +152,11 @@ func EvaluateCase(cases []Case, requestedID string, workspace string, report Rep
 	if !tc.Approval.OfficialMutationAuthorized && proposal.Delivery.Path == "official_review" {
 		addFail("official knowledge mutation was not approved")
 	}
+	checkProposalHumanReviewApproval(proposal.HumanReview.ProposalApproved, tc.Approval.ProposalApproved, addFail, addReview, "proposal approval did not match the case boundary")
+	checkProposalHumanReviewApproval(proposal.HumanReview.CandidateWriteApproved, tc.Approval.CandidateWriteApproved, addFail, addReview, "candidate write was not approved")
+	checkProposalHumanReviewApproval(proposal.HumanReview.PriorityMustAuthorized, tc.Approval.PriorityMustAuthorized, addFail, addReview, "priority escalation was not approved")
+	checkProposalHumanReviewApproval(proposal.HumanReview.OfficialMutationAuthorized, tc.Approval.OfficialMutationAuthorized, addFail, addReview, "official knowledge mutation was not approved")
+	checkProposalHumanReviewApproval(proposal.HumanReview.PromoteAuthorized, tc.Approval.PromoteAuthorized, addFail, addReview, "promotion was not approved")
 
 	verifyRan := false
 	verifyResult := reportStatusNotRun
@@ -213,6 +218,16 @@ func finalizeAuthoringEvaluation(tc Case, evaluation Evaluation) Evaluation {
 		})
 	}
 	return evaluation
+}
+
+func checkProposalHumanReviewApproval(reported bool, allowed bool, addFail func(string), addReview func(string), failMessage string) {
+	if reported && !allowed {
+		addFail(failMessage)
+		return
+	}
+	if !reported && allowed {
+		addReview("proposal human review decisions did not match the case boundary")
+	}
 }
 
 func enforceHiddenOracle(tc Case, proposal author.ProposalV2, report Report, candidatePath string, verifyRan bool, verifyResult string, addFail func(string), addReview func(string)) {
@@ -322,7 +337,7 @@ func proposalSatisfiesHiddenEvidence(proposal author.ProposalV2, report Report, 
 func workflowSatisfiesHiddenGuard(tc Case, proposal author.ProposalV2, report Report, candidatePath string, verifyRan bool, verifyResult string, guard string) (bool, bool) {
 	switch guard {
 	case "proposal_before_write":
-		return !candidateWritten(report, candidatePath) || report.HumanReview.ProposalApproved || proposal.HumanReview.ProposalApproved || report.Guards["proposal reviewed before candidate write"] == ResultPass, true
+		return !candidateWritten(proposal, report, candidatePath) || report.HumanReview.ProposalApproved || proposal.HumanReview.ProposalApproved || report.Guards["proposal reviewed before candidate write"] == ResultPass, true
 	case "source_profile":
 		return hasAnySourceEvidence(proposal) && len(proposal.SourceProfile.Claims) > 0, true
 	case "future_use":
@@ -342,7 +357,7 @@ func workflowSatisfiesHiddenGuard(tc Case, proposal author.ProposalV2, report Re
 	case "overlap_checked":
 		return strings.TrimSpace(proposal.OverlapDecision.Decision) != "" && strings.TrimSpace(proposal.OverlapDecision.Reason) != "", true
 	case "no_write_before_decision":
-		return proposal.OverlapDecision.Decision != "unresolved" || !candidateWritten(report, candidatePath), true
+		return proposal.OverlapDecision.Decision != "unresolved" || !candidateWritten(proposal, report, candidatePath), true
 	case "author_verify_run":
 		return verifyRan, true
 	case "findability_reported":
@@ -365,7 +380,7 @@ func avoidsForbiddenHiddenMutation(proposal author.ProposalV2, report Report, ca
 	case "promotion":
 		return !proposal.Delivery.PromoteAuthorized && !report.HumanReview.PromoteAuthorized, true
 	case "candidate_write":
-		return !candidateWritten(report, candidatePath), true
+		return !candidateWritten(proposal, report, candidatePath), true
 	case "priority_must":
 		return !priorityMustRequested(proposal) && !proposal.Delivery.PriorityMustAuthorized && !report.HumanReview.PriorityMustAuthorized, true
 	default:
@@ -487,8 +502,9 @@ func priorityMustRequested(proposal author.ProposalV2) bool {
 	return proposal.ProposedShape.Priority == "must"
 }
 
-func candidateWritten(report Report, candidatePath string) bool {
+func candidateWritten(proposal author.ProposalV2, report Report, candidatePath string) bool {
 	return candidatePath != "" ||
+		proposal.HumanReview.CandidateWriteApproved ||
 		report.HumanReview.CandidateWriteApproved ||
 		report.VerifyResult != "" && report.VerifyResult != reportStatusNotRun
 }

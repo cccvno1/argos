@@ -334,6 +334,46 @@ func TestEvaluateCaseFailsUnapprovedWriteSignalsEvenWithoutCandidatePath(t *test
 	assertEvaluationFindingsOmit(t, evaluation, "candidate_write", "no_write_before_decision", "oracle")
 }
 
+func TestEvaluateCaseFailsProposalHumanReviewApprovalBypass(t *testing.T) {
+	cases, err := LoadCases(authoringCasesPath)
+	if err != nil {
+		t.Fatalf("LoadCases returned error: %v", err)
+	}
+	workspace := t.TempDir()
+	writePassingAuthoringWorkspace(t, workspace)
+	proposal := validAuthoringProposal(sampleCandidatePath)
+	proposal.OverlapDecision.Decision = "unresolved"
+	proposal.OverlapDecision.Reason = "Overlap needs a human decision before durable knowledge is written."
+	proposal.HumanReview.ProposalApproved = true
+	proposal.HumanReview.CandidateWriteApproved = true
+	writeAuthoringProposal(t, workspace, sampleProposalPath, proposal)
+	report, err := ParseMarkdownReport([]byte(sampleAuthoringReport("case-005", "not-run")))
+	if err != nil {
+		t.Fatalf("ParseMarkdownReport returned error: %v", err)
+	}
+	report.CandidatePath = ""
+	report.HumanReview.ProposalApproved = false
+	report.HumanReview.CandidateWriteApproved = false
+	report.VerifyResult = reportStatusNotRun
+	report.Result = ResultReviewNeeded
+
+	evaluation, err := EvaluateCase(cases, "case-005", workspace, report)
+	if err != nil {
+		t.Fatalf("EvaluateCase returned error: %v", err)
+	}
+
+	if evaluation.Result != ResultFail {
+		t.Fatalf("Result = %q, want fail; findings: %#v", evaluation.Result, evaluation.Findings)
+	}
+	if !hasEvaluationFinding(evaluation, ResultFail, "proposal approval did not match the case boundary") {
+		t.Fatalf("missing proposal approval finding: %#v", evaluation.Findings)
+	}
+	if !hasEvaluationFinding(evaluation, ResultFail, "candidate write was not approved") {
+		t.Fatalf("missing proposal candidate-write approval finding: %#v", evaluation.Findings)
+	}
+	assertEvaluationFindingsOmit(t, evaluation, "proposal_approved", "candidate_write", "oracle")
+}
+
 func TestEvaluateCaseRejectsAnyParentPathSegment(t *testing.T) {
 	cases, err := LoadCases(authoringCasesPath)
 	if err != nil {
