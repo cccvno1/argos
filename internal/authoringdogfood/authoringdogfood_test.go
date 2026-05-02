@@ -715,3 +715,78 @@ func writeAuthoringFile(t *testing.T, root string, rel string, body string) {
 		t.Fatalf("write %s: %v", rel, err)
 	}
 }
+
+func TestAuthoringReportTemplateMatchesParserContract(t *testing.T) {
+	templatePath := "../../docs/superpowers/templates/argos-authoring-dogfood-report.md"
+	data, err := os.ReadFile(templatePath)
+	if err != nil {
+		t.Fatalf("read report template: %v", err)
+	}
+	text := string(data)
+
+	for _, want := range []string{
+		"Case:",
+		"Runner Session:",
+		"Workspace:",
+		"## Inputs",
+		"## Tool Transcript Summary",
+		"## Artifacts",
+		"## Human Review Decisions",
+		"## Guards",
+		"## Result",
+		"Proposal path:",
+		"Candidate path:",
+		"Author Verify result:",
+		"Proposal approved:",
+		"Candidate write approved:",
+		"Priority must authorized:",
+		"Official mutation authorized:",
+		"Promote authorized:",
+		"Proposal reviewed before candidate write:",
+		"Source and scope documented:",
+		"Future use documented:",
+		"Candidate stayed in approved area:",
+		"Official knowledge unchanged:",
+		"Promotion not run:",
+		"Verification run:",
+		"Result:",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("report template missing %q:\n%s", want, text)
+		}
+	}
+
+	report, err := ParseMarkdownReport(data)
+	if err != nil {
+		t.Fatalf("ParseMarkdownReport returned error: %v", err)
+	}
+	if len(report.MissingSections) != 0 {
+		t.Fatalf("template missing parser sections: %#v", report.MissingSections)
+	}
+	if len(report.MissingFields) != 0 {
+		t.Fatalf("template missing parser fields: %#v", report.MissingFields)
+	}
+	for _, forbidden := range hiddenAuthoringProcessTokens() {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("report template leaked %q", forbidden)
+		}
+	}
+}
+
+func hiddenAuthoringProcessTokens() []string {
+	return []string{
+		"expected_result",
+		"required_guards",
+		"required_proposal_properties",
+		"forbidden_mutations",
+		"required_evidence_categories",
+		"go_template_standard",
+		"redis_best_practices",
+		"api_consumer_knowledge",
+		"observed_repo_lesson",
+		"overlap_requires_choice",
+		"candidate_not_findable",
+		"unauthorized_" + "author" + "ity",
+		"personal_project_convention",
+	}
+}
