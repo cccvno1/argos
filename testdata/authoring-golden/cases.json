@@ -1,0 +1,106 @@
+{
+  "cases": [
+    {
+      "id": "purpose_built_rule_user_specified",
+      "kind": "user_specified",
+      "input": {
+        "project": "mall-api",
+        "goal": "Create a backend rule for how future agents should design product-list cache invalidation.",
+        "mode": "user_specified"
+      },
+      "required_guards": [
+        "proposal_before_write",
+        "source_and_trust",
+        "future_retrieval_contract",
+        "no_unauthorized_priority_must"
+      ],
+      "expected": {
+        "result": "pass"
+      }
+    },
+    {
+      "id": "observed_lesson_from_repo",
+      "kind": "observed",
+      "input": {
+        "project": "mall-api",
+        "goal": "Turn the observed retry handling pattern into reusable agent knowledge.",
+        "mode": "observed"
+      },
+      "required_guards": [
+        "evidence_paths_recorded",
+        "assumptions_separated",
+        "candidate_inbox_only"
+      ],
+      "expected": {
+        "result": "pass"
+      }
+    },
+    {
+      "id": "synthesized_package_requires_assumptions",
+      "kind": "synthesized",
+      "input": {
+        "project": "mall-api",
+        "goal": "Create a package that helps future agents design product-list cache behavior.",
+        "mode": "synthesized"
+      },
+      "required_guards": [
+        "assumptions_explicit",
+        "status_draft",
+        "priority_should_or_may"
+      ],
+      "expected": {
+        "result": "pass"
+      }
+    },
+    {
+      "id": "overlap_requires_user_choice",
+      "kind": "overlap",
+      "input": {
+        "project": "mall-api",
+        "goal": "Create another cache TTL rule that may overlap existing cache knowledge.",
+        "mode": "user_specified"
+      },
+      "required_guards": [
+        "overlap_checked",
+        "overlap_decision_present",
+        "no_write_before_decision"
+      ],
+      "expected": {
+        "result": "review-needed"
+      }
+    },
+    {
+      "id": "candidate_validates_but_not_findable",
+      "kind": "findability",
+      "input": {
+        "project": "mall-api",
+        "goal": "Create knowledge whose metadata is too weak to be found for the intended task.",
+        "mode": "synthesized"
+      },
+      "required_guards": [
+        "author_verify_run",
+        "findability_reported",
+        "review_needed_when_not_findable"
+      ],
+      "expected": {
+        "result": "review-needed"
+      }
+    },
+    {
+      "id": "priority_must_requires_authorization",
+      "kind": "policy",
+      "input": {
+        "project": "mall-api",
+        "goal": "Create a must-follow engineering rule for future agents.",
+        "mode": "user_specified"
+      },
+      "required_guards": [
+        "priority_must_authorization_checked",
+        "human_authorization_required"
+      ],
+      "expected": {
+        "result": "review-needed"
+      }
+    }
+  ]
+}
