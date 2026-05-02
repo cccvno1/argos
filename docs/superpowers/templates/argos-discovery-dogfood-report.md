@@ -1,6 +1,6 @@
 # Argos Discovery Dogfood Report
 
-Case: `<case id>`
+Case: `<case-handle>`
 Runner Session: `<fresh session identifier or timestamp>`
 Workspace: `<fixture workspace path>`
 
@@ -15,11 +15,11 @@ Workspace: `<fixture workspace path>`
 
 ## Tool Transcript Summary
 
-- `argos_context`:
-- `argos_list_knowledge`:
-- `argos_find_knowledge`:
-- `argos_read_knowledge`:
-- `argos_cite_knowledge`:
+- `argos context`:
+- `argos knowledge list`:
+- `argos knowledge find`:
+- `argos knowledge read`:
+- `argos knowledge cite`:
 
 ## Observed Results
 

@@ -40,8 +40,7 @@ You are validating one Argos Discovery case in a fresh context.
 Workspace: `<fixture workspace path>`
 Argos binary: `<argos binary path>`
 
-Tool names such as `argos_find_knowledge` are the MCP names. If MCP is not
-available, use the CLI equivalents below from the fixture workspace:
+Use the CLI equivalents below from the fixture workspace:
 
 ```bash
 <argos binary path> context --json --project <project> --phase <phase> --task "<task>"
@@ -57,20 +56,21 @@ subcommands.
 
 Allowed flow:
 
-1. Call `argos_context` if this looks like a workflow entrypoint.
-2. Call `argos_list_knowledge` if you need inventory awareness.
-3. Call `argos_find_knowledge` with the case input.
+1. Run `argos context` if this looks like a workflow entrypoint.
+2. Run `argos knowledge list` if you need inventory awareness.
+3. Run `argos knowledge find` with the case input.
 4. Decide which IDs, if any, need full body reading.
-5. Call `argos_read_knowledge` only for selected IDs.
-6. Call `argos_cite_knowledge` only for IDs actually read and used.
+5. Run `argos knowledge read` only for selected IDs.
+6. Run `argos knowledge cite` only for IDs actually read and used.
 7. Produce the report using `docs/superpowers/templates/argos-discovery-dogfood-report.md`.
 
 Forbidden:
 
 - Do not use prior knowledge of expected IDs.
 - Do not cite IDs that were not read.
-- Do not call `argos_cite_knowledge` for inventory-only cases.
-- Do not cite IDs returned only by `argos_list_knowledge` or `argos_find_knowledge`.
+- Do not run `argos knowledge cite` for inventory-only cases.
+- Do not cite IDs returned only by `argos knowledge list` or
+  `argos knowledge find`.
 - Do not treat weak or none support as Argos-backed guidance.
 - Do not query SQLite, FTS tables, vector tables, or Markdown files directly
   unless the case explicitly validates fallback behavior.

@@ -80,7 +80,7 @@ func evaluate(tc discoverytest.Case, report Report, evaluationCaseID string, all
 		expectedSupport = tc.Expected.SupportLevel
 	}
 	if expectedSupport != "" && report.ActualSupport != "" && report.ActualSupport != expectedSupport {
-		addFail("actual support does not match expected support: got " + report.ActualSupport + ", want " + expectedSupport)
+		addFail("support classification mismatch")
 	}
 
 	idEvidenceComplete := report.hasField("discovered ids") && report.hasField("read ids") && report.hasField("cited ids")
@@ -89,26 +89,26 @@ func evaluate(tc discoverytest.Case, report Report, evaluationCaseID string, all
 	if idEvidenceComplete {
 		for _, id := range tc.Expected.IncludeIDs {
 			if !containsString(allReportedIDs, id) {
-				addFail("expected ID was not reported: " + id)
+				addFail("required evidence was not reported")
 			}
 		}
 	}
 	for _, id := range tc.Expected.ExcludeIDs {
 		if containsString(allReportedIDs, id) {
-			addFail("excluded ID was reported: " + id)
+			addFail("forbidden evidence was reported")
 		}
 	}
 	if report.hasField("read ids") {
 		for _, id := range tc.Expected.LoadIDs {
 			if !containsString(report.ReadIDs, id) {
-				addFail("expected ID was not read: " + id)
+				addFail("required read evidence was missing")
 			}
 		}
 	}
 	if report.hasField("cited ids") {
 		for _, id := range tc.Expected.CiteIDs {
 			if !containsString(report.CitedIDs, id) {
-				addFail("expected ID was not cited: " + id)
+				addFail("required cited evidence was missing")
 			}
 		}
 	}

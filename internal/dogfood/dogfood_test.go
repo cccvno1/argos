@@ -587,6 +587,37 @@ func TestEvaluateReportFailsWhenRunnerReportsFail(t *testing.T) {
 	assertFindingContains(t, evaluation.Findings, "runner reported result: fail")
 }
 
+func TestEvaluateFindingsDoNotLeakExpectedValues(t *testing.T) {
+	cases, err := LoadCases(goldenCasesPath)
+	if err != nil {
+		t.Fatalf("LoadCases returned error: %v", err)
+	}
+	tc := discoverytest.CaseByID(t, cases, "progressive_read_status_and_citation_guard")
+	text := strings.Replace(sampleStrongReport(), "- Actual support: `strong`", "- Actual support: `weak`", 1)
+	text = strings.Replace(text, "- Discovered IDs: `rule:backend.auth-refresh.v1`", "- Discovered IDs: none", 1)
+	text = strings.Replace(text, "- Read IDs: `rule:backend.auth-refresh.v1`", "- Read IDs: none", 1)
+	text = strings.Replace(text, "- Cited IDs: `rule:backend.auth-refresh.v1`", "- Cited IDs: none", 1)
+	report, err := ParseMarkdownReport([]byte(text))
+	if err != nil {
+		t.Fatalf("ParseMarkdownReport returned error: %v", err)
+	}
+
+	evaluation := Evaluate(tc, report)
+
+	if evaluation.Result != ResultFail {
+		t.Fatalf("Result = %q, want %q; findings: %#v", evaluation.Result, ResultFail, evaluation.Findings)
+	}
+	body, err := json.Marshal(evaluation.Findings)
+	if err != nil {
+		t.Fatalf("Marshal findings returned error: %v", err)
+	}
+	for _, forbidden := range []string{"strong", "expected support", "expected ID", "rule:backend.auth-refresh.v1", "decision:backend.session-renewal.v1"} {
+		if strings.Contains(string(body), forbidden) {
+			t.Fatalf("findings leaked %q: %s", forbidden, string(body))
+		}
+	}
+}
+
 func sampleStrongReport() string {
 	return `# Argos Dogfood Runner Report
 
