@@ -276,6 +276,128 @@ func TestEvaluateCaseRequiresWorkspaceArtifacts(t *testing.T) {
 	}
 }
 
+func TestEvaluateCaseEnforcesHiddenRequiredProposalProperties(t *testing.T) {
+	cases, err := LoadCases(authoringCasesPath)
+	if err != nil {
+		t.Fatalf("LoadCases returned error: %v", err)
+	}
+	workspace := t.TempDir()
+	writePassingAuthoringWorkspace(t, workspace)
+	proposal := validAuthoringProposal(sampleCandidatePath)
+	proposal.SourceProfile.Templates = nil
+	writeAuthoringProposal(t, workspace, sampleProposalPath, proposal)
+	report, err := ParseMarkdownReport([]byte(sampleAuthoringReport("case-001", "pass")))
+	if err != nil {
+		t.Fatalf("ParseMarkdownReport returned error: %v", err)
+	}
+
+	evaluation, err := EvaluateCase(cases, "case-001", workspace, report)
+	if err != nil {
+		t.Fatalf("EvaluateCase returned error: %v", err)
+	}
+
+	if evaluation.Result == ResultPass {
+		t.Fatalf("Result = pass, want oracle enforcement finding; findings: %#v", evaluation.Findings)
+	}
+	if !hasEvaluationFinding(evaluation, ResultFail, "proposal does not satisfy hidden evaluation requirements") {
+		t.Fatalf("missing hidden proposal-property finding: %#v", evaluation.Findings)
+	}
+	assertEvaluationFindingsOmit(t, evaluation, "source_profile.templates", "required_proposal_properties", "oracle")
+}
+
+func TestEvaluateCaseFailsUnapprovedWriteSignalsEvenWithoutCandidatePath(t *testing.T) {
+	cases, err := LoadCases(authoringCasesPath)
+	if err != nil {
+		t.Fatalf("LoadCases returned error: %v", err)
+	}
+	workspace := t.TempDir()
+	writePassingAuthoringWorkspace(t, workspace)
+	report, err := ParseMarkdownReport([]byte(strings.Replace(sampleAuthoringReport("case-005", "pass"), "- Candidate path: `"+sampleCandidatePath+"`", "- Candidate path: none", 1)))
+	if err != nil {
+		t.Fatalf("ParseMarkdownReport returned error: %v", err)
+	}
+
+	evaluation, err := EvaluateCase(cases, "case-005", workspace, report)
+	if err != nil {
+		t.Fatalf("EvaluateCase returned error: %v", err)
+	}
+
+	if evaluation.Result != ResultFail {
+		t.Fatalf("Result = %q, want fail; findings: %#v", evaluation.Result, evaluation.Findings)
+	}
+	if !hasEvaluationFinding(evaluation, ResultFail, "candidate write was not approved") {
+		t.Fatalf("missing candidate write approval finding: %#v", evaluation.Findings)
+	}
+	if !hasEvaluationFinding(evaluation, ResultFail, "author verify was not approved") {
+		t.Fatalf("missing verify approval finding: %#v", evaluation.Findings)
+	}
+	assertEvaluationFindingsOmit(t, evaluation, "candidate_write", "no_write_before_decision", "oracle")
+}
+
+func TestEvaluateCaseRejectsAnyParentPathSegment(t *testing.T) {
+	cases, err := LoadCases(authoringCasesPath)
+	if err != nil {
+		t.Fatalf("LoadCases returned error: %v", err)
+	}
+	workspace := t.TempDir()
+	writePassingAuthoringWorkspace(t, workspace)
+	report, err := ParseMarkdownReport([]byte(sampleAuthoringReport("case-001", "pass")))
+	if err != nil {
+		t.Fatalf("ParseMarkdownReport returned error: %v", err)
+	}
+	report.ProposalPath = "knowledge/.inbox/x/../proposal.json"
+
+	evaluation, err := EvaluateCase(cases, "case-001", workspace, report)
+	if err != nil {
+		t.Fatalf("EvaluateCase returned error: %v", err)
+	}
+
+	if evaluation.Result != ResultFail {
+		t.Fatalf("Result = %q, want fail; findings: %#v", evaluation.Result, evaluation.Findings)
+	}
+	if !hasEvaluationFinding(evaluation, ResultFail, "unsafe proposal path") {
+		t.Fatalf("missing unsafe proposal path finding: %#v", evaluation.Findings)
+	}
+}
+
+func TestEvaluateCaseEnforcesExpectedFailOracle(t *testing.T) {
+	workspace := t.TempDir()
+	writePassingAuthoringWorkspace(t, workspace)
+	report, err := ParseMarkdownReport([]byte(sampleAuthoringReport("case-001", "pass")))
+	if err != nil {
+		t.Fatalf("ParseMarkdownReport returned error: %v", err)
+	}
+	cases := []Case{{
+		ID:      "synthetic_expected_fail",
+		Kind:    "go_template_standard",
+		Fixture: "full",
+		Input: Input{
+			UserRequest: "Create durable knowledge for a synthetic failure case.",
+			Project:     "mall-api",
+		},
+		Approval: Approval{
+			ProposalApproved:       true,
+			CandidateWriteApproved: true,
+		},
+		Oracle: Oracle{
+			ExpectedResult: ResultFail,
+		},
+	}}
+
+	evaluation, err := EvaluateCase(cases, "case-001", workspace, report)
+	if err != nil {
+		t.Fatalf("EvaluateCase returned error: %v", err)
+	}
+
+	if evaluation.Result != ResultFail {
+		t.Fatalf("Result = %q, want fail; findings: %#v", evaluation.Result, evaluation.Findings)
+	}
+	if !hasEvaluationFinding(evaluation, ResultFail, "expected failure was not observed") {
+		t.Fatalf("missing expected-fail finding: %#v", evaluation.Findings)
+	}
+	assertEvaluationFindingsOmit(t, evaluation, "expected_result", "synthetic_expected_fail", "oracle")
+}
+
 func collectSummaryStrings(t *testing.T, summaries []Summary) []string {
 	t.Helper()
 
@@ -385,6 +507,19 @@ func hasEvaluationFinding(evaluation Evaluation, severity, contains string) bool
 	return false
 }
 
+func assertEvaluationFindingsOmit(t *testing.T, evaluation Evaluation, forbidden ...string) {
+	t.Helper()
+	data, err := json.Marshal(evaluation.Findings)
+	if err != nil {
+		t.Fatalf("marshal findings: %v", err)
+	}
+	for _, value := range forbidden {
+		if strings.Contains(string(data), value) {
+			t.Fatalf("evaluation leaked %q in findings: %s", value, string(data))
+		}
+	}
+}
+
 func writePassingAuthoringWorkspace(t *testing.T, root string) {
 	t.Helper()
 	writeAuthoringFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend]
@@ -432,11 +567,16 @@ Read this package before generating a Go service template implementation.
 `)
 
 	proposal := validAuthoringProposal(sampleCandidatePath)
+	writeAuthoringProposal(t, root, sampleProposalPath, proposal)
+}
+
+func writeAuthoringProposal(t *testing.T, root, rel string, proposal author.ProposalV2) {
+	t.Helper()
 	data, err := json.MarshalIndent(proposal, "", "  ")
 	if err != nil {
 		t.Fatalf("marshal proposal: %v", err)
 	}
-	writeAuthoringFile(t, root, sampleProposalPath, string(data))
+	writeAuthoringFile(t, root, rel, string(data))
 }
 
 func validAuthoringProposal(candidatePath string) author.ProposalV2 {
