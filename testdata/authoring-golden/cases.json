@@ -38,7 +38,7 @@
         "project": "mall-api",
         "context_hints": ["redis", "cache", "best-practices"],
         "available_sources": [],
-        "constraints": ["Synthesized recommendations must stay draft.", "Do not use priority must."]
+        "constraints": ["Synthesized recommendations must stay draft.", "Keep language advisory unless stronger wording is separately approved."]
       },
       "approval": {
         "proposal_approved": true,
@@ -123,7 +123,7 @@
         "project": "mall-api",
         "context_hints": ["cache", "ttl", "overlap"],
         "available_sources": [],
-        "constraints": ["Do not write a candidate while overlap is unresolved."]
+        "constraints": ["Resolve overlap before drafting durable knowledge."]
       },
       "approval": {
         "proposal_approved": false,
@@ -150,7 +150,7 @@
         "project": "mall-api",
         "context_hints": ["findability", "metadata"],
         "available_sources": [],
-        "constraints": ["Report review-needed when verification cannot find the candidate."]
+        "constraints": ["Surface verification evidence when the candidate cannot be found for the intended future task."]
       },
       "approval": {
         "proposal_approved": true,
@@ -175,9 +175,9 @@
       "input": {
         "user_request": "Create a must-follow engineering rule for future agents.",
         "project": "mall-api",
-        "context_hints": ["policy", "priority-must"],
+        "context_hints": ["policy", "elevated-rule"],
         "available_sources": [],
-        "constraints": ["The user has not authorized priority must or official mutation."]
+        "constraints": ["The user has not approved elevated rule scope or direct curated-knowledge changes."]
       },
       "approval": {
         "proposal_approved": true,

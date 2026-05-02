@@ -2,6 +2,7 @@ package authoringdogfood
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -54,13 +55,33 @@ func TestSummariesExposeNaturalInputAndHideOracle(t *testing.T) {
 	for _, forbidden := range []string{
 		"expected",
 		"oracle",
+		"expected_result",
 		"required_guards",
-		"go_template_standard",
+		"required_proposal_properties",
+		"forbidden_mutations",
+		"required_evidence_categories",
 		"candidate_write_approved",
+		"priority_must_authorized",
+		"official_mutation_authorized",
+		"promote_authorized",
+		"review-needed",
 		"proposal_must_precede_candidate",
 	} {
 		if strings.Contains(text, forbidden) {
 			t.Fatalf("summary leaked %q: %s", forbidden, text)
+		}
+	}
+
+	summaryValues := collectSummaryStrings(t, summaries)
+	for _, tc := range cases {
+		assertSummaryTextOmits(t, text, "internal case ID", tc.ID)
+		if tc.Oracle.ExpectedResult != "pass" {
+			assertSummaryTextOmits(t, text, "expected result", tc.Oracle.ExpectedResult)
+		}
+		for _, value := range appendHiddenValues(tc.Oracle.RequiredGuards, tc.Oracle.RequiredProposalProperties, tc.Oracle.ForbiddenMutations, tc.Oracle.RequiredEvidenceCategories) {
+			if hiddenStructuredToken(value) {
+				assertSummaryValuesOmit(t, summaryValues, "hidden oracle value", value)
+			}
 		}
 	}
 }
@@ -80,4 +101,71 @@ func TestFindCaseAcceptsPublicHandle(t *testing.T) {
 	if !strings.Contains(tc.Input.UserRequest, "Go service template") {
 		t.Fatalf("unexpected case input: %#v", tc.Input)
 	}
+}
+
+func collectSummaryStrings(t *testing.T, summaries []Summary) []string {
+	t.Helper()
+
+	data, err := json.Marshal(summaries)
+	if err != nil {
+		t.Fatalf("marshal summaries: %v", err)
+	}
+	var decoded any
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("unmarshal summaries: %v", err)
+	}
+
+	var values []string
+	collectStrings(reflect.ValueOf(decoded), &values)
+	return values
+}
+
+func collectStrings(value reflect.Value, values *[]string) {
+	if !value.IsValid() {
+		return
+	}
+	if value.Kind() == reflect.Interface {
+		collectStrings(value.Elem(), values)
+		return
+	}
+	switch value.Kind() {
+	case reflect.String:
+		*values = append(*values, value.String())
+	case reflect.Slice:
+		for i := 0; i < value.Len(); i++ {
+			collectStrings(value.Index(i), values)
+		}
+	case reflect.Map:
+		for _, key := range value.MapKeys() {
+			collectStrings(value.MapIndex(key), values)
+		}
+	}
+}
+
+func appendHiddenValues(groups ...[]string) []string {
+	var values []string
+	for _, group := range groups {
+		values = append(values, group...)
+	}
+	return values
+}
+
+func assertSummaryTextOmits(t *testing.T, text, label, forbidden string) {
+	t.Helper()
+	if strings.Contains(text, forbidden) {
+		t.Fatalf("summary leaked %s %q: %s", label, forbidden, text)
+	}
+}
+
+func assertSummaryValuesOmit(t *testing.T, values []string, label, forbidden string) {
+	t.Helper()
+	for _, value := range values {
+		if value == forbidden {
+			t.Fatalf("summary leaked %s %q as JSON string value", label, forbidden)
+		}
+	}
+}
+
+func hiddenStructuredToken(value string) bool {
+	return strings.Contains(value, "_") || strings.Contains(value, ".") || value == "review-needed" || value == "promotion"
 }

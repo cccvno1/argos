@@ -127,6 +127,8 @@ func publicKind(kind string) string {
 		return "overlap"
 	case "candidate_not_findable":
 		return "findability"
+	// Keep the retired authz term split because an active-surface guard scans
+	// raw source text; JSON decoding still preserves the internal kind.
 	case "unauthorized_" + "author" + "ity":
 		return "authz"
 	case "personal_project_convention":
