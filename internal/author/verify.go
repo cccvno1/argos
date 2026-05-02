@@ -1,6 +1,7 @@
 package author
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -67,7 +68,7 @@ func Verify(root string, req VerifyRequest) (VerifyResponse, error) {
 		return VerifyResponse{}, err
 	}
 
-	proposal, err := LoadProposal(filepath.Join(root, proposalPath))
+	proposal, proposalFindings, _, err := loadProposalForVerify(filepath.Join(root, proposalPath))
 	if err != nil {
 		return VerifyResponse{}, err
 	}
@@ -86,7 +87,6 @@ func Verify(root string, req VerifyRequest) (VerifyResponse, error) {
 		Findability: FindabilityStatus{Result: "pass"},
 	}
 
-	proposalFindings := ValidateProposal(proposal)
 	response.Proposal.Validation = statusFromFindings(proposalFindings)
 	response.Findings = append(response.Findings, proposalFindings...)
 	response.Result = aggregateResult(response.Findings)
@@ -133,6 +133,39 @@ func Verify(root string, req VerifyRequest) (VerifyResponse, error) {
 
 	response.Result = aggregateResult(response.Findings)
 	return response, nil
+}
+
+func loadProposalForVerify(path string) (Proposal, []Finding, string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return Proposal{}, nil, "", fmt.Errorf("read proposal: %w", err)
+	}
+	var header struct {
+		SchemaVersion string `json:"schema_version"`
+	}
+	if err := json.Unmarshal(data, &header); err != nil {
+		return Proposal{}, nil, "", fmt.Errorf("parse proposal JSON: %w", err)
+	}
+
+	switch header.SchemaVersion {
+	case ProposalSchemaVersion:
+		var proposal Proposal
+		if err := json.Unmarshal(data, &proposal); err != nil {
+			return Proposal{}, nil, header.SchemaVersion, fmt.Errorf("parse proposal JSON: %w", err)
+		}
+		return proposal, ValidateProposal(proposal), header.SchemaVersion, nil
+	case ProposalV2SchemaVersion:
+		var proposal ProposalV2
+		if err := json.Unmarshal(data, &proposal); err != nil {
+			return Proposal{}, nil, header.SchemaVersion, fmt.Errorf("parse proposal JSON: %w", err)
+		}
+		return NormalizeProposalV2(proposal), ValidateProposalV2(proposal), header.SchemaVersion, nil
+	default:
+		return Proposal{}, []Finding{{
+			Severity: "fail",
+			Message:  "schema_version must be authoring.proposal.v1 or authoring.proposal.v2",
+		}}, header.SchemaVersion, nil
+	}
 }
 
 func cleanVerifyPath(field string, path string) (string, error) {

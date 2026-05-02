@@ -388,3 +388,66 @@ func hasAnySourceV2(source SourceProfileV2) bool {
 		len(nonEmpty(source.Templates)) > 0 ||
 		len(nonEmpty(source.Examples)) > 0
 }
+
+func NormalizeProposalV2(proposal ProposalV2) Proposal {
+	return Proposal{
+		SchemaVersion: ProposalSchemaVersion,
+		KnowledgeGoal: proposal.KnowledgeGoal,
+		AuthoringMode: "synthesized",
+		Project:       proposal.Project,
+		ProposedShape: ProposedShape{
+			Kind:     proposal.ProposedShape.Kind,
+			Type:     proposal.ProposedShape.Type,
+			Title:    proposal.ProposedShape.Title,
+			ID:       proposal.ProposedShape.ID,
+			Path:     proposal.ProposedShape.Path,
+			Status:   proposal.ProposedShape.Status,
+			Priority: proposal.ProposedShape.Priority,
+		},
+		FutureRetrievalContract: FutureRetrievalContract{
+			Tasks:           append([]string{}, proposal.FutureUse.TriggerRequests...),
+			Phases:          append([]string{}, proposal.FutureUse.Phases...),
+			Files:           append([]string{}, proposal.Scope.Files...),
+			FileGlobs:       append([]string{}, proposal.Scope.FileGlobs...),
+			QueryPhrases:    append([]string{}, proposal.FutureUse.QueryPhrases...),
+			Projects:        append([]string{}, proposal.Scope.Projects...),
+			TechDomains:     append([]string{}, proposal.Scope.TechDomains...),
+			BusinessDomains: nil,
+			Tags:            append([]string{}, proposal.Scope.SubjectDomains...),
+			ExpectedUse:     proposal.FutureUse.ExpectedUse,
+			CiteAfterUse:    proposal.FutureUse.CitationPolicy == "cite_after_use",
+		},
+		SourceAndTrust: SourceAndTrust{
+			UserProvided:  append([]string{}, proposal.SourceProfile.UserConfirmed...),
+			Observed:      append([]string{}, proposal.SourceProfile.Observed...),
+			Imported:      append([]string{}, proposal.SourceProfile.Imported...),
+			Synthesized:   append([]string{}, proposal.SourceProfile.Synthesized...),
+			Assumptions:   append([]string{}, proposal.SourceProfile.Assumptions...),
+			OpenQuestions: append([]string{}, proposal.SourceProfile.OpenQuestions...),
+		},
+		Applicability: proposal.Applicability,
+		OverlapDecision: OverlapDecision{
+			OfficialOverlap: append([]string{}, proposal.OverlapDecision.OfficialOverlap...),
+			InboxOverlap:    append([]string{}, proposal.OverlapDecision.InboxOverlap...),
+			Decision:        normalizeOverlapDecisionV2(proposal.OverlapDecision.Decision),
+			Reason:          proposal.OverlapDecision.Reason,
+		},
+		Delivery: Delivery{
+			Path:                   proposal.Delivery.Path,
+			RequiresHumanApproval:  proposal.Delivery.WriteRequiresHumanApproval,
+			PriorityMustAuthorized: proposal.Delivery.PriorityMustAuthorized,
+			PromoteAuthorized:      proposal.Delivery.PromoteAuthorized,
+		},
+		CandidateFiles:   append([]CandidateFile{}, proposal.CandidateFiles...),
+		VerificationPlan: proposal.VerificationPlan,
+	}
+}
+
+func normalizeOverlapDecisionV2(decision string) string {
+	switch decision {
+	case "merge_with_existing":
+		return "update_existing"
+	default:
+		return decision
+	}
+}

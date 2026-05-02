@@ -477,6 +477,78 @@ func TestVerifyWeakButMatchedFindabilityReturnsReviewNeeded(t *testing.T) {
 	}
 }
 
+func TestVerifyAcceptsV2ProposalAndValidInboxCandidate(t *testing.T) {
+	root := t.TempDir()
+	writeAuthorRegistry(t, root)
+
+	candidatePath := "knowledge/.inbox/packages/backend/go-service-template"
+	writeAuthorFile(t, root, "knowledge/.inbox/packages/backend/go-service-template/KNOWLEDGE.md", verifyAuthorPackage("package:backend.go-service-template.v1", "draft", "Go Service Template Knowledge"))
+	proposalPath := "knowledge/.inbox/proposals/go-service-template/proposal.json"
+	writeProposalV2(t, root, proposalPath, validVerifyProposalV2(candidatePath))
+
+	result, err := Verify(root, VerifyRequest{ProposalPath: proposalPath, CandidatePath: candidatePath})
+	if err != nil {
+		t.Fatalf("Verify returned error: %v", err)
+	}
+	if result.Result != "pass" {
+		t.Fatalf("expected pass result, got %#v", result)
+	}
+	if result.Proposal.Validation != "pass" {
+		t.Fatalf("expected proposal pass, got %#v", result.Proposal)
+	}
+	if result.Candidate.Validation != "pass" {
+		t.Fatalf("expected candidate pass, got %#v", result.Candidate)
+	}
+}
+
+func TestVerifyV2ReturnsReviewNeededForUnresolvedOverlap(t *testing.T) {
+	root := t.TempDir()
+	writeAuthorRegistry(t, root)
+
+	candidatePath := "knowledge/.inbox/packages/backend/go-service-template"
+	writeAuthorFile(t, root, "knowledge/.inbox/packages/backend/go-service-template/KNOWLEDGE.md", verifyAuthorPackage("package:backend.go-service-template.v1", "draft", "Go Service Template Knowledge"))
+	proposalPath := "knowledge/.inbox/proposals/go-service-template/proposal.json"
+	proposal := validVerifyProposalV2(candidatePath)
+	proposal.OverlapDecision.Decision = "unresolved"
+	proposal.OverlapDecision.HumanChoiceRequired = true
+	writeProposalV2(t, root, proposalPath, proposal)
+
+	result, err := Verify(root, VerifyRequest{ProposalPath: proposalPath, CandidatePath: candidatePath})
+	if err != nil {
+		t.Fatalf("Verify returned error: %v", err)
+	}
+	if result.Result != "review-needed" {
+		t.Fatalf("expected review-needed, got %#v", result)
+	}
+	if !hasVerifyFinding(result.Findings, "review-needed", "overlap decision is unresolved") {
+		t.Fatalf("expected unresolved overlap finding, got %#v", result.Findings)
+	}
+}
+
+func TestVerifyV2RejectsUnauthorizedPriorityMust(t *testing.T) {
+	root := t.TempDir()
+	writeAuthorRegistry(t, root)
+
+	candidatePath := "knowledge/.inbox/packages/backend/go-service-template"
+	writeAuthorFile(t, root, "knowledge/.inbox/packages/backend/go-service-template/KNOWLEDGE.md", verifyAuthorPackage("package:backend.go-service-template.v1", "draft", "Go Service Template Knowledge"))
+	proposalPath := "knowledge/.inbox/proposals/go-service-template/proposal.json"
+	proposal := validVerifyProposalV2(candidatePath)
+	proposal.ProposedShape.Priority = "must"
+	proposal.Delivery.PriorityMustAuthorized = false
+	writeProposalV2(t, root, proposalPath, proposal)
+
+	result, err := Verify(root, VerifyRequest{ProposalPath: proposalPath, CandidatePath: candidatePath})
+	if err != nil {
+		t.Fatalf("Verify returned error: %v", err)
+	}
+	if result.Result != "fail" {
+		t.Fatalf("expected fail, got %#v", result)
+	}
+	if !hasVerifyFinding(result.Findings, "fail", "priority: must") {
+		t.Fatalf("expected priority must finding, got %#v", result.Findings)
+	}
+}
+
 func validVerifyProposal(candidatePath string, findQuery string) Proposal {
 	return Proposal{
 		SchemaVersion:  ProposalSchemaVersion,
@@ -574,6 +646,57 @@ func writeProposal(t *testing.T, root string, rel string, proposal Proposal) {
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		t.Fatalf("write proposal: %v", err)
 	}
+}
+
+func writeProposalV2(t *testing.T, root, rel string, proposal ProposalV2) {
+	t.Helper()
+	data, err := json.MarshalIndent(proposal, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal v2 proposal: %v", err)
+	}
+	writeAuthorFile(t, root, rel, string(data))
+}
+
+func validVerifyProposalV2(candidatePath string) ProposalV2 {
+	proposal := validProposalV2()
+	proposal.ProposedShape.Path = candidatePath
+	proposal.VerificationPlan.ValidatePath = candidatePath
+	proposal.CandidateFiles = []CandidateFile{{Path: candidatePath + "/KNOWLEDGE.md", Purpose: "entrypoint", Load: "start_here"}}
+	return proposal
+}
+
+func verifyAuthorPackage(id, status, title string) string {
+	return `---
+id: ` + id + `
+title: ` + title + `
+type: package
+tech_domains: [backend]
+business_domains: [catalog]
+tags: [service-template]
+projects: [mall-api]
+status: ` + status + `
+priority: should
+updated_at: 2026-05-02
+applies_to:
+  files:
+    - templates/go-service/**
+---
+## Purpose
+
+Guide future agents when generating Go services.
+
+## When To Use
+
+Use when creating a new Go service from the standard template.
+
+## Start Here
+
+Use this package before creating a new Go service.
+
+## Load On Demand
+
+- examples/template.md
+`
 }
 
 func hasVerifyFinding(findings []Finding, severity string, messageContains string) bool {
