@@ -794,6 +794,72 @@ func TestAuthoringReportTemplateMatchesParserContract(t *testing.T) {
 	}
 }
 
+func TestAuthoringDogfoodChecklistDefinesFreshRunnerWorkflow(t *testing.T) {
+	checklistPath := "../../docs/superpowers/checklists/2026-05-03-argos-authoring-dogfood-checklist.md"
+	data, err := os.ReadFile(checklistPath)
+	if err != nil {
+		t.Fatalf("read checklist: %v", err)
+	}
+	text := string(data)
+
+	for _, want := range []string{
+		"Run one case per fresh AI session.",
+		"Do not give the runner `testdata/authoring-golden/cases.json`.",
+		"docs/superpowers/templates/argos-authoring-dogfood-report.md",
+		"dogfood authoring cases --json",
+		"dogfood authoring packet --case case-001",
+		"dogfood authoring evaluate --case case-001",
+		"mkdir -p /tmp/argos-authoring-dogfood/case-001",
+		"cp -R testdata/authoring-golden/fixtures/full/.",
+		"authoring.proposal.v2",
+		"author verify --json",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("checklist missing %q:\n%s", want, text)
+		}
+	}
+	for _, forbidden := range hiddenAuthoringProcessTokens() {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("checklist leaked %q", forbidden)
+		}
+	}
+}
+
+func TestAuthoringDogfoodRound0RecordsEvaluationLoop(t *testing.T) {
+	reportPath := "../../docs/superpowers/reports/2026-05-03-argos-authoring-dogfood-round-0.md"
+	data, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatalf("read round report: %v", err)
+	}
+	text := string(data)
+
+	for _, want := range []string{
+		"# Argos Authoring Dogfood Round 0",
+		"Status: `not-run`",
+		"## Runner Isolation",
+		"## Fixture Preparation",
+		"## Case Matrix",
+		"## Evaluation Commands",
+		"## Results",
+		"## Failure Classification",
+		"`product`",
+		"`harness`",
+		"`runner`",
+		"`case`",
+		"`blocked`",
+		"## Next Development Decision",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("round report missing %q:\n%s", want, text)
+		}
+	}
+	for _, forbidden := range hiddenAuthoringProcessTokens() {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("round report leaked %q", forbidden)
+		}
+	}
+}
+
 func hiddenAuthoringProcessTokens() []string {
 	return []string{
 		"expected_result",
