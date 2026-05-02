@@ -51,9 +51,17 @@ type ListKnowledgeRequest struct {
 }
 
 type ContextResponse struct {
-	Project              string     `json:"project"`
-	Phase                string     `json:"phase"`
-	RecommendedNextSteps []NextStep `json:"recommended_next_steps"`
+	Project              string            `json:"project"`
+	Phase                string            `json:"phase"`
+	Task                 string            `json:"task"`
+	Files                []string          `json:"files,omitempty"`
+	RecommendedNextSteps []ContextNextStep `json:"recommended_next_steps"`
+}
+
+type ContextNextStep struct {
+	Tool      string         `json:"tool"`
+	Reason    string         `json:"reason"`
+	Arguments map[string]any `json:"arguments,omitempty"`
 }
 
 type FindKnowledgeResponse struct {
@@ -216,8 +224,13 @@ func New(store *index.Store) *Service {
 }
 
 func (s *Service) Context(req ContextRequest) ContextResponse {
+	project := strings.TrimSpace(req.Project)
+	phase := strings.TrimSpace(req.Phase)
+	task := strings.TrimSpace(req.Task)
+	files := normalizedContextFiles(req.Files)
+
 	reason := "standards are useful before code changes"
-	switch req.Phase {
+	switch phase {
 	case "planning":
 		reason = "planning should start from active project standards"
 	case "implementation":
@@ -230,19 +243,83 @@ func (s *Service) Context(req ContextRequest) ContextResponse {
 		reason = "operational work should respect active project standards"
 	}
 
-	calls := []NextStep{
-		{Tool: "argos_find_knowledge", Reason: "find task-relevant Argos knowledge without reading full bodies"},
-		{Tool: "argos_standards", Reason: reason},
+	calls := []ContextNextStep{
+		{
+			Tool:      "argos_find_knowledge",
+			Reason:    "find task-relevant Argos knowledge without reading full bodies",
+			Arguments: contextFindArguments(project, phase, task, files),
+		},
+		{
+			Tool:      "argos_standards",
+			Reason:    reason,
+			Arguments: contextStandardsArguments(project, phase, files),
+		},
 	}
-	if req.Phase == "planning" || strings.Contains(strings.ToLower(req.Task), "understand") {
-		calls = append([]NextStep{{Tool: "argos_list_knowledge", Reason: "inventory available project knowledge before broad work"}}, calls...)
+	if contextNeedsInventory(phase, task, files) {
+		calls = append([]ContextNextStep{{
+			Tool:      "argos_list_knowledge",
+			Reason:    "inventory available project knowledge before broad work",
+			Arguments: map[string]any{"project": project},
+		}}, calls...)
 	}
 
 	return ContextResponse{
-		Project:              req.Project,
-		Phase:                req.Phase,
+		Project:              project,
+		Phase:                phase,
+		Task:                 task,
+		Files:                files,
 		RecommendedNextSteps: calls,
 	}
+}
+
+func normalizedContextFiles(files []string) []string {
+	var normalized []string
+	for _, file := range files {
+		file = strings.TrimSpace(file)
+		if file != "" {
+			normalized = append(normalized, file)
+		}
+	}
+	return normalized
+}
+
+func contextFindArguments(project string, phase string, task string, files []string) map[string]any {
+	args := map[string]any{
+		"project": project,
+		"phase":   phase,
+		"task":    task,
+	}
+	if len(files) > 0 {
+		args["files"] = files
+	}
+	return args
+}
+
+func contextStandardsArguments(project string, phase string, files []string) map[string]any {
+	args := map[string]any{
+		"project":   project,
+		"task_type": phase,
+	}
+	if len(files) > 0 {
+		args["files"] = files
+	}
+	return args
+}
+
+func contextNeedsInventory(phase string, task string, files []string) bool {
+	if len(files) > 0 {
+		return false
+	}
+	task = strings.ToLower(task)
+	if phase == "planning" {
+		return true
+	}
+	for _, term := range []string{"understand", "explore", "orient", "map"} {
+		if strings.Contains(task, term) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Service) Standards(req StandardsRequest) (Response, error) {

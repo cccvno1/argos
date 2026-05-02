@@ -1426,6 +1426,91 @@ func TestContextRecommendsNextSteps(t *testing.T) {
 	}
 }
 
+func TestContextEchoesTaskInputsAndReturnsStepArguments(t *testing.T) {
+	service := New(nil)
+	result := service.Context(ContextRequest{
+		Project: "mall-api",
+		Phase:   "implementation",
+		Task:    "add refresh token endpoint",
+		Files:   []string{" internal/auth/session.go ", "", "internal/auth/session_test.go"},
+	})
+
+	if result.Project != "mall-api" {
+		t.Fatalf("Project = %q, want mall-api", result.Project)
+	}
+	if result.Phase != "implementation" {
+		t.Fatalf("Phase = %q, want implementation", result.Phase)
+	}
+	if result.Task != "add refresh token endpoint" {
+		t.Fatalf("Task = %q, want task echo", result.Task)
+	}
+	if got, want := result.Files, []string{"internal/auth/session.go", "internal/auth/session_test.go"}; !sameStrings(got, want) {
+		t.Fatalf("Files = %#v, want %#v", got, want)
+	}
+
+	find := contextStepByTool(t, result.RecommendedNextSteps, "argos_find_knowledge")
+	if find.Arguments["project"] != "mall-api" || find.Arguments["phase"] != "implementation" || find.Arguments["task"] != "add refresh token endpoint" {
+		t.Fatalf("find arguments did not preserve context: %#v", find.Arguments)
+	}
+	if got, want := stringSliceArgument(t, find.Arguments["files"]), []string{"internal/auth/session.go", "internal/auth/session_test.go"}; !sameStrings(got, want) {
+		t.Fatalf("find files = %#v, want %#v", got, want)
+	}
+
+	standards := contextStepByTool(t, result.RecommendedNextSteps, "argos_standards")
+	if standards.Arguments["project"] != "mall-api" || standards.Arguments["task_type"] != "implementation" {
+		t.Fatalf("standards arguments did not preserve context: %#v", standards.Arguments)
+	}
+	if got, want := stringSliceArgument(t, standards.Arguments["files"]), []string{"internal/auth/session.go", "internal/auth/session_test.go"}; !sameStrings(got, want) {
+		t.Fatalf("standards files = %#v, want %#v", got, want)
+	}
+}
+
+func TestContextDoesNotRecommendReadOrCiteDirectly(t *testing.T) {
+	service := New(nil)
+	result := service.Context(ContextRequest{
+		Project: "mall-api",
+		Phase:   "implementation",
+		Task:    "add refresh token endpoint",
+	})
+
+	for _, step := range result.RecommendedNextSteps {
+		if step.Tool == "argos_read_knowledge" || step.Tool == "argos_cite_knowledge" {
+			t.Fatalf("context must not recommend %s directly: %#v", step.Tool, result.RecommendedNextSteps)
+		}
+	}
+}
+
+func TestContextBroadPlanningAddsInventoryBeforeFindAndStandards(t *testing.T) {
+	service := New(nil)
+	result := service.Context(ContextRequest{
+		Project: "mall-api",
+		Phase:   "planning",
+		Task:    "understand auth refresh token flow",
+	})
+
+	if got, want := contextTools(result.RecommendedNextSteps), []string{"argos_list_knowledge", "argos_find_knowledge", "argos_standards"}; !sameStrings(got, want) {
+		t.Fatalf("context tools = %#v, want %#v", got, want)
+	}
+	list := contextStepByTool(t, result.RecommendedNextSteps, "argos_list_knowledge")
+	if list.Arguments["project"] != "mall-api" {
+		t.Fatalf("list arguments = %#v, want project", list.Arguments)
+	}
+}
+
+func TestContextNarrowImplementationOmitsInventory(t *testing.T) {
+	service := New(nil)
+	result := service.Context(ContextRequest{
+		Project: "mall-api",
+		Phase:   "implementation",
+		Task:    "fix auth token rotation bug",
+		Files:   []string{"internal/auth/session.go"},
+	})
+
+	if got, want := contextTools(result.RecommendedNextSteps), []string{"argos_find_knowledge", "argos_standards"}; !sameStrings(got, want) {
+		t.Fatalf("context tools = %#v, want %#v", got, want)
+	}
+}
+
 func TestContextRecommendationsOnlyUseCallableTools(t *testing.T) {
 	service := New(nil)
 	callableTools := map[string]bool{
@@ -1507,6 +1592,46 @@ func TestContextDoesNotRecommendListKnowledgeForNarrowImplementationWork(t *test
 	if contains(tools, "argos_list_knowledge") {
 		t.Fatalf("did not expect list recommendation for narrow implementation work: %#v", result.RecommendedNextSteps)
 	}
+}
+
+func contextStepByTool(t *testing.T, steps []ContextNextStep, tool string) ContextNextStep {
+	t.Helper()
+	for _, step := range steps {
+		if step.Tool == tool {
+			return step
+		}
+	}
+	t.Fatalf("missing context step %s in %#v", tool, steps)
+	return ContextNextStep{}
+}
+
+func contextTools(steps []ContextNextStep) []string {
+	tools := make([]string, 0, len(steps))
+	for _, step := range steps {
+		tools = append(tools, step.Tool)
+	}
+	return tools
+}
+
+func stringSliceArgument(t *testing.T, value any) []string {
+	t.Helper()
+	values, ok := value.([]string)
+	if !ok {
+		t.Fatalf("argument %#v has type %T, want []string", value, value)
+	}
+	return values
+}
+
+func sameStrings(left []string, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if left[i] != right[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func TestReadKnowledgeReturnsFullBody(t *testing.T) {
