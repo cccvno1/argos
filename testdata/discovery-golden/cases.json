@@ -422,6 +422,30 @@
       }
     },
     {
+      "id": "context_entrypoint_carries_task_arguments",
+      "operation": "context-workflow",
+      "input": {
+        "project": "mall-api",
+        "phase": "implementation",
+        "task": "add refresh token endpoint",
+        "query": "refresh token session renewal",
+        "files": ["internal/auth/session.go"],
+        "limit": 5
+      },
+      "expected": {
+        "support": "strong",
+        "support_level": "strong",
+        "usage_read": "recommended",
+        "usage_cite": "after_read_and_used",
+        "usage_claim": "allowed",
+        "search_semantic_status": "disabled",
+        "include_ids": ["rule:backend.auth-refresh.v1"],
+        "load_ids": ["rule:backend.auth-refresh.v1"],
+        "cite_ids": ["rule:backend.auth-refresh.v1"],
+        "no_bodies": true
+      }
+    },
+    {
       "id": "interface_mcp_strict_schema",
       "operation": "mcp-schema",
       "input": {"project": "mall-api"},

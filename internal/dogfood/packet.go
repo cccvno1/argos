@@ -114,6 +114,8 @@ func operationNotes(tc discoverytest.Case, publicID string) ([]string, error) {
 		notes = append(notes, "Find case: run find, read selected IDs when useful, and cite only read-and-used IDs.")
 	case "workflow":
 		notes = append(notes, "Workflow case: find, read selected IDs, and cite only read-and-used IDs.")
+	case "context-workflow":
+		notes = append(notes, "Context workflow case: call context first, then use returned arguments for find before read/cite.")
 	case "mcp-schema":
 		notes = append(notes, "MCP schema case: use JSON-RPC commands through `argos mcp`.")
 	case "adapter":
