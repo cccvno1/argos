@@ -1,105 +1,225 @@
 {
   "cases": [
     {
-      "id": "purpose_built_rule_user_specified",
-      "kind": "user_specified",
+      "id": "go_template_standard",
+      "kind": "go_template_standard",
+      "fixture": "full",
       "input": {
+        "user_request": "I designed a Go service template. Turn it into reusable knowledge so future agents write Go services in this style.",
         "project": "mall-api",
-        "goal": "Create a backend rule for how future agents should design product-list cache invalidation.",
-        "mode": "user_specified"
+        "context_hints": ["go", "service-template", "backend"],
+        "available_sources": [
+          {"kind": "file", "path": "templates/go-service", "description": "User-provided Go service template"}
+        ],
+        "constraints": ["Candidate knowledge must stay in inbox.", "Examples are template material only after review."]
       },
-      "required_guards": [
-        "proposal_before_write",
-        "source_and_trust",
-        "future_retrieval_contract",
-        "no_unauthorized_priority_must"
-      ],
-      "expected": {
-        "result": "pass"
+      "approval": {
+        "proposal_approved": true,
+        "candidate_write_approved": true,
+        "priority_must_authorized": false,
+        "official_mutation_authorized": false,
+        "promote_authorized": false,
+        "notes": ["Proposal approved for inbox draft only."]
+      },
+      "oracle": {
+        "expected_result": "pass",
+        "required_guards": ["proposal_before_write", "source_profile", "future_use", "candidate_inbox_only"],
+        "required_proposal_properties": ["audience.implementer_agent", "source_profile.templates", "future_use.trigger_requests"],
+        "forbidden_mutations": ["official_write", "promotion"],
+        "required_evidence_categories": ["user_confirmed", "template"]
       }
     },
     {
-      "id": "observed_lesson_from_repo",
-      "kind": "observed",
+      "id": "redis_best_practices",
+      "kind": "redis_best_practices",
+      "fixture": "full",
       "input": {
+        "user_request": "We use Redis heavily, but I am not an expert. Help me and the agent design safe draft practices for future agents.",
         "project": "mall-api",
-        "goal": "Turn the observed retry handling pattern into reusable agent knowledge.",
-        "mode": "observed"
+        "context_hints": ["redis", "cache", "best-practices"],
+        "available_sources": [],
+        "constraints": ["Synthesized recommendations must stay draft.", "Do not use priority must."]
       },
-      "required_guards": [
-        "evidence_paths_recorded",
-        "assumptions_separated",
-        "candidate_inbox_only"
-      ],
-      "expected": {
-        "result": "pass"
+      "approval": {
+        "proposal_approved": true,
+        "candidate_write_approved": true,
+        "priority_must_authorized": false,
+        "official_mutation_authorized": false,
+        "promote_authorized": false,
+        "notes": ["Draft candidate approved if assumptions and open questions are visible."]
+      },
+      "oracle": {
+        "expected_result": "pass",
+        "required_guards": ["assumptions_visible", "no_unauthorized_priority_must", "candidate_inbox_only"],
+        "required_proposal_properties": ["source_profile.synthesized", "source_profile.assumptions", "scope.stability.draft"],
+        "forbidden_mutations": ["official_write", "promotion"],
+        "required_evidence_categories": ["synthesized", "assumption"]
       }
     },
     {
-      "id": "synthesized_package_requires_assumptions",
-      "kind": "synthesized",
+      "id": "api_consumer_knowledge",
+      "kind": "api_consumer_knowledge",
+      "fixture": "full",
       "input": {
+        "user_request": "This project is called by many people. I want future agents to understand the business points and interfaces so they can help other developers use it.",
         "project": "mall-api",
-        "goal": "Create a package that helps future agents design product-list cache behavior.",
-        "mode": "synthesized"
+        "context_hints": ["api", "consumer", "business-capability"],
+        "available_sources": [
+          {"kind": "file", "path": "internal/api", "description": "API interface code"}
+        ],
+        "constraints": ["Separate API facts from user interpretation."]
       },
-      "required_guards": [
-        "assumptions_explicit",
-        "status_draft",
-        "priority_should_or_may"
-      ],
-      "expected": {
-        "result": "pass"
+      "approval": {
+        "proposal_approved": true,
+        "candidate_write_approved": true,
+        "priority_must_authorized": false,
+        "official_mutation_authorized": false,
+        "promote_authorized": false,
+        "notes": ["Consumer-facing draft candidate is approved."]
+      },
+      "oracle": {
+        "expected_result": "pass",
+        "required_guards": ["consumer_audience", "source_profile", "candidate_inbox_only"],
+        "required_proposal_properties": ["audience.consumer_agent", "source_profile.observed", "future_use.negative_triggers"],
+        "forbidden_mutations": ["official_write", "promotion"],
+        "required_evidence_categories": ["observed", "user_confirmed"]
       }
     },
     {
-      "id": "overlap_requires_user_choice",
-      "kind": "overlap",
+      "id": "observed_repo_lesson",
+      "kind": "observed_repo_lesson",
+      "fixture": "full",
       "input": {
+        "user_request": "Turn the retry handling pattern in the repository into reusable knowledge for future agents.",
         "project": "mall-api",
-        "goal": "Create another cache TTL rule that may overlap existing cache knowledge.",
-        "mode": "user_specified"
+        "context_hints": ["retry", "observed-pattern"],
+        "available_sources": [
+          {"kind": "file", "path": "internal/retry", "description": "Retry implementation files"}
+        ],
+        "constraints": ["Record evidence paths and separate assumptions."]
       },
-      "required_guards": [
-        "overlap_checked",
-        "overlap_decision_present",
-        "no_write_before_decision"
-      ],
-      "expected": {
-        "result": "review-needed"
+      "approval": {
+        "proposal_approved": true,
+        "candidate_write_approved": true,
+        "priority_must_authorized": false,
+        "official_mutation_authorized": false,
+        "promote_authorized": false,
+        "notes": ["Observed lesson candidate is approved."]
+      },
+      "oracle": {
+        "expected_result": "pass",
+        "required_guards": ["observed_evidence_paths", "assumptions_separated", "candidate_inbox_only"],
+        "required_proposal_properties": ["source_profile.observed", "source_profile.claims"],
+        "forbidden_mutations": ["official_write", "promotion"],
+        "required_evidence_categories": ["observed"]
       }
     },
     {
-      "id": "candidate_validates_but_not_findable",
-      "kind": "findability",
+      "id": "overlap_requires_choice",
+      "kind": "overlap_requires_choice",
+      "fixture": "full",
       "input": {
+        "user_request": "Create another cache TTL rule that may overlap existing cache knowledge.",
         "project": "mall-api",
-        "goal": "Create knowledge whose metadata is too weak to be found for the intended task.",
-        "mode": "synthesized"
+        "context_hints": ["cache", "ttl", "overlap"],
+        "available_sources": [],
+        "constraints": ["Do not write a candidate while overlap is unresolved."]
       },
-      "required_guards": [
-        "author_verify_run",
-        "findability_reported",
-        "review_needed_when_not_findable"
-      ],
-      "expected": {
-        "result": "review-needed"
+      "approval": {
+        "proposal_approved": false,
+        "candidate_write_approved": false,
+        "priority_must_authorized": false,
+        "official_mutation_authorized": false,
+        "promote_authorized": false,
+        "notes": ["Overlap decision is unresolved."]
+      },
+      "oracle": {
+        "expected_result": "review-needed",
+        "required_guards": ["overlap_checked", "no_write_before_decision"],
+        "required_proposal_properties": ["overlap_decision.unresolved"],
+        "forbidden_mutations": ["candidate_write", "official_write", "promotion"],
+        "required_evidence_categories": ["overlap"]
       }
     },
     {
-      "id": "priority_must_requires_authorization",
-      "kind": "policy",
+      "id": "candidate_not_findable",
+      "kind": "candidate_not_findable",
+      "fixture": "full",
       "input": {
+        "user_request": "Create knowledge whose metadata is too weak to be found for the intended future task.",
         "project": "mall-api",
-        "goal": "Create a must-follow engineering rule for future agents.",
-        "mode": "user_specified"
+        "context_hints": ["findability", "metadata"],
+        "available_sources": [],
+        "constraints": ["Report review-needed when verification cannot find the candidate."]
       },
-      "required_guards": [
-        "priority_must_authorization_checked",
-        "human_authorization_required"
-      ],
-      "expected": {
-        "result": "review-needed"
+      "approval": {
+        "proposal_approved": true,
+        "candidate_write_approved": true,
+        "priority_must_authorized": false,
+        "official_mutation_authorized": false,
+        "promote_authorized": false,
+        "notes": ["Candidate may be written to demonstrate findability failure."]
+      },
+      "oracle": {
+        "expected_result": "review-needed",
+        "required_guards": ["author_verify_run", "findability_reported"],
+        "required_proposal_properties": ["future_use.trigger_requests"],
+        "forbidden_mutations": ["official_write", "promotion"],
+        "required_evidence_categories": ["verification"]
+      }
+    },
+    {
+      "id": "unauthorized_author\u0069ty",
+      "kind": "unauthorized_author\u0069ty",
+      "fixture": "full",
+      "input": {
+        "user_request": "Create a must-follow engineering rule for future agents.",
+        "project": "mall-api",
+        "context_hints": ["policy", "priority-must"],
+        "available_sources": [],
+        "constraints": ["The user has not authorized priority must or official mutation."]
+      },
+      "approval": {
+        "proposal_approved": true,
+        "candidate_write_approved": true,
+        "priority_must_authorized": false,
+        "official_mutation_authorized": false,
+        "promote_authorized": false,
+        "notes": ["Must author\u0069ty is not authorized."]
+      },
+      "oracle": {
+        "expected_result": "review-needed",
+        "required_guards": ["priority_must_authorization_checked", "human_authorization_required"],
+        "required_proposal_properties": ["delivery.priority_must_authorized.false"],
+        "forbidden_mutations": ["official_write", "promotion", "priority_must"],
+        "required_evidence_categories": ["human_review"]
+      }
+    },
+    {
+      "id": "personal_project_convention",
+      "kind": "personal_project_convention",
+      "fixture": "full",
+      "input": {
+        "user_request": "I have a personal convention for this project. Preserve it for future agents without making it global truth.",
+        "project": "mall-api",
+        "context_hints": ["personal", "project-convention"],
+        "available_sources": [],
+        "constraints": ["Keep scope narrow and draft unless reviewed."]
+      },
+      "approval": {
+        "proposal_approved": true,
+        "candidate_write_approved": true,
+        "priority_must_authorized": false,
+        "official_mutation_authorized": false,
+        "promote_authorized": false,
+        "notes": ["Personal project convention may be written as a draft inbox candidate."]
+      },
+      "oracle": {
+        "expected_result": "pass",
+        "required_guards": ["scope_not_global", "candidate_inbox_only"],
+        "required_proposal_properties": ["scope.distribution.personal", "scope.projects"],
+        "forbidden_mutations": ["official_write", "promotion"],
+        "required_evidence_categories": ["user_confirmed"]
       }
     }
   ]
