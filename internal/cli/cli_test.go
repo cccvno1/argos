@@ -320,6 +320,263 @@ func TestRunKnowledgeFindAcceptsRepeatedFiles(t *testing.T) {
 	}
 }
 
+func TestRunDogfoodCasesReturnsInputsWithoutExpectedValues(t *testing.T) {
+	chdir(t, repoRootForCLITest(t))
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{"dogfood", "cases", "--json"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stderr=%q", code, stderr.String())
+	}
+	if stderr.String() != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+	var cases []struct {
+		ID    string `json:"id"`
+		Input struct {
+			Task string `json:"task"`
+		} `json:"input"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &cases); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, stdout.String())
+	}
+	if len(cases) == 0 || cases[0].ID != "case-001" {
+		t.Fatalf("expected public case handles, got: %s", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "add refresh token endpoint") {
+		t.Fatalf("expected case input task in JSON: %s", stdout.String())
+	}
+	for _, forbidden := range []string{
+		"expected",
+		"support_level",
+		"include_ids",
+		"rule:backend.auth-refresh.v1",
+		"strong_auth_refresh_full_signal",
+		"partial_domain_without_task_detail",
+		"weak_single_generic_term",
+		"none_payment_webhook",
+	} {
+		if strings.Contains(stdout.String(), forbidden) {
+			t.Fatalf("dogfood cases leaked %q in output: %s", forbidden, stdout.String())
+		}
+	}
+}
+
+func TestRunDogfoodPacketReturnsMarkdownWithoutExpectedValues(t *testing.T) {
+	chdir(t, repoRootForCLITest(t))
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{
+		"dogfood", "packet",
+		"--case", "case-009",
+		"--workspace", "/tmp/argos-fixture",
+		"--argos-binary", "/usr/local/bin/argos",
+	}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stderr=%q", code, stderr.String())
+	}
+	if stderr.String() != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+	output := stdout.String()
+	for _, want := range []string{
+		"# Argos Dogfood Runner Packet",
+		"Case: `case-009`",
+		"Workspace: `/tmp/argos-fixture`",
+		"Argos binary: `/usr/local/bin/argos`",
+		"/usr/local/bin/argos knowledge find --json",
+		"tune cache ttl for product list",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("expected packet markdown to contain %q, got: %s", want, output)
+		}
+	}
+	for _, forbidden := range []string{
+		"expected",
+		"support_level",
+		"include_ids",
+		"reference:backend.cache-policy.v1",
+		"partial_domain_without_task_detail",
+	} {
+		if strings.Contains(output, forbidden) {
+			t.Fatalf("dogfood packet leaked %q in output: %s", forbidden, output)
+		}
+	}
+}
+
+func TestRunDogfoodPacketRejectsMissingCase(t *testing.T) {
+	chdir(t, repoRootForCLITest(t))
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{"dogfood", "packet", "--workspace", "/tmp/ws", "--argos-binary", "/tmp/argos"}, &stdout, &stderr)
+
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "dogfood packet: --case is required") {
+		t.Fatalf("unexpected stderr: %q", stderr.String())
+	}
+}
+
+func TestRunDogfoodEvaluateReturnsJSONEvaluation(t *testing.T) {
+	root := repoRootForCLITest(t)
+	reportPath := filepath.Join(t.TempDir(), "report.md")
+	writeCLIFile(t, filepath.Dir(reportPath), filepath.Base(reportPath), sampleCLIDogfoodReport())
+	chdir(t, root)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{"dogfood", "evaluate", "--case", "case-009", "--report", reportPath, "--json"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stderr=%q stdout=%q", code, stderr.String(), stdout.String())
+	}
+	if stderr.String() != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+	var evaluation struct {
+		CaseID   string `json:"case_id"`
+		Result   string `json:"result"`
+		Findings []struct {
+			Severity string `json:"severity"`
+			Message  string `json:"message"`
+		} `json:"findings"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &evaluation); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, stdout.String())
+	}
+	if evaluation.CaseID != "case-009" || evaluation.Result != "pass" || len(evaluation.Findings) != 0 {
+		t.Fatalf("unexpected evaluation: %s", stdout.String())
+	}
+}
+
+func sampleCLIDogfoodReport() string {
+	return `Case: case-009
+
+## Inputs
+
+Runner used the packet input.
+
+## Tool Transcript Summary
+
+Ran find, read, and cite commands.
+
+## Observed Results
+
+- Actual support: partial
+- Usage guidance: must separate Argos-backed and general reasoning
+- Search status: disabled
+- Discovered IDs: reference:backend.cache-policy.v1
+- Read IDs: reference:backend.cache-policy.v1
+- Cited IDs: reference:backend.cache-policy.v1
+- Missing needs: product-list TTL implementation detail
+- Argos-backed vs general reasoning: separated
+- Next steps: none
+
+## Guards
+
+- Progressive reading: pass
+- Weak/none no-overclaim: pass
+- Citation accountability: pass
+- Cited IDs subset of read-and-used IDs: pass
+- Missing needs not cited: pass
+- Attribution boundary: pass
+- No discovery-triggered upload/capture: pass
+- Usage guidance followed: pass
+- Context contamination: pass
+
+## Result
+
+Result: pass
+`
+}
+
+func TestRunDogfoodEvaluateMismatchDoesNotLeakGoldenCaseID(t *testing.T) {
+	root := repoRootForCLITest(t)
+	reportPath := filepath.Join(t.TempDir(), "report.md")
+	writeCLIFile(t, filepath.Dir(reportPath), filepath.Base(reportPath), `Case: case-008
+
+## Inputs
+
+Runner used the packet input.
+
+## Tool Transcript Summary
+
+Ran find, read, and cite commands.
+
+## Observed Results
+
+- Actual support: partial
+- Usage guidance: must separate Argos-backed and general reasoning
+- Search status: disabled
+- Discovered IDs: reference:backend.cache-policy.v1
+- Read IDs: reference:backend.cache-policy.v1
+- Cited IDs: reference:backend.cache-policy.v1
+- Missing needs: product-list TTL implementation detail
+- Argos-backed vs general reasoning: separated
+- Next steps: none
+
+## Guards
+
+- Progressive reading: pass
+- Weak/none no-overclaim: pass
+- Citation accountability: pass
+- Cited IDs subset of read-and-used IDs: pass
+- Missing needs not cited: pass
+- Attribution boundary: pass
+- No discovery-triggered upload/capture: pass
+- Usage guidance followed: pass
+- Context contamination: pass
+
+## Result
+
+Result: pass
+`)
+	chdir(t, root)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{"dogfood", "evaluate", "--case", "case-009", "--report", reportPath, "--json"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stderr=%q stdout=%q", code, stderr.String(), stdout.String())
+	}
+	for _, forbidden := range []string{"partial_domain_without_task_detail", "strong_auth_refresh_full_signal", "weak_single_generic_term", "none_payment_webhook"} {
+		if strings.Contains(stdout.String(), forbidden) {
+			t.Fatalf("dogfood evaluate leaked %q in output: %s", forbidden, stdout.String())
+		}
+	}
+	if !strings.Contains(stdout.String(), `"result": "fail"`) {
+		t.Fatalf("expected mismatch to fail without leaking golden ID: %s", stdout.String())
+	}
+}
+
+func TestRunDogfoodEvaluateMismatchDoesNotEchoHiddenReportCaseID(t *testing.T) {
+	root := repoRootForCLITest(t)
+	reportPath := filepath.Join(t.TempDir(), "report.md")
+	writeCLIFile(t, filepath.Dir(reportPath), filepath.Base(reportPath), strings.Replace(sampleCLIDogfoodReport(), "Case: case-009", "Case: strong_auth_refresh_full_signal", 1))
+	chdir(t, root)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{"dogfood", "evaluate", "--case", "case-009", "--report", reportPath, "--json"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stderr=%q stdout=%q", code, stderr.String(), stdout.String())
+	}
+	if strings.Contains(stdout.String(), "strong_auth_refresh_full_signal") || strings.Contains(stdout.String(), "partial_domain_without_task_detail") {
+		t.Fatalf("dogfood evaluate echoed hidden case ID in output: %s", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "report case id does not match requested case") {
+		t.Fatalf("expected case mismatch finding: %s", stdout.String())
+	}
+}
+
 func TestRunKnowledgeFindAcceptsDiscoveryFiltersAndLimit(t *testing.T) {
 	root := t.TempDir()
 	writeCLIDiscoveryWorkspace(t, root)
@@ -1095,6 +1352,19 @@ func chdir(t *testing.T, dir string) {
 			t.Fatalf("restore working directory to %s: %v", previous, err)
 		}
 	})
+}
+
+func repoRootForCLITest(t *testing.T) string {
+	t.Helper()
+
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatalf("resolve repository root: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "go.mod")); err != nil {
+		t.Fatalf("expected repository root at %s: %v", root, err)
+	}
+	return root
 }
 
 func runWithIO(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {

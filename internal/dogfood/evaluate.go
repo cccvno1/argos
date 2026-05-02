@@ -55,7 +55,7 @@ func evaluate(tc discoverytest.Case, report Report, evaluationCaseID string, all
 
 	allowedCaseIDs = uniqueStrings(allowedCaseIDs)
 	if report.CaseID != "" && !containsString(allowedCaseIDs, report.CaseID) {
-		addFail(fmt.Sprintf("report case id does not match requested case: got %q, want one of %q", report.CaseID, strings.Join(allowedCaseIDs, ", ")))
+		addFail("report case id does not match requested case")
 	}
 	for _, section := range report.MissingSections {
 		addReview("missing section: " + section)

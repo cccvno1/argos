@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"argos/internal/adapters"
+	"argos/internal/dogfood"
 	"argos/internal/index"
 	"argos/internal/knowledge"
 	"argos/internal/mcp"
@@ -17,6 +18,8 @@ import (
 	"argos/internal/registry"
 	"argos/internal/workspace"
 )
+
+const defaultDogfoodCasesPath = "testdata/discovery-golden/cases.json"
 
 func Run(args []string, stdout io.Writer, stderr io.Writer) int {
 	return run(args, os.Stdin, stdout, stderr)
@@ -119,6 +122,8 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		return printJSON(stdout, stderr, result)
 	case "knowledge":
 		return runKnowledge(args[1:], stdout, stderr)
+	case "dogfood":
+		return runDogfood(args[1:], stdout, stderr)
 	case "mcp":
 		root, err := os.Getwd()
 		if err != nil {
@@ -164,6 +169,128 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		printUsage(stderr)
 		return 2
 	}
+}
+
+func runDogfood(args []string, stdout io.Writer, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "dogfood: subcommand is required")
+		printUsage(stderr)
+		return 2
+	}
+	switch args[0] {
+	case "cases":
+		return runDogfoodCases(args[1:], stdout, stderr)
+	case "packet":
+		return runDogfoodPacket(args[1:], stdout, stderr)
+	case "evaluate":
+		return runDogfoodEvaluate(args[1:], stdout, stderr)
+	default:
+		fmt.Fprintf(stderr, "dogfood: unknown subcommand %q\n", args[0])
+		printUsage(stderr)
+		return 2
+	}
+}
+
+func runDogfoodCases(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("dogfood cases", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	jsonOut := flags.Bool("json", false, "print JSON output")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if !*jsonOut {
+		fmt.Fprintln(stderr, "dogfood cases: --json is required")
+		return 2
+	}
+	cases, err := dogfood.LoadCases(defaultDogfoodCasesPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "dogfood cases: %v\n", err)
+		return 1
+	}
+	return printJSON(stdout, stderr, dogfood.Summaries(cases))
+}
+
+func runDogfoodPacket(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("dogfood packet", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	jsonOut := flags.Bool("json", false, "print JSON output")
+	caseID := flags.String("case", "", "dogfood case id or public handle")
+	workspacePath := flags.String("workspace", "", "fixture workspace path")
+	argosBinary := flags.String("argos-binary", "", "argos binary path")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if strings.TrimSpace(*caseID) == "" {
+		fmt.Fprintln(stderr, "dogfood packet: --case is required")
+		return 2
+	}
+	cases, err := dogfood.LoadCases(defaultDogfoodCasesPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "dogfood packet: %v\n", err)
+		return 1
+	}
+	packet, err := dogfood.BuildPacket(cases, dogfood.PacketOptions{
+		CaseID:      *caseID,
+		Workspace:   *workspacePath,
+		ArgosBinary: *argosBinary,
+	})
+	if err != nil {
+		fmt.Fprintf(stderr, "dogfood packet: %v\n", err)
+		return 2
+	}
+	if *jsonOut {
+		return printJSON(stdout, stderr, packet)
+	}
+	fmt.Fprint(stdout, packet.Markdown)
+	return 0
+}
+
+func runDogfoodEvaluate(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("dogfood evaluate", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	jsonOut := flags.Bool("json", false, "print JSON output")
+	caseID := flags.String("case", "", "dogfood case id or public handle")
+	reportPath := flags.String("report", "", "markdown report path")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if !*jsonOut {
+		fmt.Fprintln(stderr, "dogfood evaluate: --json is required")
+		return 2
+	}
+	if strings.TrimSpace(*caseID) == "" {
+		fmt.Fprintln(stderr, "dogfood evaluate: --case is required")
+		return 2
+	}
+	if strings.TrimSpace(*reportPath) == "" {
+		fmt.Fprintln(stderr, "dogfood evaluate: --report is required")
+		return 2
+	}
+	cases, err := dogfood.LoadCases(defaultDogfoodCasesPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "dogfood evaluate: %v\n", err)
+		return 1
+	}
+	data, err := os.ReadFile(*reportPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "dogfood evaluate: read report: %v\n", err)
+		return 1
+	}
+	report, err := dogfood.ParseMarkdownReport(data)
+	if err != nil {
+		fmt.Fprintf(stderr, "dogfood evaluate: parse report: %v\n", err)
+		return 1
+	}
+	evaluation, err := dogfood.EvaluateCase(cases, *caseID, report)
+	if err != nil {
+		fmt.Fprintf(stderr, "dogfood evaluate: %v\n", err)
+		return 2
+	}
+	if *jsonOut {
+		return printJSON(stdout, stderr, evaluation)
+	}
+	fmt.Fprintf(stdout, "%s: %s\n", evaluation.CaseID, evaluation.Result)
+	return 0
 }
 
 func runKnowledge(args []string, stdout io.Writer, stderr io.Writer) int {
@@ -525,6 +652,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  install-adapters")
 	fmt.Fprintln(w, "  context")
 	fmt.Fprintln(w, "  knowledge")
+	fmt.Fprintln(w, "  dogfood")
 	fmt.Fprintln(w, "  mcp")
 	fmt.Fprintln(w, "  promote")
 	fmt.Fprintln(w, "")
