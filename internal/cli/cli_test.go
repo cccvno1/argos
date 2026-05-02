@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"argos/internal/author"
 	"argos/internal/index"
 )
 
@@ -842,6 +843,176 @@ func TestRunKnowledgeFindRequiresIndex(t *testing.T) {
 	}
 }
 
+func TestRunAuthorInspectReturnsAuthoringPolicyJSON(t *testing.T) {
+	root := t.TempDir()
+	writeCLIAuthorRegistry(t, root)
+	chdir(t, root)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{
+		"author", "inspect",
+		"--json",
+		"--project", "mall-api",
+		"--goal", "document product list cache ttl",
+	}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stderr=%q", code, stderr.String())
+	}
+	if stderr.String() != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+	var result struct {
+		Project string `json:"project"`
+		Policy  struct {
+			PriorityMust string `json:"priority_must"`
+		} `json:"policy"`
+		RecommendedNextSteps []struct {
+			Step string `json:"step"`
+		} `json:"recommended_next_steps"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, stdout.String())
+	}
+	if result.Project != "mall-api" {
+		t.Fatalf("unexpected project: %s", stdout.String())
+	}
+	if result.Policy.PriorityMust != "requires_explicit_authorization" {
+		t.Fatalf("unexpected priority_must policy: %s", stdout.String())
+	}
+	if len(result.RecommendedNextSteps) == 0 || result.RecommendedNextSteps[0].Step != "write_knowledge_design_proposal" {
+		t.Fatalf("unexpected next step: %s", stdout.String())
+	}
+}
+
+func TestRunAuthorInspectRequiresJSONProjectAndGoal(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "missing json", args: []string{"author", "inspect", "--project", "mall-api", "--goal", "document product list cache ttl"}, want: "author inspect: --json is required"},
+		{name: "missing project", args: []string{"author", "inspect", "--json", "--goal", "document product list cache ttl"}, want: "author inspect: --project is required"},
+		{name: "missing goal", args: []string{"author", "inspect", "--json", "--project", "mall-api"}, want: "author inspect: --goal is required"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout bytes.Buffer
+			var stderr bytes.Buffer
+			code := Run(tt.args, &stdout, &stderr)
+
+			if code != 2 {
+				t.Fatalf("expected exit code 2, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+			}
+			if stdout.String() != "" {
+				t.Fatalf("expected empty stdout, got %q", stdout.String())
+			}
+			if !strings.Contains(stderr.String(), tt.want) {
+				t.Fatalf("stderr = %q, want %q", stderr.String(), tt.want)
+			}
+		})
+	}
+}
+
+func TestRunAuthorFlagHelpWritesUsage(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "inspect", args: []string{"author", "inspect", "--help"}, want: "Usage of author inspect:"},
+		{name: "verify", args: []string{"author", "verify", "--help"}, want: "Usage of author verify:"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout bytes.Buffer
+			var stderr bytes.Buffer
+			code := Run(tt.args, &stdout, &stderr)
+
+			if code != 2 {
+				t.Fatalf("expected exit code 2, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+			}
+			if stdout.String() != "" {
+				t.Fatalf("expected empty stdout, got %q", stdout.String())
+			}
+			if !strings.Contains(stderr.String(), tt.want) {
+				t.Fatalf("stderr = %q, want %q", stderr.String(), tt.want)
+			}
+		})
+	}
+}
+
+func TestRunAuthorVerifyReturnsPassJSON(t *testing.T) {
+	root := t.TempDir()
+	writeCLIAuthorRegistry(t, root)
+	candidatePath := "knowledge/.inbox/items/backend/cache.md"
+	writeCLIFile(t, root, candidatePath, validCLIAuthorCandidate())
+	proposalPath := "knowledge/.inbox/proposals/product-list-cache/proposal.json"
+	writeCLIAuthorProposal(t, root, proposalPath, validCLIAuthorProposal(candidatePath))
+	chdir(t, root)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{
+		"author", "verify",
+		"--json",
+		"--proposal", proposalPath,
+		"--path", candidatePath,
+	}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stderr=%q stdout=%q", code, stderr.String(), stdout.String())
+	}
+	if stderr.String() != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+	var result struct {
+		Result    string `json:"result"`
+		Candidate struct {
+			Validation string `json:"validation"`
+		} `json:"candidate"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, stdout.String())
+	}
+	if result.Result != "pass" {
+		t.Fatalf("expected pass result, got %s", stdout.String())
+	}
+	if result.Candidate.Validation != "pass" {
+		t.Fatalf("expected candidate validation pass, got %s", stdout.String())
+	}
+}
+
+func TestRunAuthorVerifyRequiresJSONProposalAndPath(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "missing json", args: []string{"author", "verify", "--proposal", "knowledge/.inbox/proposals/product-list-cache/proposal.json", "--path", "knowledge/.inbox/items/backend/cache.md"}, want: "author verify: --json is required"},
+		{name: "missing proposal", args: []string{"author", "verify", "--json", "--path", "knowledge/.inbox/items/backend/cache.md"}, want: "author verify: --proposal is required"},
+		{name: "missing path", args: []string{"author", "verify", "--json", "--proposal", "knowledge/.inbox/proposals/product-list-cache/proposal.json"}, want: "author verify: --path is required"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout bytes.Buffer
+			var stderr bytes.Buffer
+			code := Run(tt.args, &stdout, &stderr)
+
+			if code != 2 {
+				t.Fatalf("expected exit code 2, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+			}
+			if stdout.String() != "" {
+				t.Fatalf("expected empty stdout, got %q", stdout.String())
+			}
+			if !strings.Contains(stderr.String(), tt.want) {
+				t.Fatalf("stderr = %q, want %q", stderr.String(), tt.want)
+			}
+		})
+	}
+}
+
 func TestRunIndexRejectsInvalidKnowledgeWithoutReplacingExistingIndex(t *testing.T) {
 	root := t.TempDir()
 	writeCLIFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend]
@@ -1357,6 +1528,21 @@ business_domains: [account]
 	writeCLIFile(t, root, "knowledge/types.yaml", "types: [rule, package]\n")
 }
 
+func writeCLIAuthorRegistry(t *testing.T, root string) {
+	t.Helper()
+	writeCLIFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend, database]
+business_domains: [catalog]
+`)
+	writeCLIFile(t, root, "knowledge/projects.yaml", `projects:
+  - id: mall-api
+    name: Mall API
+    path: services/mall-api
+    tech_domains: [backend]
+    business_domains: [catalog]
+`)
+	writeCLIFile(t, root, "knowledge/types.yaml", "types: [rule, decision, lesson, runbook, reference, package]\n")
+}
+
 func writeCLIDiscoveryWorkspace(t *testing.T, root string) {
 	t.Helper()
 	writeCLIFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend, security]
@@ -1389,6 +1575,74 @@ Refresh token auth guidance.
 Full body implementation detail: refresh token endpoints must rotate tokens and require auth middleware.
 `)
 	writeCLIFile(t, root, "knowledge/packages/backend/auth-refresh/KNOWLEDGE.md", validCLIPackage("package:backend.auth-refresh.v1"))
+}
+
+func writeCLIAuthorProposal(t *testing.T, root string, rel string, proposal author.Proposal) {
+	t.Helper()
+	data, err := json.MarshalIndent(proposal, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal proposal: %v", err)
+	}
+	writeCLIFile(t, root, rel, string(data))
+}
+
+func validCLIAuthorProposal(candidatePath string) author.Proposal {
+	return author.Proposal{
+		SchemaVersion:  author.ProposalSchemaVersion,
+		KnowledgeGoal:  "Document product list cache TTL guidance.",
+		AuthoringMode:  author.ModeUserSpecified,
+		Project:        "mall-api",
+		ProposedShape:  author.ProposedShape{Kind: "item", Type: "rule", Title: "Product list cache TTL rule", ID: "rule:backend.cache.v1", Path: candidatePath, Status: "draft", Priority: "should"},
+		SourceAndTrust: author.SourceAndTrust{UserProvided: []string{"Human supplied the cache TTL requirement."}},
+		FutureRetrievalContract: author.FutureRetrievalContract{
+			Tasks:           []string{"implement product list cache"},
+			Phases:          []string{"implementation"},
+			Files:           []string{"internal/catalog/products.go"},
+			FileGlobs:       []string{"internal/catalog/**"},
+			QueryPhrases:    []string{"product list cache ttl"},
+			Projects:        []string{"mall-api"},
+			TechDomains:     []string{"backend"},
+			BusinessDomains: []string{"catalog"},
+			Tags:            []string{"cache"},
+			ExpectedUse:     "Find this guidance before changing product list cache behavior.",
+		},
+		Applicability: author.Applicability{
+			WhenToUse:    []string{"When implementing product list cache behavior."},
+			WhenNotToUse: []string{"When changing unrelated warehouse scanning behavior."},
+		},
+		OverlapDecision: author.OverlapDecision{Decision: "create_new", Reason: "No official knowledge covers product list cache TTLs."},
+		Delivery:        author.Delivery{Path: "inbox", RequiresHumanApproval: true},
+		CandidateFiles:  []author.CandidateFile{{Path: candidatePath, Purpose: "Candidate knowledge item.", Load: "autoload"}},
+		VerificationPlan: author.VerificationPlan{
+			ValidatePath: candidatePath,
+			FindabilityScenarios: []author.FindabilityScenario{{
+				Project: "mall-api",
+				Phase:   "implementation",
+				Task:    "implement product list cache ttl",
+				Query:   "product list cache ttl",
+				Files:   []string{"internal/catalog/products.go"},
+			}},
+		},
+	}
+}
+
+func validCLIAuthorCandidate() string {
+	return `---
+id: rule:backend.cache.v1
+title: Product list cache TTL rule
+type: rule
+tech_domains: [backend]
+business_domains: [catalog]
+projects: [mall-api]
+status: draft
+priority: should
+updated_at: 2026-05-02
+tags: [cache]
+applies_to:
+  files: [internal/catalog/**]
+---
+Product list cache TTL guidance for backend work.
+`
 }
 
 func validCLIPackage(id string) string {

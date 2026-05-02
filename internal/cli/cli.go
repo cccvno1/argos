@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"argos/internal/adapters"
+	"argos/internal/author"
 	"argos/internal/dogfood"
 	"argos/internal/index"
 	"argos/internal/knowledge"
@@ -139,6 +140,8 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			Files:   files,
 		})
 		return printJSON(stdout, stderr, result)
+	case "author":
+		return runAuthor(args[1:], stdout, stderr)
 	case "knowledge":
 		return runKnowledge(args[1:], stdout, stderr)
 	case "dogfood":
@@ -188,6 +191,119 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		printUsage(stderr)
 		return 2
 	}
+}
+
+func runAuthor(args []string, stdout io.Writer, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "author: subcommand is required")
+		printUsage(stderr)
+		return 2
+	}
+	switch args[0] {
+	case "inspect":
+		return runAuthorInspect(args[1:], stdout, stderr)
+	case "verify":
+		return runAuthorVerify(args[1:], stdout, stderr)
+	default:
+		fmt.Fprintf(stderr, "author: unknown subcommand %q\n", args[0])
+		printUsage(stderr)
+		return 2
+	}
+}
+
+func runAuthorInspect(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("author inspect", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	jsonOut := flags.Bool("json", false, "print JSON output")
+	project := flags.String("project", "", "project id")
+	goal := flags.String("goal", "", "knowledge authoring goal")
+	mode := flags.String("mode", "", "authoring mode")
+	futureTask := flags.String("future-task", "", "future retrieval task")
+	phase := flags.String("phase", "", "workflow phase")
+	queryText := flags.String("query", "", "search query")
+	candidatePath := flags.String("candidate-path", "", "candidate knowledge path")
+	var files multiValueFlag
+	var domains multiValueFlag
+	var tags multiValueFlag
+	flags.Var(&files, "files", "file path relevant to the current task; may be repeated")
+	flags.Var(&domains, "domains", "domain relevant to the current task; may be repeated")
+	flags.Var(&tags, "tags", "tag relevant to the current task; may be repeated")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if !*jsonOut {
+		fmt.Fprintln(stderr, "author inspect: --json is required")
+		return 2
+	}
+	if strings.TrimSpace(*project) == "" {
+		fmt.Fprintln(stderr, "author inspect: --project is required")
+		return 2
+	}
+	if strings.TrimSpace(*goal) == "" {
+		fmt.Fprintln(stderr, "author inspect: --goal is required")
+		return 2
+	}
+
+	root, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(stderr, "author inspect: get current directory: %v\n", err)
+		return 1
+	}
+	result, err := author.Inspect(root, author.InspectRequest{
+		Project:       *project,
+		Goal:          *goal,
+		Mode:          *mode,
+		FutureTask:    *futureTask,
+		Phase:         *phase,
+		Query:         *queryText,
+		Files:         files,
+		Domains:       domains,
+		Tags:          tags,
+		CandidatePath: *candidatePath,
+	})
+	if err != nil {
+		fmt.Fprintf(stderr, "author inspect: %v\n", err)
+		return 1
+	}
+	return printJSON(stdout, stderr, result)
+}
+
+func runAuthorVerify(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("author verify", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	jsonOut := flags.Bool("json", false, "print JSON output")
+	proposalPath := flags.String("proposal", "", "proposal JSON path")
+	candidatePath := flags.String("path", "", "candidate item or package path")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if !*jsonOut {
+		fmt.Fprintln(stderr, "author verify: --json is required")
+		return 2
+	}
+	if strings.TrimSpace(*proposalPath) == "" {
+		fmt.Fprintln(stderr, "author verify: --proposal is required")
+		return 2
+	}
+	if strings.TrimSpace(*candidatePath) == "" {
+		fmt.Fprintln(stderr, "author verify: --path is required")
+		return 2
+	}
+
+	root, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(stderr, "author verify: get current directory: %v\n", err)
+		return 1
+	}
+	result, err := author.Verify(root, author.VerifyRequest{
+		ProposalPath:  *proposalPath,
+		CandidatePath: *candidatePath,
+	})
+	if err != nil {
+		fmt.Fprintf(stderr, "author verify: %v\n", err)
+		return 1
+	}
+	return printJSON(stdout, stderr, result)
 }
 
 func runDogfood(args []string, stdout io.Writer, stderr io.Writer) int {
@@ -670,6 +786,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  index")
 	fmt.Fprintln(w, "  install-adapters")
 	fmt.Fprintln(w, "  context")
+	fmt.Fprintln(w, "  author")
 	fmt.Fprintln(w, "  knowledge")
 	fmt.Fprintln(w, "  dogfood")
 	fmt.Fprintln(w, "  mcp")
@@ -680,4 +797,6 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  argos knowledge find --json --project <project> --task <task>")
 	fmt.Fprintln(w, "  argos knowledge read --json <id>")
 	fmt.Fprintln(w, "  argos knowledge cite --json <id>...")
+	fmt.Fprintln(w, "  argos author inspect --json --project <project> --goal <goal>")
+	fmt.Fprintln(w, "  argos author verify --json --proposal <proposal.json> --path <candidate>")
 }
