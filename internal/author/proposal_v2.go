@@ -76,6 +76,7 @@ type ProposedShapeV2 struct {
 	Priority       string `json:"priority"`
 	Rationale      string `json:"rationale"`
 	EntrypointLoad string `json:"entrypoint_load"`
+	ArtifactState  string `json:"artifact_state"`
 }
 
 type FutureUseV2 struct {
@@ -255,10 +256,10 @@ func validateProposedShapeV2(shape ProposedShapeV2, delivery DeliveryV2, addFail
 		addFail("proposed_shape must include kind, type, id, and path")
 	}
 	if strings.TrimSpace(shape.Kind) != "" && !validProposedShapeKindV2(shape.Kind) {
-		addFail("proposed_shape.kind must be item or package")
+		addFail("proposed_shape.kind must be item, package, or review")
 	}
 	if strings.TrimSpace(shape.Type) != "" && !validProposedShapeTypeV2(shape.Type) {
-		addFail("proposed_shape.type must be rule, decision, lesson, runbook, reference, template, checklist, or package")
+		addFail("proposed_shape.type must be rule, decision, lesson, runbook, reference, template, checklist, package, or review")
 	}
 	if strings.TrimSpace(shape.Status) == "" || strings.TrimSpace(shape.Priority) == "" {
 		addFail("proposed_shape must include status and priority")
@@ -303,7 +304,7 @@ func validScopeDistributionV2(distribution string) bool {
 
 func validProposedShapeKindV2(kind string) bool {
 	switch kind {
-	case "item", "package":
+	case "item", "package", "review":
 		return true
 	default:
 		return false
@@ -312,7 +313,7 @@ func validProposedShapeKindV2(kind string) bool {
 
 func validProposedShapeTypeV2(shapeType string) bool {
 	switch shapeType {
-	case "rule", "decision", "lesson", "runbook", "reference", "template", "checklist", "package":
+	case "rule", "decision", "lesson", "runbook", "reference", "template", "checklist", "package", "review":
 		return true
 	default:
 		return false
@@ -369,16 +370,32 @@ func validateDeliveryV2(delivery DeliveryV2, addFail func(string)) {
 }
 
 func validateCandidateAndPlanV2(proposal ProposalV2, addFail func(string), addReview func(string)) {
+	reviewOnly := proposalV2ReviewOnly(proposal)
 	proposedPath, proposedPathOK := cleanAuthoringPathV2("proposed_shape.path", proposal.ProposedShape.Path, addFail)
 	validatePath, validatePathOK := cleanAuthoringPathV2("verification_plan.validate_path", proposal.VerificationPlan.ValidatePath, addFail)
 	if proposedPathOK {
-		validateDeliveryPathBoundaryV2("proposed_shape.path", proposedPath, proposal.Delivery.Path, addFail)
+		if reviewOnly {
+			validateReviewOnlyPathBoundaryV2("proposed_shape.path", proposedPath, addFail)
+		} else {
+			validateDeliveryPathBoundaryV2("proposed_shape.path", proposedPath, proposal.Delivery.Path, addFail)
+		}
 	}
 	if validatePathOK {
 		validateDeliveryPathBoundaryV2("verification_plan.validate_path", validatePath, proposal.Delivery.Path, addFail)
 	}
-	if proposedPathOK && validatePathOK && proposedPath != validatePath {
+	if !reviewOnly && proposedPathOK && validatePathOK && proposedPath != validatePath {
 		addFail("verification_plan.validate_path must match proposed_shape.path")
+	}
+
+	if reviewOnly {
+		if len(proposal.CandidateFiles) > 0 {
+			addReview("review-only proposal should not include candidate files before approval")
+		}
+		if strings.TrimSpace(proposal.VerificationPlan.ValidatePath) != "" {
+			addReview("review-only proposal should not set verification_plan.validate_path before candidate approval")
+		}
+		addReview("proposal is review-only until human decisions unblock candidate writing")
+		return
 	}
 
 	if len(proposal.CandidateFiles) == 0 {
@@ -446,6 +463,22 @@ func validateDeliveryPathBoundaryV2(field string, path string, delivery string, 
 			addFail(field + " is outside official_review delivery boundary")
 		}
 	}
+}
+
+func validateReviewOnlyPathBoundaryV2(field string, path string, addFail func(string)) {
+	if !strings.HasPrefix(path, "knowledge/.inbox/proposals/") {
+		addFail(field + " is outside review proposal boundary")
+	}
+}
+
+func proposalV2ReviewOnly(proposal ProposalV2) bool {
+	state := strings.TrimSpace(proposal.ProposedShape.ArtifactState)
+	return state == "review_only" ||
+		proposal.ProposedShape.Kind == "review" ||
+		proposal.OverlapDecision.Decision == "unresolved" &&
+			!proposal.HumanReview.CandidateWriteApproved &&
+			len(proposal.CandidateFiles) == 0 &&
+			strings.TrimSpace(proposal.VerificationPlan.ValidatePath) == ""
 }
 
 func pathWithinAuthoringRootV2(path string, root string) bool {

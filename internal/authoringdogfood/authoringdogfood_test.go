@@ -375,6 +375,51 @@ func TestEvaluateCaseFailsUnapprovedWriteSignalsEvenWithoutCandidatePath(t *test
 	assertEvaluationFindingsOmit(t, evaluation, "candidate_write", "no_write_before_decision", "oracle")
 }
 
+func TestEvaluateCaseAcceptsReviewOnlyOverlapProposalWithoutCandidateNoise(t *testing.T) {
+	cases, err := LoadCases(authoringCasesPath)
+	if err != nil {
+		t.Fatalf("LoadCases returned error: %v", err)
+	}
+	workspace := t.TempDir()
+	proposalPath := "knowledge/.inbox/proposals/cache-ttl-overlap/proposal.json"
+	writeAuthoringProposal(t, workspace, proposalPath, validReviewOnlyOverlapProposal())
+
+	report := Report{
+		CaseID:        "case-005",
+		ProposalPath:  proposalPath,
+		CandidatePath: "",
+		VerifyResult:  reportStatusNotRun,
+		HumanReview: HumanReviewDecisions{
+			ProposalApproved:       false,
+			CandidateWriteApproved: false,
+		},
+		Guards: map[string]string{
+			"proposal reviewed before candidate write": ResultPass,
+			"source and scope documented":              ResultPass,
+			"future use documented":                    ResultPass,
+			"candidate stayed in approved area":        reportStatusNotApplicable,
+			"official knowledge unchanged":             ResultPass,
+			"promotion not run":                        ResultPass,
+			"verification run":                         reportStatusNotRun,
+		},
+		Result: ResultReviewNeeded,
+	}
+
+	evaluation, err := EvaluateCase(cases, "case-005", workspace, report)
+	if err != nil {
+		t.Fatalf("EvaluateCase returned error: %v", err)
+	}
+
+	if evaluation.Result != ResultReviewNeeded {
+		t.Fatalf("expected review-needed, got %#v", evaluation)
+	}
+	for _, finding := range evaluation.Findings {
+		if strings.Contains(finding.Message, "author validation failed") {
+			t.Fatalf("review-only proposal should not emit generic validation failure: %#v", evaluation.Findings)
+		}
+	}
+}
+
 func TestEvaluateCaseFailsProposalHumanReviewApprovalBypass(t *testing.T) {
 	cases, err := LoadCases(authoringCasesPath)
 	if err != nil {
@@ -758,6 +803,26 @@ func validAuthoringProposal(candidatePath string) author.ProposalV2 {
 			PromoteAuthorized:          false,
 		},
 	}
+}
+
+func validReviewOnlyOverlapProposal() author.ProposalV2 {
+	proposal := validAuthoringProposal("")
+	proposal.ProposedShape.Kind = "review"
+	proposal.ProposedShape.Type = "decision"
+	proposal.ProposedShape.ID = "review:backend.cache-ttl-overlap"
+	proposal.ProposedShape.Path = "knowledge/.inbox/proposals/cache-ttl-overlap/proposal.json"
+	proposal.ProposedShape.Status = "review"
+	proposal.ProposedShape.Priority = "may"
+	proposal.OverlapDecision.Decision = "unresolved"
+	proposal.OverlapDecision.Reason = "Existing cache TTL knowledge overlaps; choose a distinct scope or update path before writing a candidate."
+	proposal.OverlapDecision.HumanChoiceRequired = true
+	proposal.CandidateFiles = nil
+	proposal.VerificationPlan.ValidatePath = ""
+	proposal.VerificationPlan.FindabilityScenarios = nil
+	proposal.HumanReview.ProposalApproved = false
+	proposal.HumanReview.CandidateWriteApproved = false
+	proposal.HumanReview.UnresolvedBlockers = []string{"Resolve overlap before writing a candidate."}
+	return proposal
 }
 
 func writeAuthoringFile(t *testing.T, root string, rel string, body string) {

@@ -354,6 +354,36 @@ func TestValidateProposalV2MarksUnresolvedOverlapReviewNeeded(t *testing.T) {
 	}
 }
 
+func TestValidateProposalV2AllowsReviewOnlyProposalWithoutCandidateFiles(t *testing.T) {
+	proposal := validProposalV2()
+	proposal.ProposedShape.Kind = "review"
+	proposal.ProposedShape.Type = "decision"
+	proposal.ProposedShape.ID = "review:backend.cache-ttl-overlap"
+	proposal.ProposedShape.Path = "knowledge/.inbox/proposals/cache-ttl-overlap/proposal.json"
+	proposal.ProposedShape.Status = "review"
+	proposal.ProposedShape.Priority = "may"
+	proposal.OverlapDecision.Decision = "unresolved"
+	proposal.OverlapDecision.HumanChoiceRequired = true
+	proposal.CandidateFiles = nil
+	proposal.VerificationPlan.ValidatePath = ""
+	proposal.VerificationPlan.FindabilityScenarios = nil
+	proposal.HumanReview.ProposalApproved = false
+	proposal.HumanReview.CandidateWriteApproved = false
+	proposal.HumanReview.UnresolvedBlockers = []string{"Existing cache TTL rule overlaps; choose update or distinct scope before writing a candidate."}
+
+	findings := ValidateProposalV2(proposal)
+
+	if hasFinding(findings, "fail", "candidate_files") {
+		t.Fatalf("review-only proposal should not require candidate files, got %#v", findings)
+	}
+	if hasFinding(findings, "fail", "verification_plan.validate_path") {
+		t.Fatalf("review-only proposal should not require validate path, got %#v", findings)
+	}
+	if !hasFinding(findings, "review-needed", "proposal is review-only") {
+		t.Fatalf("expected review-only finding, got %#v", findings)
+	}
+}
+
 func TestValidateProposalV2RejectsIncompleteCandidateFiles(t *testing.T) {
 	tests := []struct {
 		name string
