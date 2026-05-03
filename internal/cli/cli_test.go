@@ -1112,6 +1112,15 @@ func TestRunAuthorInspectReturnsAuthoringPolicyJSON(t *testing.T) {
 		RecommendedNextSteps []struct {
 			Step string `json:"step"`
 		} `json:"recommended_next_steps"`
+		AuthoringPacket struct {
+			State             string `json:"state"`
+			RecommendedAction string `json:"recommended_action"`
+			CandidateAllowed  bool   `json:"candidate_allowed"`
+			Commands          struct {
+				WriteProposal   string `json:"write_proposal"`
+				VerifyCandidate string `json:"verify_candidate"`
+			} `json:"commands"`
+		} `json:"authoring_packet"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 		t.Fatalf("invalid JSON: %v\n%s", err, stdout.String())
@@ -1124,6 +1133,18 @@ func TestRunAuthorInspectReturnsAuthoringPolicyJSON(t *testing.T) {
 	}
 	if len(result.RecommendedNextSteps) == 0 || result.RecommendedNextSteps[0].Step != "write_knowledge_design_proposal" {
 		t.Fatalf("unexpected next step: %s", stdout.String())
+	}
+	if result.AuthoringPacket.State != "ready_for_proposal" {
+		t.Fatalf("unexpected authoring packet state: %s", stdout.String())
+	}
+	if result.AuthoringPacket.RecommendedAction != "write_proposal" {
+		t.Fatalf("unexpected authoring packet action: %s", stdout.String())
+	}
+	if result.AuthoringPacket.CandidateAllowed {
+		t.Fatalf("inspect must not authorize candidate writing: %s", stdout.String())
+	}
+	if result.AuthoringPacket.Commands.WriteProposal == "" || result.AuthoringPacket.Commands.VerifyCandidate == "" {
+		t.Fatalf("authoring packet should include write and verify command guidance: %s", stdout.String())
 	}
 }
 
