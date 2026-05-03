@@ -36,6 +36,7 @@ type InspectResponse struct {
 	Policy               InspectPolicy       `json:"policy"`
 	ProposalRequirements []string            `json:"proposal_requirements"`
 	ProposalScaffold     ProposalV2          `json:"proposal_scaffold"`
+	AuthoringPacket      AuthoringPacket     `json:"authoring_packet"`
 	RecommendedNextSteps []InspectNextStep   `json:"recommended_next_steps"`
 }
 
@@ -144,6 +145,7 @@ func Inspect(root string, req InspectRequest) (InspectResponse, error) {
 		response.Overlap.Index = indexOverlap(root, req)
 	}
 	response.ProposalScaffold = buildProposalScaffold(response, req)
+	response.AuthoringPacket = buildAuthoringPacket(response, req)
 	return response, nil
 }
 
