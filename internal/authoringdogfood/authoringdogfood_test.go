@@ -157,6 +157,7 @@ func TestBuildPacketIncludesNaturalRequestAndAuthoringCommands(t *testing.T) {
 		"`human_review`",
 		"/tmp/argos author inspect --json --project \"mall-api\" --goal",
 		"/tmp/argos author verify --json --proposal <proposal-path> --path <candidate-path>",
+		"Use only the workspace, Argos binary, generated packet, and report template path listed in this packet.",
 		"Keep proposal and candidate artifacts under the workspace using relative paths.",
 		"docs/superpowers/templates/argos-authoring-dogfood-report.md",
 		"Use the authoring dogfood report template",
@@ -733,9 +734,9 @@ func TestAuthoringReportTemplateMatchesParserContract(t *testing.T) {
 	text := string(data)
 
 	for _, want := range []string{
-		"Case:",
-		"Runner Session:",
-		"Workspace:",
+		"Case: `<case-handle>`",
+		"Runner Session: `<fresh-session-id>`",
+		"Workspace: `<workspace-path>`",
 		"## Inputs",
 		"## Tool Transcript Summary",
 		"## Artifacts",
@@ -797,8 +798,14 @@ func TestAuthoringReportTemplateMatchesParserContract(t *testing.T) {
 			t.Fatalf("report template leaked %q", forbidden)
 		}
 	}
-	if strings.Contains(text, "oracle") {
-		t.Fatalf("report template leaked %q", "oracle")
+	for _, forbidden := range []string{
+		"oracle",
+		"case-001",
+		"/tmp/argos-authoring-dogfood/case-001",
+	} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("report template leaked %q", forbidden)
+		}
 	}
 }
 
@@ -816,13 +823,14 @@ func TestAuthoringDogfoodChecklistDefinesFreshRunnerWorkflow(t *testing.T) {
 		"docs/superpowers/templates/argos-authoring-dogfood-report.md",
 		"dogfood authoring cases --json",
 		"dogfood authoring packet --case case-001",
-		"> /tmp/argos-authoring-dogfood/packets/case-001.md",
+		"ROUND_ROOT=$(mktemp -d /tmp/argos-authoring-dogfood.XXXXXX)",
+		"> \"$ROUND_ROOT/packets/case-001.md\"",
 		"dogfood authoring evaluate --case case-001",
-		"mkdir -p /tmp/argos-authoring-dogfood/packets /tmp/argos-authoring-dogfood/reports /tmp/argos-authoring-dogfood/case-001",
-		"/tmp/argos-authoring-dogfood/reports/case-001.md",
+		"mkdir -p \"$ROUND_ROOT/packets\" \"$ROUND_ROOT/reports\" \"$ROUND_ROOT/case-001\"",
+		"$ROUND_ROOT/reports/case-001.md",
 		"cp -R testdata/authoring-golden/fixtures/full/.",
-		"Start a fresh runner with `/tmp/argos-authoring-dogfood/packets/case-001.md`",
-		"Fresh runner saves the completed report at `/tmp/argos-authoring-dogfood/reports/case-001.md`.",
+		"Start a fresh runner with `$ROUND_ROOT/packets/case-001.md`",
+		"Fresh runner saves the completed report at `$ROUND_ROOT/reports/case-001.md`.",
 		"authoring.proposal.v2",
 		"author verify --json --proposal <proposal-path> --path <candidate-path>",
 	} {
@@ -831,10 +839,11 @@ func TestAuthoringDogfoodChecklistDefinesFreshRunnerWorkflow(t *testing.T) {
 		}
 	}
 	assertTextOrder(t, "checklist", text,
-		"mkdir -p /tmp/argos-authoring-dogfood/packets /tmp/argos-authoring-dogfood/reports /tmp/argos-authoring-dogfood/case-001",
-		"go build -o /tmp/argos-authoring-dogfood/argos ./cmd/argos",
+		"mkdir -p \"$ROUND_ROOT/packets\" \"$ROUND_ROOT/reports\" \"$ROUND_ROOT/case-001\"",
+		"go build -o \"$ROUND_ROOT/argos\" ./cmd/argos",
 	)
 	assertAuthoringProcessDocOmitsHiddenTokens(t, "checklist", text)
+	assertAuthoringProcessDocOmitsFixedRoundPaths(t, "checklist", text)
 }
 
 func TestAuthoringDogfoodRound0RecordsEvaluationLoop(t *testing.T) {
@@ -853,10 +862,11 @@ func TestAuthoringDogfoodRound0RecordsEvaluationLoop(t *testing.T) {
 		"## Fixture Preparation",
 		"## Case Matrix",
 		"| Case | Status | Packet | Runner Report | Evaluation |",
-		"/tmp/argos-authoring-dogfood/packets/case-001.md",
-		"/tmp/argos-authoring-dogfood/reports/case-001.md",
+		"$ROUND_ROOT/packets/case-001.md",
+		"$ROUND_ROOT/reports/case-001.md",
+		"ROUND_ROOT=$(mktemp -d /tmp/argos-authoring-dogfood.XXXXXX)",
 		"dogfood authoring packet --case case-001",
-		"> /tmp/argos-authoring-dogfood/packets/case-001.md",
+		"> \"$ROUND_ROOT/packets/case-001.md\"",
 		"## Evaluation Commands",
 		"## Results",
 		"## Failure Classification",
@@ -872,10 +882,11 @@ func TestAuthoringDogfoodRound0RecordsEvaluationLoop(t *testing.T) {
 		}
 	}
 	assertTextOrder(t, "round report", text,
-		"mkdir -p /tmp/argos-authoring-dogfood/packets /tmp/argos-authoring-dogfood/reports /tmp/argos-authoring-dogfood/case-001",
-		"go build -o /tmp/argos-authoring-dogfood/argos ./cmd/argos",
+		"mkdir -p \"$ROUND_ROOT/packets\" \"$ROUND_ROOT/reports\" \"$ROUND_ROOT/case-001\"",
+		"go build -o \"$ROUND_ROOT/argos\" ./cmd/argos",
 	)
 	assertAuthoringProcessDocOmitsHiddenTokens(t, "round report", text)
+	assertAuthoringProcessDocOmitsFixedRoundPaths(t, "round report", text)
 }
 
 func TestREADMEExplainsAuthoringDogfoodRoundWorkflow(t *testing.T) {
@@ -899,17 +910,19 @@ func TestREADMEExplainsAuthoringDogfoodRoundWorkflow(t *testing.T) {
 		"docs/superpowers/checklists/2026-05-03-argos-authoring-dogfood-checklist.md",
 		"testdata/authoring-golden/fixtures/full",
 		"copy the fixture seed to a temp workspace",
+		"ROUND_ROOT=$(mktemp -d /tmp/argos-authoring-dogfood.XXXXXX)",
 		"start a fresh runner",
 		"dogfood authoring evaluate",
 		"record the evaluated result in the round report",
-		"/tmp/argos-authoring-dogfood/packets/case-001.md",
-		"/tmp/argos-authoring-dogfood/reports/case-001.md",
+		"$ROUND_ROOT/packets/case-001.md",
+		"$ROUND_ROOT/reports/case-001.md",
 	} {
 		if !strings.Contains(section, want) {
 			t.Fatalf("README missing %q", want)
 		}
 	}
 	assertAuthoringProcessDocOmitsHiddenTokens(t, "README authoring dogfood section", section)
+	assertAuthoringProcessDocOmitsFixedRoundPaths(t, "README authoring dogfood section", section)
 }
 
 func TestAuthoringDogfoodProcessAssetsUseAlignedPacketAndReportPaths(t *testing.T) {
@@ -927,8 +940,8 @@ func TestAuthoringDogfoodProcessAssetsUseAlignedPacketAndReportPaths(t *testing.
 	checklist := string(checklistData)
 	roundReport := string(roundReportData)
 	for _, path := range []string{
-		"/tmp/argos-authoring-dogfood/packets/case-001.md",
-		"/tmp/argos-authoring-dogfood/reports/case-001.md",
+		"$ROUND_ROOT/packets/case-001.md",
+		"$ROUND_ROOT/reports/case-001.md",
 	} {
 		if !strings.Contains(checklist, path) {
 			t.Fatalf("checklist missing aligned path %q:\n%s", path, checklist)
@@ -936,6 +949,19 @@ func TestAuthoringDogfoodProcessAssetsUseAlignedPacketAndReportPaths(t *testing.
 		if !strings.Contains(roundReport, path) {
 			t.Fatalf("round report missing aligned path %q:\n%s", path, roundReport)
 		}
+	}
+	for label, text := range map[string]string{
+		"checklist":    checklist,
+		"round report": roundReport,
+	} {
+		if !strings.Contains(text, "ROUND_ROOT=$(mktemp -d /tmp/argos-authoring-dogfood.XXXXXX)") {
+			t.Fatalf("%s missing unique round root setup", label)
+		}
+		assertTextOrder(t, label, text,
+			"mkdir -p \"$ROUND_ROOT/packets\" \"$ROUND_ROOT/reports\" \"$ROUND_ROOT/case-001\"",
+			"go build -o \"$ROUND_ROOT/argos\" ./cmd/argos",
+		)
+		assertAuthoringProcessDocOmitsFixedRoundPaths(t, label, text)
 	}
 
 	oldRunnerReportPath := "docs/superpowers/reports/authoring-round-0-case-001.md"
@@ -1221,6 +1247,19 @@ func assertAuthoringProcessDocOmitsHiddenTokens(t *testing.T, label, text string
 	for _, forbidden := range authoringProcessDocumentHiddenTokens(t) {
 		if strings.Contains(text, forbidden) {
 			t.Fatalf("%s leaked %q", label, forbidden)
+		}
+	}
+}
+
+func assertAuthoringProcessDocOmitsFixedRoundPaths(t *testing.T, label, text string) {
+	t.Helper()
+	for _, forbidden := range []string{
+		"/tmp/argos-authoring-dogfood/packets/case-001.md",
+		"/tmp/argos-authoring-dogfood/reports/case-001.md",
+		"/tmp/argos-authoring-dogfood/case-001",
+	} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("%s contains stale fixed round path %q", label, forbidden)
 		}
 	}
 }

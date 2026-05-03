@@ -16,26 +16,27 @@ Record the first fresh-runner authoring dogfood round after the process assets a
 
 ## Fixture Preparation
 
-Packet output: `/tmp/argos-authoring-dogfood/packets/case-001.md`
-Runner report output: `/tmp/argos-authoring-dogfood/reports/case-001.md`
+Packet output: `$ROUND_ROOT/packets/case-001.md`
+Runner report output: `$ROUND_ROOT/reports/case-001.md`
 
 ```bash
-mkdir -p /tmp/argos-authoring-dogfood/packets /tmp/argos-authoring-dogfood/reports /tmp/argos-authoring-dogfood/case-001
-go build -o /tmp/argos-authoring-dogfood/argos ./cmd/argos
-cp -R testdata/authoring-golden/fixtures/full/. /tmp/argos-authoring-dogfood/case-001/
-/tmp/argos-authoring-dogfood/argos dogfood authoring packet --case case-001 --workspace /tmp/argos-authoring-dogfood/case-001 --argos-binary /tmp/argos-authoring-dogfood/argos > /tmp/argos-authoring-dogfood/packets/case-001.md
+ROUND_ROOT=$(mktemp -d /tmp/argos-authoring-dogfood.XXXXXX)
+mkdir -p "$ROUND_ROOT/packets" "$ROUND_ROOT/reports" "$ROUND_ROOT/case-001"
+go build -o "$ROUND_ROOT/argos" ./cmd/argos
+cp -R testdata/authoring-golden/fixtures/full/. "$ROUND_ROOT/case-001/"
+"$ROUND_ROOT/argos" dogfood authoring packet --case case-001 --workspace "$ROUND_ROOT/case-001" --argos-binary "$ROUND_ROOT/argos" > "$ROUND_ROOT/packets/case-001.md"
 ```
 
 ## Case Matrix
 
 | Case | Status | Packet | Runner Report | Evaluation |
 | --- | --- | --- | --- | --- |
-| `case-001` | `not-run` | `/tmp/argos-authoring-dogfood/packets/case-001.md` | `/tmp/argos-authoring-dogfood/reports/case-001.md` | `not-run` |
+| `case-001` | `not-run` | `$ROUND_ROOT/packets/case-001.md` | `$ROUND_ROOT/reports/case-001.md` | `not-run` |
 
 ## Evaluation Commands
 
 ```bash
-/tmp/argos-authoring-dogfood/argos dogfood authoring evaluate --case case-001 --report /tmp/argos-authoring-dogfood/reports/case-001.md --workspace /tmp/argos-authoring-dogfood/case-001 --json
+"$ROUND_ROOT/argos" dogfood authoring evaluate --case case-001 --report "$ROUND_ROOT/reports/case-001.md" --workspace "$ROUND_ROOT/case-001" --json
 ```
 
 ## Results

@@ -1,8 +1,8 @@
 # Argos Authoring Dogfood Report
 
-Case: `case-001`
-Runner Session: `fresh-session-id`
-Workspace: `/tmp/argos-authoring-dogfood/case-001`
+Case: `<case-handle>`
+Runner Session: `<fresh-session-id>`
+Workspace: `<workspace-path>`
 
 ## Inputs
 

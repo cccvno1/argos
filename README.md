@@ -136,16 +136,21 @@ Use the authoring dogfood checklist and report template for counted runs:
 - `docs/superpowers/checklists/2026-05-03-argos-authoring-dogfood-checklist.md`
 - `docs/superpowers/templates/argos-authoring-dogfood-report.md`
 
-For each case, copy the fixture seed to a temp workspace, generate a packet,
-start a fresh runner with the packet and template, save the runner report, run
-`dogfood authoring evaluate`, and record the evaluated result in the round report.
-The public fixture seed lives at `testdata/authoring-golden/fixtures/full`.
+For each case, create a unique round root, then copy the fixture seed to a temp workspace.
+Generate a packet, start a fresh runner with the packet and template, save the
+runner report, run `dogfood authoring evaluate`, and record the evaluated result in the round report.
+The public fixture seed lives at
+`testdata/authoring-golden/fixtures/full`.
+
+```bash
+ROUND_ROOT=$(mktemp -d /tmp/argos-authoring-dogfood.XXXXXX)
+mkdir -p "$ROUND_ROOT/packets" "$ROUND_ROOT/reports" "$ROUND_ROOT/case-001"
+```
 
 The checklist is authoritative for exact packet and report paths. Counted runs
-save packet and report artifacts outside the repo under
-`/tmp/argos-authoring-dogfood/`, including
-`/tmp/argos-authoring-dogfood/packets/case-001.md` and
-`/tmp/argos-authoring-dogfood/reports/case-001.md`.
+save packet and report artifacts outside the repo under the unique round root,
+including `$ROUND_ROOT/packets/case-001.md` and
+`$ROUND_ROOT/reports/case-001.md`.
 
 ## Agent Knowledge Authoring
 

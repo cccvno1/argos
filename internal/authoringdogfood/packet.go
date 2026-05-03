@@ -72,7 +72,7 @@ func renderAuthoringPacketMarkdown(packet Packet) string {
 	fmt.Fprintf(&builder, "Argos binary: `%s`\n\n", packet.ArgosBinary)
 
 	fmt.Fprintf(&builder, "## Runner Instructions\n\n")
-	fmt.Fprintf(&builder, "- Use only the workspace and Argos binary listed above.\n")
+	fmt.Fprintf(&builder, "- Use only the workspace, Argos binary, generated packet, and report template path listed in this packet.\n")
 	fmt.Fprintf(&builder, "- Treat the natural request as the user's full write-side authoring task.\n")
 	fmt.Fprintf(&builder, "- Do not inspect case files, golden data, source test code, or private expectation data.\n")
 	fmt.Fprintf(&builder, "- Keep proposal review separate from candidate writing; write candidates only when the approval boundary below allows it.\n")
