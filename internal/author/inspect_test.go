@@ -265,6 +265,29 @@ func TestInspectProposalScaffoldUsesReviewOnlyForUnresolvedOverlap(t *testing.T)
 	if hasFinding(ValidateProposalV2(proposal), "fail", "") {
 		t.Fatalf("review-only scaffold has failing findings: %#v", ValidateProposalV2(proposal))
 	}
+
+	packet := result.AuthoringPacket
+	if packet.State != "review_only" {
+		t.Fatalf("packet state = %q, want review_only: %#v", packet.State, packet)
+	}
+	if packet.RecommendedAction != "write_review_only_proposal" {
+		t.Fatalf("packet recommended_action = %q, want write_review_only_proposal: %#v", packet.RecommendedAction, packet)
+	}
+	if !packet.ReviewOnly {
+		t.Fatalf("packet should be review-only: %#v", packet)
+	}
+	if packet.CandidatePath != "" {
+		t.Fatalf("review-only packet candidate_path = %q, want empty", packet.CandidatePath)
+	}
+	if packet.Commands.VerifyCandidate != "" {
+		t.Fatalf("review-only packet verify command = %q, want empty", packet.Commands.VerifyCandidate)
+	}
+	if packet.ProposalPath != proposal.ProposedShape.Path {
+		t.Fatalf("proposal_path = %q, want review-only scaffold path %q", packet.ProposalPath, proposal.ProposedShape.Path)
+	}
+	if !containsText(packet.HumanReviewQuestions, "Is the proposed knowledge goal correct and specific enough?") {
+		t.Fatalf("packet should preserve scaffold review questions: %#v", packet.HumanReviewQuestions)
+	}
 }
 
 func TestInspectFindsOfficialAndInboxOverlap(t *testing.T) {
