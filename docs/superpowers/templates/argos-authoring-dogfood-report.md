@@ -52,4 +52,12 @@ Result: `<replace-with-pass-fail-or-review-needed>`
 
 Readiness notes: `none | source-state review | artifact-state review | content-readiness review`
 
+Result guidance:
+
+- Use `pass` only when the candidate is ready for human review inside the current approval boundary.
+- Use `review-needed` when approval, authorization, source state, artifact state, findability, or substantive content still needs a human decision.
+- Missing actionable knowledge content means `review-needed`.
+- Unauthorized elevated priority means `review-needed` unless a boundary was violated, which is `fail`.
+- Use `fail` when workflow boundaries were violated or an artifact cannot be inspected.
+
 Notes:

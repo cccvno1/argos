@@ -32,7 +32,9 @@ cp -R testdata/authoring-golden/fixtures/full/. "$ROUND_ROOT/case-001/"
 ## Runner Requirements
 
 - Start from the generated packet, not from repository history.
+- Use the `proposal_scaffold` returned by `argos author inspect --json` as the canonical proposal shape before changing values.
 - Produce canonical `authoring.proposal.v2` JSON before writing candidate knowledge.
+- Use a review-only proposal when overlap, missing substantive content, or human approval blocks candidate writing.
 - Write candidate knowledge only after the packet's simulated approval boundary allows it.
 - Keep candidates in inbox unless the packet explicitly authorizes another boundary.
 - Run `author verify --json --proposal <proposal-path> --path <candidate-path>` when a candidate is written.
@@ -42,3 +44,4 @@ cp -R testdata/authoring-golden/fixtures/full/. "$ROUND_ROOT/case-001/"
 
 Copy the evaluator JSON into the round report and classify each failure as `product`, `harness`, `runner`, `case`, or `blocked`.
 - Rerun the template, consumer-reference, observed-lesson, overlap, and personal-convention cases after source/artifact/content contract changes.
+- Treat missing actionable knowledge content and unapproved elevated priority as review-needed unless the runner violated a boundary.

@@ -530,6 +530,114 @@ func TestEvaluateCaseFlagsPersonalConventionWithMissingContentAsReviewNeeded(t *
 	}
 }
 
+func TestEvaluateCaseFlagsPersonalConventionPlaceholderPackageAsReviewNeeded(t *testing.T) {
+	cases, err := LoadCases(authoringCasesPath)
+	if err != nil {
+		t.Fatalf("LoadCases returned error: %v", err)
+	}
+	workspace := t.TempDir()
+	writeAuthoringRegistry(t, workspace)
+	proposalPath := "knowledge/.inbox/proposals/personal-convention-placeholder/proposal.json"
+	candidatePath := "knowledge/.inbox/packages/backend/personal-convention-placeholder"
+	proposal := validAuthoringProposal(candidatePath)
+	proposal.UserRequest = "I have a personal convention for this project. Preserve it for future agents without making it global truth."
+	proposal.KnowledgeGoal = "Preserve a project-scoped draft record of the user's personal convention request without creating official or global knowledge."
+	proposal.Scope.Distribution = "personal"
+	proposal.Scope.Projects = []string{"mall-api"}
+	proposal.Scope.FileGlobs = []string{"**/*"}
+	proposal.SourceProfile.UserConfirmed = []string{
+		"The user has a personal convention for mall-api.",
+		"The convention should be preserved without becoming global truth.",
+	}
+	proposal.SourceProfile.Observed = nil
+	proposal.SourceProfile.Templates = nil
+	proposal.SourceProfile.Examples = nil
+	proposal.SourceProfile.Synthesized = []string{"Keep this as a draft reminder until the exact convention text is supplied."}
+	proposal.SourceProfile.Assumptions = []string{"The exact convention wording was not provided."}
+	proposal.SourceProfile.OpenQuestions = nil
+	proposal.SourceProfile.Claims = []author.SourceClaimV2{
+		{Claim: "The user has a personal convention for mall-api.", Kind: "fact", Trust: "user_confirmed", Source: []string{"user request"}},
+		{Claim: "The convention should not become global truth.", Kind: "decision", Trust: "user_confirmed", Source: []string{"user request"}},
+		{Claim: "The exact convention wording is missing and must be supplied before use.", Kind: "recommendation", Trust: "synthesized", Source: []string{"runner synthesis"}, RequiresReview: true},
+	}
+	proposal.ProposedShape.ID = "package:backend.personal-convention-placeholder.v1"
+	proposal.ProposedShape.Title = "Personal Convention Placeholder"
+	proposal.ProposedShape.Priority = "may"
+	proposal.FutureUse.TriggerRequests = []string{"I have a personal convention for this project."}
+	proposal.FutureUse.QueryPhrases = []string{"mall-api personal convention"}
+	proposal.FutureUse.ExpectedUse = "Retrieve as a reminder to ask for the missing convention wording before applying any rule."
+	proposal.FutureUse.MissingNeeds = []string{"Exact personal convention wording is missing."}
+	proposal.HumanReview.ReviewQuestions = []string{"What is the exact personal convention text? Needed before use."}
+	proposal.VerificationPlan.FindabilityScenarios = []author.FindabilityScenario{
+		{Project: "mall-api", Task: "Preserve a personal convention without making it global truth.", Query: "mall-api personal convention"},
+	}
+	writeAuthoringProposal(t, workspace, proposalPath, proposal)
+	writeCandidatePackage(t, workspace, candidatePath, "package:backend.personal-convention-placeholder.v1", "Personal Convention Placeholder")
+
+	report := validAuthoringReport("case-008", ResultPass, proposalPath, candidatePath)
+
+	evaluation, err := EvaluateCase(cases, "case-008", workspace, report)
+	if err != nil {
+		t.Fatalf("EvaluateCase returned error: %v", err)
+	}
+
+	if evaluation.Result != ResultReviewNeeded {
+		t.Fatalf("expected review-needed, got %#v", evaluation)
+	}
+	if !hasEvaluationFinding(evaluation, ResultReviewNeeded, "substantive content needs review") {
+		t.Fatalf("expected substantive content finding, got %#v", evaluation.Findings)
+	}
+}
+
+func TestEvaluateCaseFlagsUnauthorizedMustIntentAsReviewNeeded(t *testing.T) {
+	cases, err := LoadCases(authoringCasesPath)
+	if err != nil {
+		t.Fatalf("LoadCases returned error: %v", err)
+	}
+	workspace := t.TempDir()
+	writeAuthoringRegistry(t, workspace)
+	proposalPath := "knowledge/.inbox/proposals/must-follow-rule/proposal.json"
+	candidatePath := "knowledge/.inbox/packages/backend/must-follow-rule"
+	proposal := validAuthoringProposal(candidatePath)
+	proposal.UserRequest = "Create a must-follow engineering rule for future agents."
+	proposal.KnowledgeGoal = "Draft a candidate engineering rule while preserving the required human authorization boundary for must priority."
+	proposal.ProposedShape.ID = "package:backend.must-follow-rule.v1"
+	proposal.ProposedShape.Title = "Must-Follow Engineering Rule Candidate"
+	proposal.ProposedShape.Priority = "should"
+	proposal.SourceProfile.UserConfirmed = []string{
+		"The user requested a must-follow engineering rule.",
+		"Priority must is not authorized in this review boundary.",
+	}
+	proposal.SourceProfile.Synthesized = []string{"Keep the candidate as draft guidance until elevated priority is approved."}
+	proposal.SourceProfile.Assumptions = []string{"No project-specific source material was provided for the rule content."}
+	proposal.SourceProfile.Claims = []author.SourceClaimV2{
+		{Claim: "The request asks for must-follow priority.", Kind: "fact", Trust: "user_stated", Source: []string{"user request"}},
+		{Claim: "Priority must was not authorized.", Kind: "decision", Trust: "user_confirmed", Source: []string{"human review boundary"}},
+		{Claim: "Draft should-level candidate is safer than must priority.", Kind: "recommendation", Trust: "synthesized", Source: []string{"runner synthesis"}, RequiresReview: true},
+	}
+	proposal.FutureUse.TriggerRequests = []string{"Create a must-follow engineering rule for future agents."}
+	proposal.FutureUse.ExpectedUse = "Review this candidate only as draft guidance unless must priority is explicitly approved."
+	proposal.FutureUse.NegativeTriggers = []string{"Do not enforce as must without explicit authorization."}
+	proposal.HumanReview.ReviewQuestions = []string{"Should this candidate be elevated to priority must?"}
+	proposal.HumanReview.PriorityMustAuthorized = false
+	writeAuthoringProposal(t, workspace, proposalPath, proposal)
+	writeCandidatePackage(t, workspace, candidatePath, "package:backend.must-follow-rule.v1", "Must-Follow Engineering Rule Candidate")
+
+	report := validAuthoringReport("case-007", ResultPass, proposalPath, candidatePath)
+
+	evaluation, err := EvaluateCase(cases, "case-007", workspace, report)
+	if err != nil {
+		t.Fatalf("EvaluateCase returned error: %v", err)
+	}
+
+	if evaluation.Result != ResultReviewNeeded {
+		t.Fatalf("expected review-needed, got %#v", evaluation)
+	}
+	if !hasEvaluationFinding(evaluation, ResultReviewNeeded, "authorization needs review") {
+		t.Fatalf("expected authorization finding, got %#v", evaluation.Findings)
+	}
+}
+
 func TestEvaluateCaseUsesPublicDiagnosticCategories(t *testing.T) {
 	cases, err := LoadCases(authoringCasesPath)
 	if err != nil {
@@ -1086,6 +1194,8 @@ func TestAuthoringReportTemplateMatchesParserContract(t *testing.T) {
 		"Promotion not run:",
 		"Verification run:",
 		"Result:",
+		"Missing actionable knowledge content means `review-needed`.",
+		"Unauthorized elevated priority means `review-needed` unless a boundary was violated, which is `fail`.",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("report template missing %q:\n%s", want, text)
@@ -1159,6 +1269,9 @@ func TestAuthoringDogfoodChecklistDefinesFreshRunnerWorkflow(t *testing.T) {
 		"Start a fresh runner with `$ROUND_ROOT/packets/case-001.md`",
 		"Fresh runner saves the completed report at `$ROUND_ROOT/reports/case-001.md`.",
 		"authoring.proposal.v2",
+		"`proposal_scaffold` returned by `argos author inspect --json`",
+		"Use a review-only proposal when overlap, missing substantive content, or human approval blocks candidate writing.",
+		"Treat missing actionable knowledge content and unapproved elevated priority as review-needed unless the runner violated a boundary.",
 		"author verify --json --proposal <proposal-path> --path <candidate-path>",
 	} {
 		if !strings.Contains(text, want) {

@@ -428,6 +428,9 @@ func addPublicAuthoringDiagnostics(proposal author.ProposalV2, addReview func(st
 	if proposalHasMissingSubstantiveContent(proposal) {
 		addReview("substantive content needs review before this candidate is usable knowledge")
 	}
+	if proposalNeedsAuthorizationReview(proposal) {
+		addReview("authorization needs review: requested must-level priority is not authorized")
+	}
 }
 
 func proposalV2LooksReviewOnlyForDogfood(proposal author.ProposalV2) bool {
@@ -517,7 +520,8 @@ func hasAnySourceEvidence(proposal author.ProposalV2) bool {
 }
 
 func proposalHasMissingSubstantiveContent(proposal author.ProposalV2) bool {
-	return !hasSubstantiveAuthoringClaim(proposal) && hasNonEmptyString(proposal.SourceProfile.OpenQuestions)
+	return !hasSubstantiveAuthoringClaim(proposal) && hasNonEmptyString(proposal.SourceProfile.OpenQuestions) ||
+		proposalNamesMissingActionableContent(proposal)
 }
 
 func hasSubstantiveAuthoringClaim(proposal author.ProposalV2) bool {
@@ -547,6 +551,88 @@ func hasObservedClaimSource(proposal author.ProposalV2) bool {
 
 func priorityMustRequested(proposal author.ProposalV2) bool {
 	return proposal.ProposedShape.Priority == "must"
+}
+
+func proposalNeedsAuthorizationReview(proposal author.ProposalV2) bool {
+	if proposal.Delivery.PriorityMustAuthorized || proposal.HumanReview.PriorityMustAuthorized {
+		return false
+	}
+	return textSignalsMustPriority(proposal.UserRequest) ||
+		textSignalsMustPriority(proposal.KnowledgeGoal) ||
+		textSignalsMustPriority(proposal.ProposedShape.Title) ||
+		textSignalsMustPriority(proposal.ProposedShape.Priority) ||
+		anyTextSignalsMustPriority(proposal.SourceProfile.UserConfirmed) ||
+		anyClaimSignalsMustPriority(proposal.SourceProfile.Claims)
+}
+
+func proposalNamesMissingActionableContent(proposal author.ProposalV2) bool {
+	return anyTextSignalsMissingActionableContent(proposal.SourceProfile.OpenQuestions) ||
+		anyTextSignalsMissingActionableContent(proposal.SourceProfile.Assumptions) ||
+		anyTextSignalsMissingActionableContent(proposal.FutureUse.MissingNeeds) ||
+		anyTextSignalsMissingActionableContent(proposal.HumanReview.ReviewQuestions) ||
+		anyClaimSignalsMissingActionableContent(proposal.SourceProfile.Claims)
+}
+
+func anyTextSignalsMissingActionableContent(values []string) bool {
+	for _, value := range values {
+		if textSignalsMissingActionableContent(value) {
+			return true
+		}
+	}
+	return false
+}
+
+func anyClaimSignalsMissingActionableContent(claims []author.SourceClaimV2) bool {
+	for _, claim := range claims {
+		if textSignalsMissingActionableContent(claim.Claim) {
+			return true
+		}
+	}
+	return false
+}
+
+func textSignalsMissingActionableContent(value string) bool {
+	text := strings.ToLower(strings.TrimSpace(value))
+	if text == "" {
+		return false
+	}
+	missing := strings.Contains(text, "missing") ||
+		strings.Contains(text, "not provided") ||
+		strings.Contains(text, "not supplied") ||
+		strings.Contains(text, "needed before use")
+	specific := strings.Contains(text, "exact") ||
+		strings.Contains(text, "concrete") ||
+		strings.Contains(text, "wording") ||
+		strings.Contains(text, "convention text") ||
+		strings.Contains(text, "actionable")
+	return missing && specific
+}
+
+func anyTextSignalsMustPriority(values []string) bool {
+	for _, value := range values {
+		if textSignalsMustPriority(value) {
+			return true
+		}
+	}
+	return false
+}
+
+func anyClaimSignalsMustPriority(claims []author.SourceClaimV2) bool {
+	for _, claim := range claims {
+		if textSignalsMustPriority(claim.Claim) {
+			return true
+		}
+	}
+	return false
+}
+
+func textSignalsMustPriority(value string) bool {
+	text := strings.ToLower(strings.TrimSpace(value))
+	return strings.Contains(text, "must-follow") ||
+		strings.Contains(text, "must follow") ||
+		strings.Contains(text, "must-level") ||
+		strings.Contains(text, "priority must") ||
+		strings.Contains(text, "must priority")
 }
 
 func candidateWritten(proposal author.ProposalV2, report Report, candidatePath string) bool {
