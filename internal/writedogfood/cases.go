@@ -1,4 +1,4 @@
-package authoringdogfood
+package writedogfood
 
 import (
 	"encoding/json"
@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"argos/internal/knowledgewrite"
 )
 
 type CaseFile struct {
@@ -36,18 +38,18 @@ type Source struct {
 }
 
 type Approval struct {
-	ProposalApproved           bool     `json:"proposal_approved"`
-	CandidateWriteApproved     bool     `json:"candidate_write_approved"`
-	PriorityMustAuthorized     bool     `json:"priority_must_authorized"`
-	OfficialMutationAuthorized bool     `json:"official_mutation_authorized"`
-	PromoteAuthorized          bool     `json:"promote_authorized"`
-	Notes                      []string `json:"notes"`
+	DesignApproved        bool     `json:"design_approved"`
+	DraftWriteApproved    bool     `json:"draft_write_approved"`
+	PriorityMustApproved  bool     `json:"priority_must_approved"`
+	OfficialWriteApproved bool     `json:"official_write_approved"`
+	PublishApproved       bool     `json:"publish_approved"`
+	Notes                 []string `json:"notes"`
 }
 
 type Oracle struct {
 	ExpectedResult             string   `json:"expected_result"`
 	RequiredGuards             []string `json:"required_guards"`
-	RequiredProposalProperties []string `json:"required_proposal_properties"`
+	RequiredDesignProperties   []string `json:"required_design_properties"`
 	ForbiddenMutations         []string `json:"forbidden_mutations"`
 	RequiredEvidenceCategories []string `json:"required_evidence_categories"`
 }
@@ -62,7 +64,7 @@ type Summary struct {
 func LoadCases(path string) ([]Case, error) {
 	fileHandle, err := os.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("read authoring cases %q: %w", path, err)
+		return nil, fmt.Errorf("read write cases %q: %w", path, err)
 	}
 	defer fileHandle.Close()
 
@@ -70,17 +72,17 @@ func LoadCases(path string) ([]Case, error) {
 	decoder := json.NewDecoder(fileHandle)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&file); err != nil {
-		return nil, fmt.Errorf("parse authoring cases %q: %w", path, err)
+		return nil, fmt.Errorf("parse write cases %q: %w", path, err)
 	}
 	var extra struct{}
 	if err := decoder.Decode(&extra); err != io.EOF {
 		if err != nil {
-			return nil, fmt.Errorf("parse authoring cases %q: %w", path, err)
+			return nil, fmt.Errorf("parse write cases %q: %w", path, err)
 		}
-		return nil, fmt.Errorf("parse authoring cases %q: multiple JSON values", path)
+		return nil, fmt.Errorf("parse write cases %q: multiple JSON values", path)
 	}
 	if err := validateCaseFile(file); err != nil {
-		return nil, fmt.Errorf("validate authoring cases %q: %w", path, err)
+		return nil, fmt.Errorf("validate write cases %q: %w", path, err)
 	}
 	return file.Cases, nil
 }
@@ -99,14 +101,26 @@ func Summaries(cases []Case) []Summary {
 }
 
 func FindCase(cases []Case, id string) (Case, string, error) {
-	id = strings.TrimSpace(id)
-	for i, tc := range cases {
-		publicID := publicCaseID(i)
-		if id == publicID || id == tc.ID {
-			return tc, publicID, nil
+	tc, index, err := lookupWriteCase(cases, id)
+	if err != nil {
+		return Case{}, "", err
+	}
+	return tc, publicCaseID(index), nil
+}
+
+func designRequest(input Input) knowledgewrite.DesignRequest {
+	var files []string
+	for _, source := range input.AvailableSources {
+		if strings.TrimSpace(source.Path) != "" {
+			files = append(files, source.Path)
 		}
 	}
-	return Case{}, "", fmt.Errorf("unknown authoring case %q", id)
+	return knowledgewrite.DesignRequest{
+		Project: input.Project,
+		Intent:  input.UserRequest,
+		Files:   files,
+		Tags:    append([]string{}, input.ContextHints...),
+	}
 }
 
 func publicCaseID(index int) string {
@@ -125,16 +139,14 @@ func publicKind(kind string) string {
 		return "observed_lesson"
 	case "overlap_requires_choice":
 		return "overlap"
-	case "candidate_not_findable":
+	case "draft_not_findable":
 		return "findability"
-	// Keep the retired authz term split because an active-surface guard scans
-	// raw source text; JSON decoding still preserves the internal kind.
-	case "unauthorized_" + "author" + "ity":
+	case "unauthorized_scope":
 		return "authz"
 	case "personal_project_convention":
 		return "personal_convention"
 	default:
-		return "authoring"
+		return "write"
 	}
 }
 

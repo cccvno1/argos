@@ -1,4 +1,4 @@
-package authoringdogfood
+package writedogfood
 
 import (
 	"fmt"

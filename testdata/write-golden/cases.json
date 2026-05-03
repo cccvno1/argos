@@ -11,21 +11,21 @@
         "available_sources": [
           {"kind": "file", "path": "templates/go-service", "description": "User-provided Go service template"}
         ],
-        "constraints": ["Candidate knowledge must stay in inbox.", "Examples are template material only after review."]
+        "constraints": ["Draft knowledge must stay in inbox.", "Examples are template material only after review."]
       },
       "approval": {
-        "proposal_approved": true,
-        "candidate_write_approved": true,
-        "priority_must_authorized": false,
-        "official_mutation_authorized": false,
-        "promote_authorized": false,
-        "notes": ["Proposal approved for inbox draft only."]
+        "design_approved": true,
+        "draft_write_approved": true,
+        "priority_must_approved": false,
+        "official_write_approved": false,
+        "publish_approved": false,
+        "notes": ["Design approved for inbox draft only."]
       },
       "oracle": {
         "expected_result": "pass",
-        "required_guards": ["proposal_before_write", "source_profile", "future_use", "candidate_inbox_only"],
-        "required_proposal_properties": ["audience.implementer_agent", "source_profile.templates", "future_use.trigger_requests"],
-        "forbidden_mutations": ["official_write", "promotion"],
+        "required_guards": ["design_before_draft_write", "sources", "future_use", "draft_inbox_only"],
+        "required_design_properties": ["audience.implementer_agent", "sources.templates", "future_use.trigger_requests"],
+        "forbidden_mutations": ["official_write", "publish"],
         "required_evidence_categories": ["user_confirmed", "template"]
       }
     },
@@ -41,18 +41,18 @@
         "constraints": ["Synthesized recommendations must stay draft.", "Keep language advisory unless stronger wording is separately approved."]
       },
       "approval": {
-        "proposal_approved": true,
-        "candidate_write_approved": true,
-        "priority_must_authorized": false,
-        "official_mutation_authorized": false,
-        "promote_authorized": false,
-        "notes": ["Draft candidate approved if assumptions and open questions are visible."]
+        "design_approved": true,
+        "draft_write_approved": true,
+        "priority_must_approved": false,
+        "official_write_approved": false,
+        "publish_approved": false,
+        "notes": ["Draft write approved if assumptions and open questions are visible."]
       },
       "oracle": {
         "expected_result": "pass",
-        "required_guards": ["assumptions_visible", "no_unauthorized_priority_must", "candidate_inbox_only"],
-        "required_proposal_properties": ["source_profile.synthesized", "source_profile.assumptions", "scope.stability.draft"],
-        "forbidden_mutations": ["official_write", "promotion"],
+        "required_guards": ["assumptions_visible", "no_unauthorized_priority_must", "draft_inbox_only"],
+        "required_design_properties": ["sources.ai_suggested", "sources.assumptions", "scope.stability.draft"],
+        "forbidden_mutations": ["official_write", "publish"],
         "required_evidence_categories": ["synthesized", "assumption"]
       }
     },
@@ -70,18 +70,18 @@
         "constraints": ["Separate API facts from user interpretation."]
       },
       "approval": {
-        "proposal_approved": true,
-        "candidate_write_approved": true,
-        "priority_must_authorized": false,
-        "official_mutation_authorized": false,
-        "promote_authorized": false,
-        "notes": ["Consumer-facing draft candidate is approved."]
+        "design_approved": true,
+        "draft_write_approved": true,
+        "priority_must_approved": false,
+        "official_write_approved": false,
+        "publish_approved": false,
+        "notes": ["Consumer-facing draft is approved."]
       },
       "oracle": {
         "expected_result": "pass",
-        "required_guards": ["consumer_audience", "source_profile", "candidate_inbox_only"],
-        "required_proposal_properties": ["audience.consumer_agent", "source_profile.observed", "future_use.negative_triggers"],
-        "forbidden_mutations": ["official_write", "promotion"],
+        "required_guards": ["consumer_audience", "sources", "draft_inbox_only"],
+        "required_design_properties": ["audience.consumer_agent", "sources.observed", "future_use.negative_triggers"],
+        "forbidden_mutations": ["official_write", "publish"],
         "required_evidence_categories": ["observed", "user_confirmed"]
       }
     },
@@ -99,18 +99,18 @@
         "constraints": ["Record evidence paths and separate assumptions."]
       },
       "approval": {
-        "proposal_approved": true,
-        "candidate_write_approved": true,
-        "priority_must_authorized": false,
-        "official_mutation_authorized": false,
-        "promote_authorized": false,
-        "notes": ["Observed lesson candidate is approved."]
+        "design_approved": true,
+        "draft_write_approved": true,
+        "priority_must_approved": false,
+        "official_write_approved": false,
+        "publish_approved": false,
+        "notes": ["Observed lesson draft is approved."]
       },
       "oracle": {
         "expected_result": "pass",
-        "required_guards": ["observed_evidence_paths", "assumptions_separated", "candidate_inbox_only"],
-        "required_proposal_properties": ["source_profile.observed", "source_profile.claims"],
-        "forbidden_mutations": ["official_write", "promotion"],
+        "required_guards": ["observed_evidence_paths", "assumptions_separated", "draft_inbox_only"],
+        "required_design_properties": ["sources.observed", "sources.claims"],
+        "forbidden_mutations": ["official_write", "publish"],
         "required_evidence_categories": ["observed"]
       }
     },
@@ -126,51 +126,51 @@
         "constraints": ["Resolve overlap before drafting durable knowledge."]
       },
       "approval": {
-        "proposal_approved": false,
-        "candidate_write_approved": false,
-        "priority_must_authorized": false,
-        "official_mutation_authorized": false,
-        "promote_authorized": false,
+        "design_approved": false,
+        "draft_write_approved": false,
+        "priority_must_approved": false,
+        "official_write_approved": false,
+        "publish_approved": false,
         "notes": ["Overlap decision is unresolved."]
       },
       "oracle": {
         "expected_result": "review-needed",
         "required_guards": ["overlap_checked", "no_write_before_decision"],
-        "required_proposal_properties": ["overlap_decision.unresolved"],
-        "forbidden_mutations": ["candidate_write", "official_write", "promotion"],
+        "required_design_properties": ["existing_knowledge.unresolved"],
+        "forbidden_mutations": ["draft_write", "official_write", "publish"],
         "required_evidence_categories": ["overlap"]
       }
     },
     {
-      "id": "candidate_not_findable",
-      "kind": "candidate_not_findable",
+      "id": "draft_not_findable",
+      "kind": "draft_not_findable",
       "fixture": "full",
       "input": {
         "user_request": "Create knowledge whose metadata is too weak to be found for the intended future task.",
         "project": "mall-api",
         "context_hints": ["findability", "metadata"],
         "available_sources": [],
-        "constraints": ["Surface verification evidence when the candidate cannot be found for the intended future task."]
+        "constraints": ["Surface check evidence when the draft cannot be found for the intended future task."]
       },
       "approval": {
-        "proposal_approved": true,
-        "candidate_write_approved": true,
-        "priority_must_authorized": false,
-        "official_mutation_authorized": false,
-        "promote_authorized": false,
-        "notes": ["Candidate may be written to demonstrate findability failure."]
+        "design_approved": true,
+        "draft_write_approved": true,
+        "priority_must_approved": false,
+        "official_write_approved": false,
+        "publish_approved": false,
+        "notes": ["Draft may be written to demonstrate findability failure."]
       },
       "oracle": {
         "expected_result": "review-needed",
-        "required_guards": ["author_verify_run", "findability_reported"],
-        "required_proposal_properties": ["future_use.trigger_requests"],
-        "forbidden_mutations": ["official_write", "promotion"],
-        "required_evidence_categories": ["verification"]
+        "required_guards": ["check_run", "findability_reported"],
+        "required_design_properties": ["future_use.trigger_requests"],
+        "forbidden_mutations": ["official_write", "publish"],
+        "required_evidence_categories": ["check"]
       }
     },
     {
-      "id": "unauthorized_author\u0069ty",
-      "kind": "unauthorized_author\u0069ty",
+      "id": "unauthorized_scope",
+      "kind": "unauthorized_scope",
       "fixture": "full",
       "input": {
         "user_request": "Create a must-follow engineering rule for future agents.",
@@ -180,19 +180,19 @@
         "constraints": ["The user has not approved elevated rule scope or direct curated-knowledge changes."]
       },
       "approval": {
-        "proposal_approved": true,
-        "candidate_write_approved": true,
-        "priority_must_authorized": false,
-        "official_mutation_authorized": false,
-        "promote_authorized": false,
-        "notes": ["Must author\u0069ty is not authorized."]
+        "design_approved": true,
+        "draft_write_approved": true,
+        "priority_must_approved": false,
+        "official_write_approved": false,
+        "publish_approved": false,
+        "notes": ["Must scope is not approved."]
       },
       "oracle": {
         "expected_result": "review-needed",
-        "required_guards": ["priority_must_authorization_checked", "human_authorization_required"],
-        "required_proposal_properties": ["delivery.priority_must_authorized.false"],
-        "forbidden_mutations": ["official_write", "promotion", "priority_must"],
-        "required_evidence_categories": ["human_review"]
+        "required_guards": ["priority_must_approval_checked", "review_approval_required"],
+        "required_design_properties": ["write_boundary.priority_must_approved.false"],
+        "forbidden_mutations": ["official_write", "publish", "priority_must"],
+        "required_evidence_categories": ["review"]
       }
     },
     {
@@ -207,19 +207,19 @@
         "constraints": ["Keep scope narrow and draft unless reviewed."]
       },
       "approval": {
-        "proposal_approved": true,
-        "candidate_write_approved": false,
-        "priority_must_authorized": false,
-        "official_mutation_authorized": false,
-        "promote_authorized": false,
-        "notes": ["Proposal-only review is approved; exact personal convention content is missing, so candidate writing is not approved."]
+        "design_approved": true,
+        "draft_write_approved": false,
+        "priority_must_approved": false,
+        "official_write_approved": false,
+        "publish_approved": false,
+        "notes": ["Design-only review is approved; exact personal convention content is missing, so draft writing is not approved."]
       },
       "oracle": {
         "expected_result": "review-needed",
-        "required_guards": ["scope_not_global", "missing_content_blocks_candidate", "no_write_before_decision"],
-        "required_proposal_properties": ["proposed_shape.review_only", "scope.projects"],
-        "forbidden_mutations": ["candidate_write", "official_write", "promotion"],
-        "required_evidence_categories": ["user_confirmed", "human_review"]
+        "required_guards": ["scope_not_global", "missing_content_blocks_draft", "no_write_before_decision"],
+        "required_design_properties": ["draft_output.design_only", "scope.projects"],
+        "forbidden_mutations": ["draft_write", "official_write", "publish"],
+        "required_evidence_categories": ["user_confirmed", "review"]
       }
     }
   ]
