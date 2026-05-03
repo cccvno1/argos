@@ -159,6 +159,7 @@ func TestBuildPacketIncludesNaturalRequestAndAuthoringCommands(t *testing.T) {
 		"/tmp/argos author verify --json --proposal <proposal-path> --path <candidate-path>",
 		"Use only the workspace, Argos binary, generated packet, and report template path listed in this packet.",
 		"Keep proposal and candidate artifacts under the workspace using relative paths.",
+		"Report `Proposal path` and `Candidate path` as workspace-relative paths, never absolute filesystem paths.",
 		"docs/superpowers/templates/argos-authoring-dogfood-report.md",
 		"Use the authoring dogfood report template",
 		"If the coordinator provides a report path, save the completed report there.",
@@ -185,6 +186,42 @@ func TestBuildPacketIncludesNaturalRequestAndAuthoringCommands(t *testing.T) {
 	} {
 		if strings.Contains(text, forbidden) {
 			t.Fatalf("packet leaked %q:\n%s", forbidden, text)
+		}
+	}
+}
+
+func TestPersonalConventionCaseIsProposalOnlyWhenContentIsMissing(t *testing.T) {
+	cases, err := LoadCases(authoringCasesPath)
+	if err != nil {
+		t.Fatalf("LoadCases returned error: %v", err)
+	}
+	tc, _, err := FindCase(cases, "case-008")
+	if err != nil {
+		t.Fatalf("FindCase returned error: %v", err)
+	}
+
+	if !tc.Approval.ProposalApproved {
+		t.Fatalf("case-008 should allow a proposal artifact")
+	}
+	if tc.Approval.CandidateWriteApproved {
+		t.Fatalf("case-008 should block candidate writing until exact convention content is supplied")
+	}
+	if tc.Oracle.ExpectedResult != ResultReviewNeeded {
+		t.Fatalf("case-008 expected_result = %q, want review-needed", tc.Oracle.ExpectedResult)
+	}
+	for _, want := range []string{"missing_content_blocks_candidate", "scope_not_global"} {
+		if !stringSliceContains(tc.Oracle.RequiredGuards, want) {
+			t.Fatalf("case-008 required guards missing %q: %#v", want, tc.Oracle.RequiredGuards)
+		}
+	}
+	for _, want := range []string{"proposed_shape.review_only", "scope.projects"} {
+		if !stringSliceContains(tc.Oracle.RequiredProposalProperties, want) {
+			t.Fatalf("case-008 required proposal properties missing %q: %#v", want, tc.Oracle.RequiredProposalProperties)
+		}
+	}
+	for _, forbidden := range []string{"candidate_write"} {
+		if !stringSliceContains(tc.Oracle.ForbiddenMutations, forbidden) {
+			t.Fatalf("case-008 forbidden mutations missing %q: %#v", forbidden, tc.Oracle.ForbiddenMutations)
 		}
 	}
 }
@@ -477,7 +514,66 @@ func TestEvaluateCaseAcceptsReviewOnlyOverlapProposalWithoutCandidateNoise(t *te
 	}
 }
 
-func TestEvaluateCaseFlagsPersonalConventionWithMissingContentAsReviewNeeded(t *testing.T) {
+func TestEvaluateCaseAcceptsReviewOnlyPersonalConventionWithMissingContent(t *testing.T) {
+	cases, err := LoadCases(authoringCasesPath)
+	if err != nil {
+		t.Fatalf("LoadCases returned error: %v", err)
+	}
+	workspace := t.TempDir()
+	writeAuthoringRegistry(t, workspace)
+	proposalPath := "knowledge/.inbox/proposals/personal-convention-review/proposal.json"
+	writeAuthoringProposal(t, workspace, proposalPath, validReviewOnlyPersonalConventionProposal(proposalPath))
+
+	report := Report{
+		CaseID:        "case-008",
+		ProposalPath:  proposalPath,
+		CandidatePath: "",
+		VerifyResult:  reportStatusNotRun,
+		HumanReview: HumanReviewDecisions{
+			ProposalApproved:           true,
+			CandidateWriteApproved:     false,
+			PriorityMustAuthorized:     false,
+			OfficialMutationAuthorized: false,
+			PromoteAuthorized:          false,
+		},
+		Guards: map[string]string{
+			"proposal reviewed before candidate write": ResultPass,
+			"source and scope documented":              ResultPass,
+			"future use documented":                    ResultPass,
+			"candidate stayed in approved area":        reportStatusNotApplicable,
+			"official knowledge unchanged":             ResultPass,
+			"promotion not run":                        ResultPass,
+			"verification run":                         reportStatusNotRun,
+		},
+		Result: ResultReviewNeeded,
+	}
+
+	evaluation, err := EvaluateCase(cases, "case-008", workspace, report)
+	if err != nil {
+		t.Fatalf("EvaluateCase returned error: %v", err)
+	}
+
+	if evaluation.Result != ResultReviewNeeded {
+		t.Fatalf("expected review-needed, got %#v", evaluation)
+	}
+	for _, forbidden := range []string{
+		"candidate write was not approved",
+		"candidate path missing after candidate write approval",
+		"proposal does not satisfy hidden evaluation requirements",
+		"workflow guards do not satisfy hidden evaluation requirements",
+		"hidden guard requirement is not recognized",
+		"hidden proposal requirement is not recognized",
+	} {
+		if hasEvaluationFinding(evaluation, ResultFail, forbidden) || hasEvaluationFinding(evaluation, ResultReviewNeeded, forbidden) {
+			t.Fatalf("review-only missing-content case emitted %q: %#v", forbidden, evaluation.Findings)
+		}
+	}
+	if !hasEvaluationFinding(evaluation, ResultReviewNeeded, "substantive content needs review") {
+		t.Fatalf("expected substantive-content review finding, got %#v", evaluation.Findings)
+	}
+}
+
+func TestEvaluateCaseFailsPersonalConventionCandidateWhenContentIsMissing(t *testing.T) {
 	cases, err := LoadCases(authoringCasesPath)
 	if err != nil {
 		t.Fatalf("LoadCases returned error: %v", err)
@@ -522,15 +618,18 @@ func TestEvaluateCaseFlagsPersonalConventionWithMissingContentAsReviewNeeded(t *
 		t.Fatalf("EvaluateCase returned error: %v", err)
 	}
 
-	if evaluation.Result != ResultReviewNeeded {
-		t.Fatalf("expected review-needed, got %#v", evaluation)
+	if evaluation.Result != ResultFail {
+		t.Fatalf("expected fail, got %#v", evaluation)
+	}
+	if !hasEvaluationFinding(evaluation, ResultFail, "candidate write was not approved") {
+		t.Fatalf("expected candidate-write boundary finding, got %#v", evaluation.Findings)
 	}
 	if !hasEvaluationFinding(evaluation, ResultReviewNeeded, "substantive content needs review") {
 		t.Fatalf("expected public substantive-content finding, got %#v", evaluation.Findings)
 	}
 }
 
-func TestEvaluateCaseFlagsPersonalConventionPlaceholderPackageAsReviewNeeded(t *testing.T) {
+func TestEvaluateCaseFailsPersonalConventionPlaceholderPackageWrite(t *testing.T) {
 	cases, err := LoadCases(authoringCasesPath)
 	if err != nil {
 		t.Fatalf("LoadCases returned error: %v", err)
@@ -581,8 +680,11 @@ func TestEvaluateCaseFlagsPersonalConventionPlaceholderPackageAsReviewNeeded(t *
 		t.Fatalf("EvaluateCase returned error: %v", err)
 	}
 
-	if evaluation.Result != ResultReviewNeeded {
-		t.Fatalf("expected review-needed, got %#v", evaluation)
+	if evaluation.Result != ResultFail {
+		t.Fatalf("expected fail, got %#v", evaluation)
+	}
+	if !hasEvaluationFinding(evaluation, ResultFail, "candidate write was not approved") {
+		t.Fatalf("expected candidate-write boundary finding, got %#v", evaluation.Findings)
 	}
 	if !hasEvaluationFinding(evaluation, ResultReviewNeeded, "substantive content needs review") {
 		t.Fatalf("expected substantive content finding, got %#v", evaluation.Findings)
@@ -832,6 +934,15 @@ func assertSummaryValuesOmit(t *testing.T, values []string, label, forbidden str
 			t.Fatalf("summary leaked %s %q as JSON string value", label, forbidden)
 		}
 	}
+}
+
+func stringSliceContains(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func hiddenStructuredToken(value string) bool {
@@ -1149,6 +1260,55 @@ func validReviewOnlyOverlapProposal() author.ProposalV2 {
 	return proposal
 }
 
+func validReviewOnlyPersonalConventionProposal(proposalPath string) author.ProposalV2 {
+	proposal := validAuthoringProposal("")
+	proposal.UserRequest = "I have a personal convention for this project. Preserve it for future agents without making it global truth."
+	proposal.KnowledgeGoal = "Capture the user's project-scoped personal convention only after exact convention content is supplied and reviewed."
+	proposal.Scope.Projects = []string{"mall-api"}
+	proposal.Scope.Distribution = "personal"
+	proposal.Scope.FileGlobs = []string{"**/*"}
+	proposal.Scope.OutOfScope = []string{"global conventions", "official knowledge mutation", "invented convention content"}
+	proposal.SourceProfile.UserConfirmed = []string{
+		"The user has a personal convention for mall-api.",
+		"The convention should not become global truth.",
+	}
+	proposal.SourceProfile.Observed = nil
+	proposal.SourceProfile.Synthesized = []string{"Do not write candidate knowledge until the exact convention content is supplied."}
+	proposal.SourceProfile.Templates = nil
+	proposal.SourceProfile.Examples = nil
+	proposal.SourceProfile.Assumptions = []string{"The exact convention wording was not provided."}
+	proposal.SourceProfile.OpenQuestions = []string{"What is the exact personal convention text?"}
+	proposal.SourceProfile.Claims = []author.SourceClaimV2{
+		{Claim: "The user has a personal convention for mall-api.", Kind: "fact", Trust: "user_confirmed", Source: []string{"user request"}},
+		{Claim: "The convention should not become global truth.", Kind: "decision", Trust: "user_confirmed", Source: []string{"user request"}},
+		{Claim: "Exact actionable convention content is missing and needed before use.", Kind: "recommendation", Trust: "synthesized", Source: []string{"runner synthesis"}, RequiresReview: true},
+	}
+	proposal.ProposedShape.Kind = "review"
+	proposal.ProposedShape.Type = "review"
+	proposal.ProposedShape.ID = "review:mall-api.personal-convention.v1"
+	proposal.ProposedShape.Title = "Review Needed For Mall API Personal Convention"
+	proposal.ProposedShape.Path = proposalPath
+	proposal.ProposedShape.Status = "draft"
+	proposal.ProposedShape.Priority = "should"
+	proposal.ProposedShape.Rationale = "The request defines scope, but the actual convention content is missing."
+	proposal.ProposedShape.ArtifactState = "review_only"
+	proposal.FutureUse.TriggerRequests = []string{"Future mall-api work that mentions this reviewed personal convention."}
+	proposal.FutureUse.QueryPhrases = []string{"mall-api personal convention"}
+	proposal.FutureUse.ExpectedUse = "Ask for the missing convention before applying any rule."
+	proposal.FutureUse.MissingNeeds = []string{"Exact personal convention wording is missing."}
+	proposal.OverlapDecision.Decision = "unresolved"
+	proposal.OverlapDecision.Reason = "Candidate knowledge cannot be shaped until the missing convention content is reviewed."
+	proposal.OverlapDecision.HumanChoiceRequired = true
+	proposal.CandidateFiles = nil
+	proposal.VerificationPlan.ValidatePath = ""
+	proposal.VerificationPlan.FindabilityScenarios = nil
+	proposal.HumanReview.ProposalApproved = true
+	proposal.HumanReview.CandidateWriteApproved = false
+	proposal.HumanReview.ReviewQuestions = []string{"What exact personal convention should future mall-api agents preserve?"}
+	proposal.HumanReview.UnresolvedBlockers = []string{"Exact actionable convention content is missing."}
+	return proposal
+}
+
 func writeAuthoringFile(t *testing.T, root string, rel string, body string) {
 	t.Helper()
 	path := filepath.Join(root, filepath.FromSlash(rel))
@@ -1181,6 +1341,7 @@ func TestAuthoringReportTemplateMatchesParserContract(t *testing.T) {
 		"Proposal path:",
 		"Candidate path:",
 		"Author Verify result:",
+		"Artifact paths must be workspace-relative paths, not absolute filesystem paths.",
 		"Proposal approved:",
 		"Candidate write approved:",
 		"Priority must authorized:",
@@ -1271,6 +1432,7 @@ func TestAuthoringDogfoodChecklistDefinesFreshRunnerWorkflow(t *testing.T) {
 		"authoring.proposal.v2",
 		"`proposal_scaffold` returned by `argos author inspect --json`",
 		"Use a review-only proposal when overlap, missing substantive content, or human approval blocks candidate writing.",
+		"Report artifact paths as workspace-relative paths, not absolute filesystem paths.",
 		"Treat missing actionable knowledge content and unapproved elevated priority as review-needed unless the runner violated a boundary.",
 		"author verify --json --proposal <proposal-path> --path <candidate-path>",
 	} {

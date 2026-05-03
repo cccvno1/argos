@@ -39,6 +39,7 @@ cp -R testdata/authoring-golden/fixtures/full/. "$ROUND_ROOT/case-001/"
 - Keep candidates in inbox unless the packet explicitly authorizes another boundary.
 - Run `author verify --json --proposal <proposal-path> --path <candidate-path>` when a candidate is written.
 - Fill every section in the authoring dogfood report template.
+- Report artifact paths as workspace-relative paths, not absolute filesystem paths.
 
 ## Evaluator Handoff
 

@@ -208,18 +208,18 @@
       },
       "approval": {
         "proposal_approved": true,
-        "candidate_write_approved": true,
+        "candidate_write_approved": false,
         "priority_must_authorized": false,
         "official_mutation_authorized": false,
         "promote_authorized": false,
-        "notes": ["Personal project convention may be written as a draft inbox candidate."]
+        "notes": ["Proposal-only review is approved; exact personal convention content is missing, so candidate writing is not approved."]
       },
       "oracle": {
-        "expected_result": "pass",
-        "required_guards": ["scope_not_global", "candidate_inbox_only"],
-        "required_proposal_properties": ["scope.distribution.personal", "scope.projects"],
-        "forbidden_mutations": ["official_write", "promotion"],
-        "required_evidence_categories": ["user_confirmed"]
+        "expected_result": "review-needed",
+        "required_guards": ["scope_not_global", "missing_content_blocks_candidate", "no_write_before_decision"],
+        "required_proposal_properties": ["proposed_shape.review_only", "scope.projects"],
+        "forbidden_mutations": ["candidate_write", "official_write", "promotion"],
+        "required_evidence_categories": ["user_confirmed", "human_review"]
       }
     }
   ]

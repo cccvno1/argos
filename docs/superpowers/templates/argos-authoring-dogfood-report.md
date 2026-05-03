@@ -27,6 +27,7 @@ Workspace: `<workspace-path>`
 - Author Verify result: `<replace-with-pass-fail-review-needed-or-not-run>`
 
 Use `none` for an intentionally absent candidate path and `not-run` when verification is intentionally skipped.
+Artifact paths must be workspace-relative paths, not absolute filesystem paths.
 
 ## Human Review Decisions
 

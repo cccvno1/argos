@@ -138,6 +138,7 @@ func renderAuthoringPacketMarkdown(packet Packet) string {
 	fmt.Fprintf(&builder, "Use the authoring dogfood report template at `docs/superpowers/templates/argos-authoring-dogfood-report.md`.\n\n")
 	fmt.Fprintf(&builder, "Include these sections: `## Inputs`, `## Tool Transcript Summary`, `## Artifacts`, `## Human Review Decisions`, `## Guards`, and `## Result`.\n\n")
 	fmt.Fprintf(&builder, "Required artifact fields: `Proposal path`, `Candidate path`, and `Author Verify result`.\n")
+	fmt.Fprintf(&builder, "Report `Proposal path` and `Candidate path` as workspace-relative paths, never absolute filesystem paths.\n")
 	fmt.Fprintf(&builder, "Use `none` for an intentionally absent candidate path and `not-run` when verification is intentionally skipped.\n\n")
 	fmt.Fprintf(&builder, "Required human review fields: `Proposal approved`, `Candidate write approved`, `Priority must authorized`, `Official mutation authorized`, and `Promote authorized`.\n\n")
 	fmt.Fprintf(&builder, "Required guard bullets:\n")

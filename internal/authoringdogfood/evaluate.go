@@ -307,6 +307,8 @@ func proposalSatisfiesHiddenProperty(proposal author.ProposalV2, property string
 		return proposal.Scope.Distribution == "personal", true
 	case "scope.projects":
 		return hasNonEmptyString(proposal.Scope.Projects), true
+	case "proposed_shape.review_only":
+		return proposalV2LooksReviewOnlyForDogfood(proposal), true
 	default:
 		return false, false
 	}
@@ -371,6 +373,8 @@ func workflowSatisfiesHiddenGuard(tc Case, proposal author.ProposalV2, report Re
 		return proposal.Delivery.WriteRequiresHumanApproval && hasNonEmptyString(proposal.HumanReview.ReviewQuestions), true
 	case "scope_not_global":
 		return proposal.Scope.Distribution != "" && proposal.Scope.Distribution != "organization" && proposal.Scope.Distribution != "public_consumer", true
+	case "missing_content_blocks_candidate":
+		return proposalHasMissingSubstantiveContent(proposal) && !candidateWritten(proposal, report, candidatePath), true
 	default:
 		return false, false
 	}
