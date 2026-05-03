@@ -429,8 +429,6 @@ func requestLooksMissingSubstantiveContent(req InspectRequest) bool {
 
 func requestHasConcreteConventionDetails(text string) bool {
 	for _, marker := range []string{
-		"personal convention:",
-		"project convention:",
 		"put ",
 		"use ",
 		"under ",

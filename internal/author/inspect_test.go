@@ -332,6 +332,33 @@ func TestInspectUsesReviewOnlyPacketWhenPersonalConventionContentIsMissing(t *te
 	}
 }
 
+func TestInspectUsesReviewOnlyWhenConventionLabelHasNoContent(t *testing.T) {
+	root := t.TempDir()
+	writeAuthorRegistry(t, root)
+
+	result, err := Inspect(root, InspectRequest{
+		Project: "mall-api",
+		Goal:    "Personal convention: Preserve it for future agents.",
+		Tags:    []string{"personal", "project-convention"},
+	})
+	if err != nil {
+		t.Fatalf("Inspect returned error: %v", err)
+	}
+
+	proposal := result.ProposalScaffold
+	if proposal.ProposedShape.ArtifactState != "review_only" {
+		t.Fatalf("artifact_state = %q, want review_only: %#v", proposal.ProposedShape.ArtifactState, proposal.ProposedShape)
+	}
+
+	packet := result.AuthoringPacket
+	if packet.State != "review_only" {
+		t.Fatalf("packet state = %q, want review_only: %#v", packet.State, packet)
+	}
+	if !containsText(packet.HumanReviewQuestions, "What exact convention should future agents preserve?") {
+		t.Fatalf("packet should ask for exact convention content: %#v", packet.HumanReviewQuestions)
+	}
+}
+
 func TestInspectKeepsConcretePersonalConventionCandidate(t *testing.T) {
 	root := t.TempDir()
 	writeAuthorRegistry(t, root)
