@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"argos/internal/index"
+	"argos/internal/knowledgewrite"
 	"argos/internal/query"
 )
 
@@ -18,6 +19,7 @@ const maxFrameSize = 1024 * 1024
 var errFrameTooLarge = errors.New("mcp frame too large")
 
 type Server struct {
+	root    string
 	service *query.Service
 	store   *index.Store
 }
@@ -83,11 +85,16 @@ func NewServer(service *query.Service) *Server {
 	return &Server{service: service}
 }
 
-func NewServerWithStore(store *index.Store) *Server {
+func NewServerWithRoot(root string, store *index.Store) *Server {
 	return &Server{
+		root:    strings.TrimSpace(root),
 		service: query.New(store),
 		store:   store,
 	}
+}
+
+func NewServerWithStore(store *index.Store) *Server {
+	return NewServerWithRoot("", store)
 }
 
 func (s *Server) Serve(stdin io.Reader, stdout io.Writer) error {
@@ -352,6 +359,40 @@ func (s *Server) callTool(data json.RawMessage) (toolCallResult, *rpcError, erro
 		}
 		result, err := textResult(s.service.CiteKnowledge(req.IDs))
 		return result, nil, err
+	case "argos_design_knowledge":
+		var req knowledgewrite.DesignRequest
+		if err := decodeArgs(params.Arguments, &req); err != nil {
+			return textToolError("invalid arguments for argos_design_knowledge: " + err.Error()), nil, nil
+		}
+		if err := requireStringFields(map[string]string{"project": req.Project, "intent": req.Intent}, "project", "intent"); err != nil {
+			return textToolError("invalid arguments for argos_design_knowledge: " + err.Error()), nil, nil
+		}
+		if strings.TrimSpace(s.root) == "" {
+			return textToolError("workspace root not available"), nil, nil
+		}
+		resp, err := knowledgewrite.Design(s.root, req)
+		if err != nil {
+			return textToolError("design knowledge: " + err.Error()), nil, nil
+		}
+		result, err := textResult(resp)
+		return result, nil, err
+	case "argos_check_knowledge":
+		var req knowledgewrite.CheckRequest
+		if err := decodeArgs(params.Arguments, &req); err != nil {
+			return textToolError("invalid arguments for argos_check_knowledge: " + err.Error()), nil, nil
+		}
+		if err := requireStringFields(map[string]string{"design": req.DesignPath, "draft": req.DraftPath}, "design", "draft"); err != nil {
+			return textToolError("invalid arguments for argos_check_knowledge: " + err.Error()), nil, nil
+		}
+		if strings.TrimSpace(s.root) == "" {
+			return textToolError("workspace root not available"), nil, nil
+		}
+		resp, err := knowledgewrite.Check(s.root, req)
+		if err != nil {
+			return textToolError("check knowledge: " + err.Error()), nil, nil
+		}
+		result, err := textResult(resp)
+		return result, nil, err
 	default:
 		return toolCallResult{}, invalidParams("unknown tool: " + params.Name), nil
 	}
@@ -487,6 +528,29 @@ func tools() []tool {
 			InputSchema: objectSchema(map[string]any{
 				"ids": stringArrayProperty("Knowledge item ids to cite."),
 			}, []string{"ids"}),
+		},
+		{
+			Name:        "argos_design_knowledge",
+			Description: "Design durable knowledge before draft writing.",
+			InputSchema: objectSchema(map[string]any{
+				"project":     stringProperty("Project identifier."),
+				"intent":      stringProperty("Durable knowledge intent requested by the user."),
+				"future_task": stringProperty("Future task this knowledge should support."),
+				"phase":       stringProperty("Workflow phase."),
+				"query":       stringProperty("Search query for related knowledge."),
+				"files":       stringArrayProperty("Files relevant to the knowledge design."),
+				"domains":     stringArrayProperty("Domains relevant to the knowledge design."),
+				"tags":        stringArrayProperty("Tags relevant to the knowledge design."),
+				"draft_path":  stringProperty("Proposed draft knowledge path."),
+			}, []string{"project", "intent"}),
+		},
+		{
+			Name:        "argos_check_knowledge",
+			Description: "Check draft knowledge against its reviewed design.",
+			InputSchema: objectSchema(map[string]any{
+				"design": stringProperty("Path to the knowledge design JSON."),
+				"draft":  stringProperty("Path to the draft knowledge file or directory."),
+			}, []string{"design", "draft"}),
 		},
 	}
 }

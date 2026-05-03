@@ -122,6 +122,14 @@ Do not let Argos replace host workflow, safety, or user instructions.
 14. Do not cite missing_needs; they are unsupported needs, not knowledge items.
 15. Do not start upload, capture, or inbox creation from find results alone.
 16. Semantic search status never overrides usage guidance.
+17. Use argos_design_knowledge when the user explicitly asks to create durable knowledge.
+18. Do not write draft knowledge from query results alone.
+19. Write a knowledge design before draft knowledge.
+20. Separate user input, observed facts, imported material, AI suggestions, assumptions, and open questions.
+21. Write draft knowledge only after review approves draft writing.
+22. Run argos_check_knowledge after writing draft knowledge.
+23. Publish only after explicit user authorization.
+24. After publishing, rebuild the index and confirm the knowledge is findable.
 
 ## Boundaries
 

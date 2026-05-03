@@ -12,6 +12,7 @@ import (
 	"argos/internal/index"
 	"argos/internal/knowledge"
 	"argos/internal/query"
+	"argos/internal/workspace"
 )
 
 type testResponse struct {
@@ -53,6 +54,8 @@ func TestServerHandlesToolsList(t *testing.T) {
 		"argos_list_knowledge",
 		"argos_read_knowledge",
 		"argos_cite_knowledge",
+		"argos_design_knowledge",
+		"argos_check_knowledge",
 	} {
 		assertToolListed(t, result.Tools, name)
 	}
@@ -109,6 +112,71 @@ func TestToolsListIncludesConcreteSchemasForImplementedTools(t *testing.T) {
 	assertToolSchemaHasProperties(t, result.Tools, "argos_cite_knowledge", []string{"ids"})
 	assertToolSchemaRequired(t, result.Tools, "argos_cite_knowledge", []string{"ids"})
 	assertToolSchemaDisallowsAdditionalProperties(t, result.Tools, "argos_cite_knowledge")
+
+	assertToolSchemaHasProperties(t, result.Tools, "argos_design_knowledge", []string{"project", "intent", "future_task", "phase", "query", "files", "domains", "tags", "draft_path"})
+	assertToolSchemaRequired(t, result.Tools, "argos_design_knowledge", []string{"project", "intent"})
+	assertToolSchemaDisallowsAdditionalProperties(t, result.Tools, "argos_design_knowledge")
+
+	assertToolSchemaHasProperties(t, result.Tools, "argos_check_knowledge", []string{"design", "draft"})
+	assertToolSchemaRequired(t, result.Tools, "argos_check_knowledge", []string{"design", "draft"})
+	assertToolSchemaDisallowsAdditionalProperties(t, result.Tools, "argos_check_knowledge")
+}
+
+func TestToolListIncludesKnowledgeWriteTools(t *testing.T) {
+	server := NewServerWithRoot(t.TempDir(), nil)
+	var out bytes.Buffer
+	err := server.HandleLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`), &out)
+	if err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+	var decoded struct {
+		Result struct {
+			Tools []struct {
+				Name string `json:"name"`
+			} `json:"tools"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &decoded); err != nil {
+		t.Fatalf("parse response: %v\n%s", err, out.String())
+	}
+	names := map[string]bool{}
+	for _, tool := range decoded.Result.Tools {
+		names[tool.Name] = true
+	}
+	for _, want := range []string{"argos_design_knowledge", "argos_check_knowledge"} {
+		if !names[want] {
+			t.Fatalf("missing tool %s in %#v", want, names)
+		}
+	}
+}
+
+func TestToolCallArgosDesignKnowledgeReturnsWriteGuidance(t *testing.T) {
+	root := t.TempDir()
+	if err := workspace.Init(root); err != nil {
+		t.Fatalf("init workspace: %v", err)
+	}
+	server := NewServerWithRoot(root, nil)
+	var out bytes.Buffer
+	line := []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_design_knowledge","arguments":{"project":"mall-api","intent":"Create Redis cache best practices for future backend agents."}}}`)
+	if err := server.HandleLine(line, &out); err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+	text := toolTextResult(t, out.Bytes())
+	if !strings.Contains(text, `"write_guidance"`) || !strings.Contains(text, `"knowledge_design_template"`) {
+		t.Fatalf("missing write response fields: %s", text)
+	}
+	assertNoRemovedWriteTerms(t, text)
+}
+
+func TestToolCallArgosDesignKnowledgeRejectsUnknownFields(t *testing.T) {
+	server := NewServerWithRoot(t.TempDir(), nil)
+	var out bytes.Buffer
+	unknownField := strings.Join([]string{"proposal", "scaffold"}, "_")
+	line := []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_design_knowledge","arguments":{"project":"mall-api","intent":"x","` + unknownField + `":true}}}`)
+	if err := server.HandleLine(line, &out); err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+	assertToolErrorContains(t, out.Bytes(), "invalid arguments for argos_design_knowledge")
 }
 
 func TestToolCallUnknownToolReturnsInvalidParams(t *testing.T) {
@@ -1000,6 +1068,19 @@ func firstContentText(t *testing.T, result map[string]any) string {
 	return text
 }
 
+func toolTextResult(t *testing.T, body []byte) string {
+	t.Helper()
+	resp := decodeRPCResponse(t, body)
+	if resp.Error != nil {
+		t.Fatalf("unexpected rpc error: %#v", resp.Error)
+	}
+	result := resultMap(t, resp)
+	if result["isError"] == true {
+		t.Fatalf("unexpected tool error: %#v", result)
+	}
+	return firstContentText(t, result)
+}
+
 func assertToolErrorContains(t *testing.T, body []byte, want string) {
 	t.Helper()
 
@@ -1014,6 +1095,25 @@ func assertToolErrorContains(t *testing.T, body []byte, want string) {
 	text := firstContentText(t, result)
 	if !strings.Contains(text, want) {
 		t.Fatalf("expected tool error text to contain %q, got %q", want, text)
+	}
+}
+
+func assertNoRemovedWriteTerms(t *testing.T, body string) {
+	t.Helper()
+
+	for _, forbidden := range removedWriteTerms() {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("response contains removed write term %q:\n%s", forbidden, body)
+		}
+	}
+}
+
+func removedWriteTerms() []string {
+	return []string{
+		strings.Join([]string{"authoring", "packet"}, "_"),
+		strings.Join([]string{"proposal", "scaffold"}, "_"),
+		strings.Join([]string{"argos", "author", "inspect"}, " "),
+		strings.Join([]string{"argos", "author", "verify"}, " "),
 	}
 }
 

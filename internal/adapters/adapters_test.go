@@ -99,6 +99,31 @@ func TestRenderedAdaptersDoNotAdvertiseUnimplementedWorkflowTools(t *testing.T) 
 	}
 }
 
+func TestRenderAdaptersIncludeKnowledgeWriteProtocol(t *testing.T) {
+	project := registry.Project{ID: "mall-api", Name: "Mall API"}
+	body := RenderAGENTS(project)
+	for _, want := range []string{
+		"Use argos_design_knowledge when the user explicitly asks to create durable knowledge.",
+		"Do not write draft knowledge from query results alone.",
+		"Run argos_check_knowledge after writing draft knowledge.",
+		"Publish only after explicit user authorization.",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("adapter missing %q:\n%s", want, body)
+		}
+	}
+	for _, forbidden := range []string{
+		strings.Join([]string{"authoring", "packet"}, "_"),
+		strings.Join([]string{"proposal", "scaffold"}, "_"),
+		strings.Join([]string{"argos", "author", "inspect"}, " "),
+		strings.Join([]string{"argos", "author", "verify"}, " "),
+	} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("adapter contains removed write term %q:\n%s", forbidden, body)
+		}
+	}
+}
+
 func TestGeneratedAdaptersDoNotRecommendDirectStorageQueries(t *testing.T) {
 	root := t.TempDir()
 	projects := []registry.Project{{

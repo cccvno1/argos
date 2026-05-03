@@ -814,18 +814,18 @@ func openMCPServer(root string) (*mcp.Server, func(), bool) {
 	dbPath := filepath.Join(root, "argos", "index.db")
 	info, err := os.Stat(dbPath)
 	if err != nil || !info.Mode().IsRegular() {
-		return mcp.NewServer(query.New(nil)), func() {}, false
+		return mcp.NewServerWithRoot(root, nil), func() {}, false
 	}
 
 	store, err := index.Open(dbPath)
 	if err != nil {
-		return mcp.NewServer(query.New(nil)), func() {}, false
+		return mcp.NewServerWithRoot(root, nil), func() {}, false
 	}
 	if err := store.CheckSchema(); err != nil {
 		_ = store.Close()
-		return mcp.NewServer(query.New(nil)), func() {}, false
+		return mcp.NewServerWithRoot(root, nil), func() {}, false
 	}
-	return mcp.NewServerWithStore(store), func() {
+	return mcp.NewServerWithRoot(root, store), func() {
 		_ = store.Close()
 	}, true
 }
