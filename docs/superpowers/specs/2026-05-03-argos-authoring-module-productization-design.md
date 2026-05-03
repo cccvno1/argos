@@ -43,7 +43,7 @@ The write side already has the core pieces:
 
 The remaining gap is product shape. Public names still expose too much internal
 review vocabulary, the AI-facing entrypoints are CLI-oriented, and the harness
-does not yet enforce the inspect packet as the public behavior contract.
+does not yet enforce write guidance as the public behavior contract.
 
 ## Decision
 
@@ -56,8 +56,7 @@ intent -> knowledge_design -> draft_knowledge -> check -> publish
 The public AI-facing vocabulary must use this pipeline consistently in CLI JSON,
 MCP tools, adapter guidance, dogfood packets, report templates, and docs.
 
-Keep existing `internal/author` implementation boundaries where they remain
-useful, but treat old public names as migration details:
+Replace old public authoring names directly:
 
 - `authoring_packet`
 - `proposal_scaffold`
@@ -71,11 +70,11 @@ useful, but treat old public names as migration details:
 - `human_review`
 - `artifact_state`
 
-Because the project is not in production, this slice may make breaking public
-JSON changes when they reduce long-term cognitive cost. The old CLI verbs may
-remain as command aliases for local convenience, but they must return the same
-new public JSON as the canonical commands. New docs, MCP schemas, adapters, and
-dogfood assets must use the new vocabulary.
+Because the project is not in production, there is no migration or compatibility
+requirement for the old public vocabulary. The first-release public surface
+should expose only the new vocabulary. Internal Go package names may change in
+the same slice or in small mechanical follow-ups, but no public JSON, MCP
+schema, adapter, dogfood asset, or help text should keep the old names.
 
 ## Goals
 
@@ -121,13 +120,14 @@ Use these names in all public authoring surfaces.
 | human review | review |
 | artifact state | draft state |
 
-The old names may remain in internal Go type names during the migration if that
-keeps the implementation controlled. Public JSON, MCP schemas, adapter text,
-dogfood templates, and docs should use the new names.
+Internal Go type names may be renamed when that keeps the implementation clear.
+If a private name temporarily survives to keep one slice reviewable, it must not
+appear in public JSON, MCP schemas, adapter text, dogfood templates, help text,
+or docs.
 
 ## Public CLI Surface
 
-Add knowledge-oriented aliases and make them canonical in documentation:
+Replace the public write-side CLI surface with knowledge-oriented commands:
 
 ```bash
 argos knowledge design --json --project <project> --intent <intent>
@@ -137,12 +137,12 @@ argos knowledge publish --path <draft-path>
 
 Relationship to existing commands:
 
-- `argos knowledge design` replaces public use of `argos author inspect`.
-- `argos knowledge check` replaces public use of `argos author verify`.
-- `argos knowledge publish` is a user-facing alias for the current promote path.
-- `argos author inspect` and `argos author verify` may remain as compatibility
-  aliases, but they should return the new JSON shape. Generated instructions
-  and dogfood packets should stop using them.
+- `argos knowledge design` replaces `argos author inspect`.
+- `argos knowledge check` replaces `argos author verify`.
+- `argos knowledge publish` is the public publishing command backed by the
+  current promote implementation.
+- `argos author inspect` and `argos author verify` should be removed from the
+  public first-release CLI surface and help text.
 
 `design` remains read-only with respect to knowledge files. It returns guidance
 and a design template, but does not write the design or the draft.
@@ -278,9 +278,10 @@ Response:
 
 ## Knowledge Design Schema
 
-Introduce `knowledge.design.v1` as the canonical public design schema. It can be
-implemented by adapting the existing `authoring.proposal.v2` model, but public
-JSON should use the new names.
+Introduce `knowledge.design.v1` as the canonical public design schema. The
+existing `authoring.proposal.v2` implementation can inform the code changes, but
+the first-release public schema should not expose `authoring.proposal.v2` or its
+old field names.
 
 Top-level fields:
 
@@ -535,8 +536,10 @@ CLI tests:
 
 - `argos knowledge design --json` works and requires `project` and `intent`;
 - `argos knowledge check --json` works and requires `design` and `draft`;
-- `argos author inspect --json` and `argos author verify --json`, if retained,
-  return the same new JSON shape as their canonical aliases;
+- public help text does not list `argos author inspect` or
+  `argos author verify`;
+- invoking removed old write-side public commands returns the same style of
+  unknown-command error as other absent commands;
 - help text uses design/draft/check/publish vocabulary.
 
 MCP tests:
@@ -577,9 +580,9 @@ controlled slices.
 
 - Introduce `knowledge.design.v1` public schema.
 - Return `write_guidance` and `knowledge_design_template`.
-- Add canonical CLI aliases under `argos knowledge`.
+- Add canonical CLI commands under `argos knowledge`.
 - Remove old public response field names from canonical JSON responses.
-- Retained old CLI verbs return the new JSON shape.
+- Remove old write-side public CLI verbs and help text.
 
 ### Slice 2: AI Entry And Harness Contract
 
