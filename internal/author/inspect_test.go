@@ -359,6 +359,36 @@ func TestInspectUsesReviewOnlyWhenConventionLabelHasNoContent(t *testing.T) {
 	}
 }
 
+func TestInspectUsesReviewOnlyWhenConventionUsesVaguePronoun(t *testing.T) {
+	root := t.TempDir()
+	writeAuthorRegistry(t, root)
+
+	result, err := Inspect(root, InspectRequest{
+		Project: "mall-api",
+		Goal:    "Project convention: use it for future agents without making it global truth.",
+		Tags:    []string{"personal", "project-convention"},
+	})
+	if err != nil {
+		t.Fatalf("Inspect returned error: %v", err)
+	}
+
+	proposal := result.ProposalScaffold
+	if proposal.ProposedShape.ArtifactState != "review_only" {
+		t.Fatalf("artifact_state = %q, want review_only: %#v", proposal.ProposedShape.ArtifactState, proposal.ProposedShape)
+	}
+	if !containsText(proposal.HumanReview.ReviewQuestions, "What exact convention should future agents preserve?") {
+		t.Fatalf("proposal should ask for exact convention content: %#v", proposal.HumanReview.ReviewQuestions)
+	}
+
+	packet := result.AuthoringPacket
+	if packet.State != "review_only" {
+		t.Fatalf("packet state = %q, want review_only: %#v", packet.State, packet)
+	}
+	if !containsText(packet.HumanReviewQuestions, "What exact convention should future agents preserve?") {
+		t.Fatalf("packet should ask for exact convention content: %#v", packet.HumanReviewQuestions)
+	}
+}
+
 func TestInspectKeepsConcretePersonalConventionCandidate(t *testing.T) {
 	root := t.TempDir()
 	writeAuthorRegistry(t, root)
@@ -498,11 +528,9 @@ func TestInspectFindsIndexOverlapReadOnly(t *testing.T) {
 	}
 
 	result, err := Inspect(root, InspectRequest{
-		Project:    "mall-api",
-		Goal:       "create product-list cache knowledge",
-		FutureTask: "product list cache ttl",
-		Query:      "product list cache",
-		Tags:       []string{"cache"},
+		Project: "mall-api",
+		Goal:    "ttl",
+		Query:   "ttl",
 	})
 	if err != nil {
 		t.Fatalf("Inspect returned error: %v", err)
@@ -510,8 +538,36 @@ func TestInspectFindsIndexOverlapReadOnly(t *testing.T) {
 	if result.Capabilities.Index != "enabled" {
 		t.Fatalf("expected enabled index capability, got %#v", result.Capabilities)
 	}
+	if hasOverlap(result.Overlap.Official, "official", "rule:backend.cache.v1") {
+		t.Fatalf("expected no official overlap for index-only request, got %#v", result.Overlap.Official)
+	}
+	if hasOverlap(result.Overlap.Inbox, "inbox", "rule:backend.cache.v1") {
+		t.Fatalf("expected no inbox overlap for index-only request, got %#v", result.Overlap.Inbox)
+	}
 	if !hasOverlap(result.Overlap.Index, "index", "rule:backend.cache.v1") {
-		t.Fatalf("expected indexed product-list cache overlap, got %#v", result.Overlap.Index)
+		t.Fatalf("expected indexed TTL overlap, got %#v", result.Overlap.Index)
+	}
+
+	proposal := result.ProposalScaffold
+	if proposal.ProposedShape.ArtifactState != "review_only" {
+		t.Fatalf("artifact_state = %q, want review_only: %#v", proposal.ProposedShape.ArtifactState, proposal.ProposedShape)
+	}
+	if proposal.OverlapDecision.Decision != "unresolved" {
+		t.Fatalf("overlap decision = %q, want unresolved", proposal.OverlapDecision.Decision)
+	}
+	if !containsText(proposal.OverlapDecision.PossibleOverlap, "rule:backend.cache.v1") {
+		t.Fatalf("possible_overlap should include index-only item: %#v", proposal.OverlapDecision.PossibleOverlap)
+	}
+
+	packet := result.AuthoringPacket
+	if packet.State != "review_only" {
+		t.Fatalf("packet state = %q, want review_only: %#v", packet.State, packet)
+	}
+	if packet.CandidatePath != "" {
+		t.Fatalf("review-only packet candidate_path = %q, want empty", packet.CandidatePath)
+	}
+	if packet.Commands.VerifyCandidate != "" {
+		t.Fatalf("review-only packet verify command = %q, want empty", packet.Commands.VerifyCandidate)
 	}
 }
 

@@ -161,7 +161,7 @@ func buildProposalScaffold(response InspectResponse, req InspectRequest) Proposa
 	slug := slugForAuthoring(goal)
 	candidatePath := filepath.ToSlash(filepath.Join("knowledge/.inbox/packages", project, slug))
 	reviewPath := filepath.ToSlash(filepath.Join("knowledge/.inbox/proposals", project, slug, "proposal.json"))
-	overlapIDs := overlapIDs(response.Overlap.Official, response.Overlap.Inbox)
+	overlapIDs := overlapIDs(response.Overlap.Official, response.Overlap.Inbox, response.Overlap.Index)
 	pathRiskBlocks := pathRiskBlocksCandidate(response.PathRisk)
 	missingContent := requestLooksMissingSubstantiveContent(req)
 	reviewOnly := len(overlapIDs) > 0 || pathRiskBlocks || missingContent
@@ -273,6 +273,7 @@ func buildProposalScaffold(response InspectResponse, req InspectRequest) Proposa
 		OverlapDecision: OverlapDecisionV2{
 			OfficialOverlap:     overlapIDsFromMatches(response.Overlap.Official),
 			InboxOverlap:        overlapIDsFromMatches(response.Overlap.Inbox),
+			PossibleOverlap:     overlapIDsFromMatches(response.Overlap.Index),
 			Decision:            "create_new",
 			Reason:              "No blocking overlap was selected by the scaffold.",
 			HumanChoiceRequired: false,
@@ -428,20 +429,41 @@ func requestLooksMissingSubstantiveContent(req InspectRequest) bool {
 }
 
 func requestHasConcreteConventionDetails(text string) bool {
-	for _, marker := range []string{
-		"put ",
-		"use ",
-		"under ",
-		"path ",
-		"`",
-		`"`,
-		"'",
-	} {
+	for _, marker := range []string{"`", `"`, "'"} {
 		if strings.Contains(text, marker) {
 			return true
 		}
 	}
+	for _, marker := range []string{"put", "use", "under", "path"} {
+		if hasConcreteConventionMarker(text, marker) {
+			return true
+		}
+	}
 	return false
+}
+
+func hasConcreteConventionMarker(text string, marker string) bool {
+	words := strings.FieldsFunc(text, func(r rune) bool {
+		return r == ' ' || r == '-' || r == '_' || r == '/' || r == ':' || r == ',' || r == '.'
+	})
+	for i, word := range words {
+		if word != marker || i+1 >= len(words) {
+			continue
+		}
+		if !isVagueConventionPronoun(words[i+1]) {
+			return true
+		}
+	}
+	return false
+}
+
+func isVagueConventionPronoun(word string) bool {
+	switch strings.ToLower(strings.TrimSpace(word)) {
+	case "it", "this", "that", "them", "these", "those":
+		return true
+	default:
+		return false
+	}
 }
 
 func overlapIDs(overlap ...[]OverlapMatch) []string {
