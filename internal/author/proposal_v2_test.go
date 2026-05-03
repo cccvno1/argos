@@ -81,6 +81,53 @@ func TestValidateProposalV2RequiresClaimSourceForUserConfirmedClaims(t *testing.
 	}
 }
 
+func TestValidateProposalV2AcceptsUserStatedSourceAlias(t *testing.T) {
+	proposal := validProposalV2()
+	proposal.SourceProfile.UserConfirmed = []string{"user request: I designed this Go service template"}
+	proposal.SourceProfile.Claims = []SourceClaimV2{
+		{
+			Claim:  "Future Go services should preserve the user-designed template shape.",
+			Kind:   "decision",
+			Trust:  "user_stated",
+			Source: []string{"user request"},
+		},
+		{
+			Claim:  "The concrete layout is documented in templates/go-service.",
+			Kind:   "template",
+			Trust:  "observed",
+			Source: []string{"templates/go-service"},
+		},
+	}
+
+	findings := ValidateProposalV2(proposal)
+
+	if hasFinding(findings, "fail", "unknown source_profile.claims trust") {
+		t.Fatalf("user_stated trust should be accepted, got %#v", findings)
+	}
+	if hasFinding(findings, "review-needed", "user_stated claim requires") {
+		t.Fatalf("user_stated trust should use user_confirmed source bucket, got %#v", findings)
+	}
+}
+
+func TestValidateProposalV2RequiresStructuredAssumptionsForAssumptionClaims(t *testing.T) {
+	proposal := validProposalV2()
+	proposal.SourceProfile.Assumptions = nil
+	proposal.SourceProfile.Claims = []SourceClaimV2{
+		{
+			Claim:  "Retry count and backoff behavior are not evidenced by the source.",
+			Kind:   "assumption",
+			Trust:  "unknown",
+			Source: []string{"internal/retry/README.md"},
+		},
+	}
+
+	findings := ValidateProposalV2(proposal)
+
+	if !hasFinding(findings, "review-needed", "assumption claim requires source_profile.assumptions") {
+		t.Fatalf("expected structured assumptions finding, got %#v", findings)
+	}
+}
+
 func TestValidateProposalV2ReviewsIncompleteSourceProfile(t *testing.T) {
 	tests := []struct {
 		name string

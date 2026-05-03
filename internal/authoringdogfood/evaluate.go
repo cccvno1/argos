@@ -314,7 +314,9 @@ func proposalSatisfiesHiddenProperty(proposal author.ProposalV2, property string
 func proposalSatisfiesHiddenEvidence(proposal author.ProposalV2, report Report, verifyRan bool, category string) (bool, bool) {
 	switch category {
 	case "user_confirmed":
-		return hasNonEmptyString(proposal.SourceProfile.UserConfirmed) || hasClaimTrust(proposal, "user_confirmed"), true
+		return hasNonEmptyString(proposal.SourceProfile.UserConfirmed) ||
+			hasClaimTrust(proposal, "user_confirmed") ||
+			hasClaimTrust(proposal, "user_stated"), true
 	case "template":
 		return hasNonEmptyString(proposal.SourceProfile.Templates) || hasClaimKind(proposal, "template"), true
 	case "synthesized":

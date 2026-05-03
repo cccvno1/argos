@@ -214,11 +214,20 @@ func validateSourceProfileV2(source SourceProfileV2, addFail func(string), addRe
 		if claim.Trust == "user_confirmed" && len(nonEmpty(claim.Source)) == 0 {
 			addReview("user_confirmed claim requires source")
 		}
+		if claim.Trust == "user_stated" && len(nonEmpty(source.UserConfirmed)) == 0 {
+			addReview("user_stated claim requires user_confirmed source")
+		}
+		if claim.Trust == "user_stated" && len(nonEmpty(claim.Source)) == 0 {
+			addReview("user_stated claim requires source")
+		}
 		if claim.Trust == "observed" && len(nonEmpty(source.Observed)) == 0 {
 			addReview("observed claim requires observed source")
 		}
 		if claim.Trust == "imported" && len(nonEmpty(source.Imported)) == 0 {
 			addReview("imported claim requires imported source")
+		}
+		if claim.Kind == "assumption" && len(nonEmpty(source.Assumptions)) == 0 {
+			addReview("assumption claim requires source_profile.assumptions")
 		}
 	}
 }
@@ -234,7 +243,7 @@ func validSourceClaimKindV2(kind string) bool {
 
 func validSourceClaimTrustV2(trust string) bool {
 	switch trust {
-	case "observed", "user_confirmed", "imported", "synthesized", "illustrative", "unknown":
+	case "observed", "user_confirmed", "user_stated", "imported", "synthesized", "illustrative", "unknown":
 		return true
 	default:
 		return false

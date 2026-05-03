@@ -189,6 +189,34 @@ func TestBuildPacketIncludesNaturalRequestAndAuthoringCommands(t *testing.T) {
 	}
 }
 
+func TestAuthoringPacketExplainsPublicSourceState(t *testing.T) {
+	cases, err := LoadCases(authoringCasesPath)
+	if err != nil {
+		t.Fatalf("LoadCases returned error: %v", err)
+	}
+
+	packet, err := BuildPacket(cases, PacketOptions{
+		CaseID:      "case-001",
+		Workspace:   "/tmp/argos-authoring/ws",
+		ArgosBinary: "/tmp/argos",
+	})
+	if err != nil {
+		t.Fatalf("BuildPacket returned error: %v", err)
+	}
+
+	for _, want := range []string{
+		"human-stated design or confirmation",
+		"observed workspace facts",
+		"synthesized recommendations",
+		"assumptions or missing details",
+	} {
+		if !strings.Contains(packet.Markdown, want) {
+			t.Fatalf("packet missing source-state guidance %q:\n%s", want, packet.Markdown)
+		}
+	}
+	assertAuthoringPacketOmitsHiddenTokens(t, packet.Markdown)
+}
+
 func TestParseMarkdownReportExtractsAuthoringArtifacts(t *testing.T) {
 	report, err := ParseMarkdownReport([]byte(sampleAuthoringReport("case-001", "pass")))
 	if err != nil {
@@ -569,6 +597,24 @@ func assertEvaluationFindingsOmit(t *testing.T, evaluation Evaluation, forbidden
 	for _, value := range forbidden {
 		if strings.Contains(string(data), value) {
 			t.Fatalf("evaluation leaked %q in findings: %s", value, string(data))
+		}
+	}
+}
+
+func assertAuthoringPacketOmitsHiddenTokens(t *testing.T, text string) {
+	t.Helper()
+	for _, forbidden := range []string{
+		"go_template_standard",
+		"oracle",
+		"required_guards",
+		"expected_result",
+		"required_proposal_properties",
+		"forbidden_mutations",
+		"required_evidence_categories",
+		"proposal_must_precede_candidate",
+	} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("packet leaked %q:\n%s", forbidden, text)
 		}
 	}
 }

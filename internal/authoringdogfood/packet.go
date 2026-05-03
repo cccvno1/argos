@@ -103,6 +103,11 @@ func renderAuthoringPacketMarkdown(packet Packet) string {
 	fmt.Fprintf(&builder, "- Set `delivery.write_requires_human_approval` and `delivery.review_packet_required` to true.\n")
 	fmt.Fprintf(&builder, "- Keep `candidate_files` under the approved candidate path and delivery boundary.\n\n")
 
+	fmt.Fprintf(&builder, "## Source State Guidance\n\n")
+	fmt.Fprintf(&builder, "- Mark human-stated design or confirmation separately from observed workspace facts.\n")
+	fmt.Fprintf(&builder, "- Mark synthesized recommendations as draft guidance and keep assumptions or missing details visible.\n")
+	fmt.Fprintf(&builder, "- Use claim-level trust so reviewers can tell what came from the user, the workspace, or agent synthesis.\n\n")
+
 	fmt.Fprintf(&builder, "## Public Input JSON\n\n")
 	fmt.Fprintf(&builder, "```json\n%s\n```\n\n", input)
 
