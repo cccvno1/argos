@@ -61,6 +61,18 @@ Before presenting the proposal, run or emulate:
 argos author inspect --json --project mall-api --goal "create product-list cache engineering knowledge"
 ```
 
+Read `authoring_packet` before writing files. Treat it as the operational
+control packet for this authoring attempt:
+
+- follow `recommended_action` for the next safe step;
+- use `proposal_path` for the proposal artifact;
+- use `candidate_path` only as a proposed path, not as write approval;
+- obey every `stop_conditions` entry;
+- ask the `human_review_questions` before candidate writing when correctness or
+  authorization depends on the answer;
+- run `commands.verify_candidate` only after candidate writing is approved and
+  candidate files exist.
+
 After approved candidate files are written, run:
 
 ```bash

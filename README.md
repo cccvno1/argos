@@ -180,7 +180,8 @@ The durable flow is:
 
 1. The human describes reusable engineering knowledge, source material, a
    decision, or a lesson.
-2. The agent inspects existing knowledge and authoring policy:
+2. The agent inspects existing knowledge, authoring policy, and the agent-ready
+   authoring packet:
 
    ```bash
    argos author inspect --json \
@@ -190,6 +191,11 @@ The durable flow is:
      --phase implementation \
      --files internal/catalog/products.go
    ```
+
+The `authoring_packet` in the inspect response gives the agent the next safe
+action, suggested proposal and candidate paths, stop conditions, human review
+questions, and the subsequent `author verify` command. Inspect never approves
+candidate writing; candidate files still require human review of the proposal.
 
 3. The agent turns that inspection output into a Knowledge Design Proposal under
    `knowledge/.inbox/proposals/`.
