@@ -67,6 +67,38 @@ func TestCheckKnowledgeRejectsDraftOutsideWriteBoundary(t *testing.T) {
 	}
 }
 
+func TestCheckKnowledgeOfficialDraftWithoutPublishApprovalNeedsReview(t *testing.T) {
+	root := t.TempDir()
+	if err := workspace.Init(root); err != nil {
+		t.Fatalf("init workspace: %v", err)
+	}
+	design := validKnowledgeDesign()
+	design.WriteBoundary.Path = "official_review"
+	design.Review.OfficialWriteApproved = true
+	design.Review.PublishApproved = false
+	design.DraftOutput.Path = "knowledge/packages/mall-api/redis-cache"
+	design.CheckPlan.ValidatePath = "knowledge/packages/mall-api/redis-cache"
+	design.DraftFiles = []DraftFile{{
+		Path:    "knowledge/packages/mall-api/redis-cache/KNOWLEDGE.md",
+		Purpose: "entrypoint",
+		Load:    "read_before_implementation",
+	}}
+	designPath := writeDesignFile(t, root, design)
+	draftPath := "knowledge/packages/mall-api/redis-cache"
+	writeDraftPackageWithStatus(t, root, draftPath, "active")
+
+	result, err := Check(root, CheckRequest{DesignPath: designPath, DraftPath: draftPath})
+	if err != nil {
+		t.Fatalf("Check returned error: %v", err)
+	}
+	if result.Result != "review-needed" {
+		t.Fatalf("expected review-needed for official draft without publish approval, got %#v", result)
+	}
+	if !hasFinding(result.Findings, "review.publish_approved") {
+		t.Fatalf("missing publish approval finding: %#v", result.Findings)
+	}
+}
+
 func TestValidateDesignUsesReviewApprovalForPriorityMust(t *testing.T) {
 	design := validKnowledgeDesign()
 	design.DraftOutput.Priority = "must"
@@ -204,6 +236,11 @@ func writeDesignFile(t *testing.T, root string, design KnowledgeDesign) string {
 
 func writeDraftPackage(t *testing.T, root string, rel string) {
 	t.Helper()
+	writeDraftPackageWithStatus(t, root, rel, "draft")
+}
+
+func writeDraftPackageWithStatus(t *testing.T, root string, rel string, status string) {
+	t.Helper()
 	dir := filepath.Join(root, filepath.FromSlash(rel))
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("mkdir draft: %v", err)
@@ -212,18 +249,33 @@ func writeDraftPackage(t *testing.T, root string, rel string) {
 id: package:mall-api.redis-cache.v1
 type: package
 title: Redis Cache Best Practices
-status: draft
+status: ` + status + `
 priority: should
 projects: [mall-api]
 tech_domains: [redis]
 tags: [cache]
+updated_at: 2026-05-03
 applies_to:
   files: ["**/*"]
 ---
 
 # Redis Cache Best Practices
 
+## Purpose
+
 Use reviewed Redis cache guidance for future backend implementation.
+
+## When To Use
+
+When implementing Redis-backed caching.
+
+## Start Here
+
+Read this package before changing cache behavior.
+
+## Load On Demand
+
+Load deeper examples only when the implementation needs them.
 `
 	if err := os.WriteFile(filepath.Join(dir, "KNOWLEDGE.md"), []byte(body), 0o644); err != nil {
 		t.Fatalf("write draft package: %v", err)

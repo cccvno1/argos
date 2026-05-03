@@ -41,6 +41,9 @@ type RegistryFacts struct {
 	ProjectKnown    bool     `json:"project_known"`
 	TechDomains     []string `json:"tech_domains"`
 	BusinessDomains []string `json:"business_domains"`
+
+	projectTechDomains     []string
+	projectBusinessDomains []string
 }
 
 type ExistingMatches struct {

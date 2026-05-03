@@ -355,6 +355,9 @@ func checkPolicy(design KnowledgeDesign, draftPath string, draftItems []knowledg
 		if !design.Review.OfficialWriteApproved {
 			addFail("official draft path requires review.official_write_approved")
 		}
+		if isOfficialDraftPath(draftSlash) && !design.Review.PublishApproved {
+			addReview("official draft path requires review.publish_approved before publish")
+		}
 	default:
 		addFail("approved write boundary cannot be determined")
 	}

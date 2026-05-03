@@ -35,9 +35,11 @@ func Design(root string, req DesignRequest) (DesignResponse, error) {
 			Index:      indexCapability,
 		},
 		Registry: RegistryFacts{
-			ProjectKnown:    projectKnown(reg, req.Project),
-			TechDomains:     append([]string{}, reg.TechDomains...),
-			BusinessDomains: append([]string{}, reg.BusinessDomains...),
+			ProjectKnown:           projectKnown(reg, req.Project),
+			TechDomains:            append([]string{}, reg.TechDomains...),
+			BusinessDomains:        append([]string{}, reg.BusinessDomains...),
+			projectTechDomains:     projectTechDomains(reg, req.Project),
+			projectBusinessDomains: projectBusinessDomains(reg, req.Project),
 		},
 		ExistingKnowledge: ExistingMatches{
 			Official: existingMatches("official", official, req),
@@ -152,8 +154,8 @@ func buildKnowledgeDesignTemplate(response DesignResponse, req DesignRequest) Kn
 			Projects:       []string{project},
 			Stability:      "draft",
 			Distribution:   "project",
-			SubjectDomains: append([]string{}, response.Registry.BusinessDomains...),
-			TechDomains:    append([]string{}, response.Registry.TechDomains...),
+			SubjectDomains: append([]string{}, response.Registry.projectBusinessDomains...),
+			TechDomains:    append([]string{}, response.Registry.projectTechDomains...),
 			FileGlobs:      []string{"**/*"},
 			OutOfScope: []string{
 				"official knowledge writing without explicit approval",
@@ -209,7 +211,7 @@ func buildKnowledgeDesignTemplate(response DesignResponse, req DesignRequest) Kn
 		CheckPlan: CheckPlan{
 			ValidatePath: draftPath,
 			FindabilityChecks: []FindabilityCheckScenario{
-				{Project: project, Task: intent, Query: intent},
+				{Project: project, Phase: strings.TrimSpace(req.Phase), Task: intent, Query: intent, Files: append([]string{}, req.Files...)},
 			},
 		},
 		Review: Review{
@@ -224,7 +226,9 @@ func buildKnowledgeDesignTemplate(response DesignResponse, req DesignRequest) Kn
 		design.Scope.Files = append([]string{}, req.Files...)
 	}
 	if len(req.Domains) > 0 {
-		design.Scope.TechDomains = append([]string{}, req.Domains...)
+		techDomains, subjectDomains := classifyRequestDomains(req.Domains, response.Registry)
+		design.Scope.TechDomains = uniqueNonEmpty(append(design.Scope.TechDomains, techDomains...))
+		design.Scope.SubjectDomains = uniqueNonEmpty(append(design.Scope.SubjectDomains, subjectDomains...))
 	}
 	if strings.TrimSpace(req.Phase) != "" {
 		design.FutureUse.Phases = []string{strings.TrimSpace(req.Phase)}
@@ -442,6 +446,43 @@ func projectKnown(reg registry.Registry, project string) bool {
 		}
 	}
 	return false
+}
+
+func projectTechDomains(reg registry.Registry, project string) []string {
+	project = strings.TrimSpace(project)
+	for _, candidate := range reg.Projects {
+		if candidate.ID == project {
+			return append([]string{}, candidate.TechDomains...)
+		}
+	}
+	return nil
+}
+
+func projectBusinessDomains(reg registry.Registry, project string) []string {
+	project = strings.TrimSpace(project)
+	for _, candidate := range reg.Projects {
+		if candidate.ID == project {
+			return append([]string{}, candidate.BusinessDomains...)
+		}
+	}
+	return nil
+}
+
+func classifyRequestDomains(domains []string, facts RegistryFacts) ([]string, []string) {
+	var techDomains []string
+	var subjectDomains []string
+	for _, domain := range domains {
+		domain = strings.TrimSpace(domain)
+		if domain == "" {
+			continue
+		}
+		if containsStringValue(facts.BusinessDomains, domain) {
+			subjectDomains = append(subjectDomains, domain)
+			continue
+		}
+		techDomains = append(techDomains, domain)
+	}
+	return uniqueNonEmpty(techDomains), uniqueNonEmpty(subjectDomains)
 }
 
 func indexStatus(root string) string {

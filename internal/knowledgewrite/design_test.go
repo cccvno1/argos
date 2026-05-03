@@ -132,6 +132,53 @@ func TestDesignKnowledgeRejectsUnsafeDraftPath(t *testing.T) {
 	}
 }
 
+func TestDesignKnowledgeDoesNotScopeToAllRegistryDomainsByDefault(t *testing.T) {
+	root := t.TempDir()
+	if err := workspace.Init(root); err != nil {
+		t.Fatalf("init workspace: %v", err)
+	}
+
+	result, err := Design(root, DesignRequest{Project: "mall-api", Intent: "Document product list cache TTL."})
+	if err != nil {
+		t.Fatalf("Design returned error: %v", err)
+	}
+
+	scope := result.KnowledgeDesignTemplate.Scope
+	if len(scope.TechDomains) != 0 {
+		t.Fatalf("tech domains should be empty without explicit or project-specific domains, got %#v", scope.TechDomains)
+	}
+	if len(scope.SubjectDomains) != 0 {
+		t.Fatalf("subject domains should be empty without explicit or project-specific domains, got %#v", scope.SubjectDomains)
+	}
+}
+
+func TestDesignKnowledgeCarriesPhaseAndFilesIntoFindabilityCheck(t *testing.T) {
+	root := t.TempDir()
+	if err := workspace.Init(root); err != nil {
+		t.Fatalf("init workspace: %v", err)
+	}
+
+	result, err := Design(root, DesignRequest{
+		Project: "mall-api",
+		Intent:  "Document product list cache TTL.",
+		Phase:   "implementation",
+		Files:   []string{"internal/catalog/products.go"},
+	})
+	if err != nil {
+		t.Fatalf("Design returned error: %v", err)
+	}
+	checks := result.KnowledgeDesignTemplate.CheckPlan.FindabilityChecks
+	if len(checks) == 0 {
+		t.Fatalf("missing findability checks: %#v", result.KnowledgeDesignTemplate.CheckPlan)
+	}
+	if checks[0].Phase != "implementation" {
+		t.Fatalf("findability phase = %q", checks[0].Phase)
+	}
+	if len(checks[0].Files) != 1 || checks[0].Files[0] != "internal/catalog/products.go" {
+		t.Fatalf("findability files = %#v", checks[0].Files)
+	}
+}
+
 func containsText(values []string, want string) bool {
 	for _, value := range values {
 		if strings.Contains(value, want) {
