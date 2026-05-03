@@ -94,6 +94,9 @@ func TestCheckKnowledgeOfficialDraftWithoutPublishApprovalNeedsReview(t *testing
 	if result.Result != "review-needed" {
 		t.Fatalf("expected review-needed for official draft without publish approval, got %#v", result)
 	}
+	if result.Policy.Result != "review-needed" {
+		t.Fatalf("expected policy review-needed for official draft without publish approval, got %#v", result.Policy)
+	}
 	if !hasFinding(result.Findings, "review.publish_approved") {
 		t.Fatalf("missing publish approval finding: %#v", result.Findings)
 	}
