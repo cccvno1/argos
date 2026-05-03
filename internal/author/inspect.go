@@ -162,7 +162,8 @@ func buildProposalScaffold(response InspectResponse, req InspectRequest) Proposa
 	candidatePath := filepath.ToSlash(filepath.Join("knowledge/.inbox/packages", project, slug))
 	reviewPath := filepath.ToSlash(filepath.Join("knowledge/.inbox/proposals", project, slug, "proposal.json"))
 	overlapIDs := overlapIDs(response.Overlap.Official, response.Overlap.Inbox)
-	reviewOnly := len(overlapIDs) > 0
+	pathRiskBlocks := pathRiskBlocksCandidate(response.PathRisk)
+	reviewOnly := len(overlapIDs) > 0 || pathRiskBlocks
 
 	source := SourceProfileV2{
 		UserConfirmed: []string{"User request: " + goal},
@@ -195,6 +196,15 @@ func buildProposalScaffold(response InspectResponse, req InspectRequest) Proposa
 			Kind:   "fact",
 			Trust:  "observed",
 			Source: []string{"argos author inspect overlap"},
+		})
+	}
+	if pathRiskBlocks {
+		source.Observed = append(source.Observed, "author inspect blocked candidate path: "+pathRiskReviewReason(response.PathRisk))
+		source.Claims = append(source.Claims, SourceClaimV2{
+			Claim:  "The supplied candidate path requires review before candidate writing.",
+			Kind:   "fact",
+			Trust:  "observed",
+			Source: []string{"argos author inspect path risk"},
 		})
 	}
 
@@ -298,16 +308,30 @@ func buildProposalScaffold(response InspectResponse, req InspectRequest) Proposa
 		proposal.ProposedShape.Status = "review"
 		proposal.ProposedShape.Priority = "may"
 		proposal.ProposedShape.Rationale = "Existing related knowledge requires a human decision before candidate writing."
+		if len(overlapIDs) > 0 && pathRiskBlocks {
+			proposal.ProposedShape.Rationale = "Existing related knowledge and the supplied candidate path require human review before candidate writing."
+		} else if pathRiskBlocks {
+			proposal.ProposedShape.Rationale = "The supplied candidate path requires human review before candidate writing."
+		}
 		proposal.ProposedShape.EntrypointLoad = "reference_only"
 		proposal.ProposedShape.ArtifactState = "review_only"
 		proposal.OverlapDecision.Decision = "unresolved"
 		proposal.OverlapDecision.Reason = "author inspect found existing related knowledge: " + strings.Join(overlapIDs, ", ")
+		if len(overlapIDs) > 0 && pathRiskBlocks {
+			proposal.OverlapDecision.Reason += "; blocked candidate path: " + pathRiskReviewReason(response.PathRisk)
+		} else if pathRiskBlocks {
+			proposal.OverlapDecision.Reason = "author inspect blocked candidate path: " + pathRiskReviewReason(response.PathRisk)
+		}
 		proposal.OverlapDecision.HumanChoiceRequired = true
 		proposal.CandidateFiles = nil
 		proposal.VerificationPlan.ValidatePath = ""
 		proposal.VerificationPlan.FindabilityScenarios = nil
-		proposal.HumanReview.UnresolvedBlockers = []string{
-			"Choose create-new, update-existing, merge, or stop before candidate writing.",
+		proposal.HumanReview.UnresolvedBlockers = nil
+		if len(overlapIDs) > 0 {
+			proposal.HumanReview.UnresolvedBlockers = append(proposal.HumanReview.UnresolvedBlockers, "Choose create-new, update-existing, merge, or stop before candidate writing.")
+		}
+		if pathRiskBlocks {
+			proposal.HumanReview.UnresolvedBlockers = append(proposal.HumanReview.UnresolvedBlockers, "Provide an allowed inbox candidate path before candidate writing.")
 		}
 	}
 
@@ -443,6 +467,22 @@ func inspectPathRisk(path string) PathRisk {
 		return PathRisk{CandidatePath: clean, Status: "official_review_required", Reason: "official mutation requires explicit review path"}
 	}
 	return PathRisk{CandidatePath: clean, Status: "review-needed", Reason: "candidate path is outside standard authoring inbox locations"}
+}
+
+func pathRiskBlocksCandidate(risk PathRisk) bool {
+	switch risk.Status {
+	case "", "not_checked", "allowed":
+		return false
+	default:
+		return true
+	}
+}
+
+func pathRiskReviewReason(risk PathRisk) string {
+	if risk.Reason == "" {
+		return risk.Status
+	}
+	return risk.Status + ": " + risk.Reason
 }
 
 func hasParentSegment(path string) bool {

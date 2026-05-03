@@ -363,14 +363,16 @@ func TestInspectFindsIndexOverlapReadOnly(t *testing.T) {
 
 func TestInspectReportsCandidatePathRisk(t *testing.T) {
 	tests := []struct {
-		name          string
-		candidatePath string
-		wantStatus    string
+		name           string
+		candidatePath  string
+		wantStatus     string
+		wantReviewOnly bool
 	}{
 		{
-			name:          "unsafe escaping path",
-			candidatePath: "../outside",
-			wantStatus:    "unsafe",
+			name:           "unsafe escaping path",
+			candidatePath:  "../outside",
+			wantStatus:     "unsafe",
+			wantReviewOnly: true,
 		},
 		{
 			name:          "standard inbox item path",
@@ -383,14 +385,22 @@ func TestInspectReportsCandidatePathRisk(t *testing.T) {
 			wantStatus:    "allowed",
 		},
 		{
-			name:          "official item path",
-			candidatePath: "knowledge/items/backend/cache.md",
-			wantStatus:    "official_review_required",
+			name:           "official item path",
+			candidatePath:  "knowledge/items/backend/cache.md",
+			wantStatus:     "official_review_required",
+			wantReviewOnly: true,
 		},
 		{
-			name:          "official package path",
-			candidatePath: "knowledge/packages/backend/product-list-cache/KNOWLEDGE.md",
-			wantStatus:    "official_review_required",
+			name:           "official package path",
+			candidatePath:  "knowledge/packages/backend/product-list-cache/KNOWLEDGE.md",
+			wantStatus:     "official_review_required",
+			wantReviewOnly: true,
+		},
+		{
+			name:           "nonstandard authoring path",
+			candidatePath:  "tmp/backend/cache.md",
+			wantStatus:     "review-needed",
+			wantReviewOnly: true,
 		},
 	}
 
@@ -409,6 +419,34 @@ func TestInspectReportsCandidatePathRisk(t *testing.T) {
 			}
 			if result.PathRisk.Status != tt.wantStatus {
 				t.Fatalf("expected path risk status %q, got %#v", tt.wantStatus, result.PathRisk)
+			}
+			if tt.wantReviewOnly {
+				if result.ProposalScaffold.ProposedShape.Kind != "review" ||
+					result.ProposalScaffold.ProposedShape.Type != "review" ||
+					result.ProposalScaffold.ProposedShape.ArtifactState != "review_only" {
+					t.Fatalf("expected review-only scaffold for path risk, got %#v", result.ProposalScaffold.ProposedShape)
+				}
+				if len(result.ProposalScaffold.CandidateFiles) != 0 {
+					t.Fatalf("expected no candidate files for review-only path risk, got %#v", result.ProposalScaffold.CandidateFiles)
+				}
+				if result.ProposalScaffold.VerificationPlan.ValidatePath != "" {
+					t.Fatalf("expected empty validate path for review-only path risk, got %q", result.ProposalScaffold.VerificationPlan.ValidatePath)
+				}
+				if !result.AuthoringPacket.ReviewOnly ||
+					result.AuthoringPacket.CandidatePath != "" ||
+					result.AuthoringPacket.RecommendedAction != "write_review_only_proposal" {
+					t.Fatalf("expected review-only authoring packet for path risk, got %#v", result.AuthoringPacket)
+				}
+				if result.AuthoringPacket.ProposalPath != result.ProposalScaffold.ProposedShape.Path {
+					t.Fatalf("packet proposal path = %q, want scaffold path %q", result.AuthoringPacket.ProposalPath, result.ProposalScaffold.ProposedShape.Path)
+				}
+				return
+			}
+			if result.ProposalScaffold.ProposedShape.ArtifactState != "candidate" {
+				t.Fatalf("expected candidate scaffold for allowed path, got %#v", result.ProposalScaffold.ProposedShape)
+			}
+			if result.AuthoringPacket.ReviewOnly {
+				t.Fatalf("expected non-review-only authoring packet for allowed path, got %#v", result.AuthoringPacket)
 			}
 		})
 	}

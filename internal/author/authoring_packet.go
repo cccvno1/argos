@@ -50,13 +50,10 @@ func buildAuthoringPacket(response InspectResponse, req InspectRequest) Authorin
 		state = "review_only"
 		action = "write_review_only_proposal"
 		reason = "A review-only proposal is required before candidate writing."
+		if pathRiskBlocksCandidate(response.PathRisk) {
+			reason = "The requested candidate path requires review before candidate writing: " + pathRiskReviewReason(response.PathRisk) + "."
+		}
 		proposalPath = proposal.ProposedShape.Path
-		candidatePath = ""
-	}
-	if response.PathRisk.Status == "unsafe" {
-		state = "review_only"
-		action = "write_review_only_proposal"
-		reason = "The requested candidate path is unsafe; write a review-only proposal and ask for a safe inbox path."
 		candidatePath = ""
 	}
 
@@ -67,7 +64,7 @@ func buildAuthoringPacket(response InspectResponse, req InspectRequest) Authorin
 		ProposalPath:      proposalPath,
 		CandidatePath:     candidatePath,
 		CandidateAllowed:  false,
-		ReviewOnly:        reviewOnly || response.PathRisk.Status == "unsafe",
+		ReviewOnly:        reviewOnly,
 		StopConditions: []string{
 			"Do not write candidate files until human_review.candidate_write_approved is true.",
 			"Do not mutate official knowledge unless official mutation is explicitly authorized.",
@@ -92,9 +89,6 @@ func buildAuthoringPacket(response InspectResponse, req InspectRequest) Authorin
 		Commands: AuthoringCommands{
 			WriteProposal: "write JSON to " + proposalPath,
 		},
-	}
-	if packet.Commands.WriteProposal == "write JSON to " {
-		packet.Commands.WriteProposal = "write proposal JSON under knowledge/.inbox/proposals/"
 	}
 	if candidatePath != "" {
 		packet.Commands.VerifyCandidate = fmt.Sprintf("argos author verify --json --proposal %s --path %s", proposalPath, candidatePath)
