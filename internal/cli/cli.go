@@ -877,7 +877,8 @@ func publishDraft(root string, relPath string, stderr io.Writer) (string, error)
 	if err != nil {
 		return "", err
 	}
-	if _, err := loadAndValidateKnowledge(root, stderr, validationScope{Path: clean}); err != nil {
+	draftItems, err := loadAndValidateKnowledge(root, stderr, validationScope{Path: clean})
+	if err != nil {
 		return "", err
 	}
 	targetAbs := filepath.Join(root, target)
@@ -886,16 +887,61 @@ func publishDraft(root string, relPath string, stderr io.Writer) (string, error)
 	} else if err != nil && !os.IsNotExist(err) {
 		return "", fmt.Errorf("stat target %s: %w", target, err)
 	}
+	if err := validateOfficialKnowledgeWithDraft(root, clean, target, draftItems, stderr); err != nil {
+		return "", fmt.Errorf("official validation failed before publish: %w", err)
+	}
 	if err := os.MkdirAll(filepath.Dir(targetAbs), 0o755); err != nil {
 		return "", fmt.Errorf("create target parent: %w", err)
 	}
 	if err := os.Rename(filepath.Join(root, clean), targetAbs); err != nil {
 		return "", fmt.Errorf("move draft: %w", err)
 	}
-	if _, err := loadAndValidateKnowledge(root, stderr, validationScope{}); err != nil {
-		return "", fmt.Errorf("official validation failed after publish: %w", err)
-	}
 	return target, nil
+}
+
+func validateOfficialKnowledgeWithDraft(root string, draftPath string, target string, draftItems []knowledge.Item, stderr io.Writer) error {
+	reg, err := registry.Load(root)
+	if err != nil {
+		return fmt.Errorf("load registry: %w", err)
+	}
+	official, err := knowledge.LoadOfficial(root)
+	if err != nil {
+		return fmt.Errorf("load official knowledge: %w", err)
+	}
+	items := append([]knowledge.Item{}, official...)
+	items = append(items, rebaseKnowledgeItemPaths(draftItems, draftPath, target)...)
+	errs := knowledge.ValidateItems(items, reg)
+	for _, err := range errs {
+		fmt.Fprintln(stderr, err)
+	}
+	if len(errs) > 0 {
+		err := fmt.Errorf("validation failed with %d error(s)", len(errs))
+		fmt.Fprintln(stderr, err)
+		return err
+	}
+	return nil
+}
+
+func rebaseKnowledgeItemPaths(items []knowledge.Item, from string, to string) []knowledge.Item {
+	fromSlash := strings.TrimSuffix(filepath.ToSlash(from), "/")
+	toSlash := strings.TrimSuffix(filepath.ToSlash(to), "/")
+	rebased := make([]knowledge.Item, 0, len(items))
+	for _, item := range items {
+		item.Path = rebaseKnowledgePath(item.Path, fromSlash, toSlash)
+		rebased = append(rebased, item)
+	}
+	return rebased
+}
+
+func rebaseKnowledgePath(path string, from string, to string) string {
+	path = filepath.ToSlash(path)
+	if path == from {
+		return to
+	}
+	if strings.HasPrefix(path, from+"/") {
+		return to + strings.TrimPrefix(path, from)
+	}
+	return path
 }
 
 func publishTarget(clean string) (string, error) {
