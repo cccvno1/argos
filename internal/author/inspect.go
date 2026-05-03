@@ -429,11 +429,6 @@ func requestLooksMissingSubstantiveContent(req InspectRequest) bool {
 }
 
 func requestHasConcreteConventionDetails(text string) bool {
-	for _, marker := range []string{"`", `"`, "'"} {
-		if strings.Contains(text, marker) {
-			return true
-		}
-	}
 	for _, marker := range []string{"put", "use", "under", "path"} {
 		if hasConcreteConventionMarker(text, marker) {
 			return true
