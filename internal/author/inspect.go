@@ -410,14 +410,40 @@ func requestLooksMissingSubstantiveContent(req InspectRequest) bool {
 	if text == "" {
 		return false
 	}
-	hasConventionIntent := strings.Contains(text, "personal convention") ||
+	hasConventionMarker := strings.Contains(text, "personal convention") ||
 		strings.Contains(text, "project convention") ||
-		strings.Contains(text, "project-convention") ||
-		strings.Contains(text, "preserve it for future agents")
-	hasNoConcreteContent := strings.Contains(text, "i have a personal convention") ||
-		strings.Contains(text, "preserve it") ||
-		strings.Contains(text, "without making it global truth")
-	return hasConventionIntent && hasNoConcreteContent
+		strings.Contains(text, "project-convention")
+	hasConventionIntent := hasConventionMarker || strings.Contains(text, "preserve it for future agents")
+	if !hasConventionIntent || requestHasConcreteConventionDetails(text) {
+		return false
+	}
+	hasVaguePersonalConvention := strings.Contains(text, "i have a personal convention") ||
+		strings.Contains(text, "i have a project convention") ||
+		strings.Contains(text, "my personal convention") ||
+		strings.Contains(text, "my project convention")
+	hasVagueConventionReference := hasConventionMarker &&
+		(strings.Contains(text, "preserve it") || strings.Contains(text, "future agents"))
+	hasGlobalTruthBoundary := strings.Contains(text, "without making it global truth")
+	return hasVaguePersonalConvention || hasVagueConventionReference || hasGlobalTruthBoundary
+}
+
+func requestHasConcreteConventionDetails(text string) bool {
+	for _, marker := range []string{
+		"personal convention:",
+		"project convention:",
+		"put ",
+		"use ",
+		"under ",
+		"path ",
+		"`",
+		`"`,
+		"'",
+	} {
+		if strings.Contains(text, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func overlapIDs(overlap ...[]OverlapMatch) []string {

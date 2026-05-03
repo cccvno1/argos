@@ -332,6 +332,68 @@ func TestInspectUsesReviewOnlyPacketWhenPersonalConventionContentIsMissing(t *te
 	}
 }
 
+func TestInspectKeepsConcretePersonalConventionCandidate(t *testing.T) {
+	root := t.TempDir()
+	writeAuthorRegistry(t, root)
+
+	result, err := Inspect(root, InspectRequest{
+		Project: "mall-api",
+		Goal:    "Personal convention: put generated SQL under internal/db/query. Preserve it for future agents.",
+		Tags:    []string{"personal", "project-convention"},
+	})
+	if err != nil {
+		t.Fatalf("Inspect returned error: %v", err)
+	}
+
+	proposal := result.ProposalScaffold
+	if proposal.ProposedShape.ArtifactState != "candidate" {
+		t.Fatalf("artifact_state = %q, want candidate: %#v", proposal.ProposedShape.ArtifactState, proposal.ProposedShape)
+	}
+
+	packet := result.AuthoringPacket
+	if packet.State != "ready_for_proposal" {
+		t.Fatalf("packet state = %q, want ready_for_proposal: %#v", packet.State, packet)
+	}
+	if packet.ReviewOnly {
+		t.Fatalf("concrete convention packet should not be review-only: %#v", packet)
+	}
+	if packet.CandidatePath == "" {
+		t.Fatalf("concrete convention packet should include candidate_path: %#v", packet)
+	}
+}
+
+func TestInspectKeepsNormalAuthoringWithPreserveVocabularyCandidate(t *testing.T) {
+	root := t.TempDir()
+	writeAuthorRegistry(t, root)
+
+	result, err := Inspect(root, InspectRequest{
+		Project:    "mall-api",
+		Goal:       "Create Go template authoring guidance that preserves source trust boundaries for future agents.",
+		FutureTask: "document template authoring practices",
+		Query:      "template authoring source trust",
+		Tags:       []string{"templates", "source-trust"},
+	})
+	if err != nil {
+		t.Fatalf("Inspect returned error: %v", err)
+	}
+
+	proposal := result.ProposalScaffold
+	if proposal.ProposedShape.ArtifactState != "candidate" {
+		t.Fatalf("artifact_state = %q, want candidate: %#v", proposal.ProposedShape.ArtifactState, proposal.ProposedShape)
+	}
+
+	packet := result.AuthoringPacket
+	if packet.State != "ready_for_proposal" {
+		t.Fatalf("packet state = %q, want ready_for_proposal: %#v", packet.State, packet)
+	}
+	if packet.ReviewOnly {
+		t.Fatalf("normal authoring packet should not be review-only: %#v", packet)
+	}
+	if packet.CandidatePath == "" {
+		t.Fatalf("normal authoring packet should include candidate_path: %#v", packet)
+	}
+}
+
 func TestInspectFindsOfficialAndInboxOverlap(t *testing.T) {
 	root := t.TempDir()
 	writeAuthorRegistry(t, root)
