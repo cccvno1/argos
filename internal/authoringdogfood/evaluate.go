@@ -413,9 +413,17 @@ func addForbiddenMutationFinding(mutation string, addFail func(string)) {
 func addAuthorFinding(finding author.Finding, addFail func(string), addReview func(string)) {
 	switch finding.Severity {
 	case ResultFail:
-		addFail("author validation failed")
+		if strings.TrimSpace(finding.Message) == "" {
+			addFail("author validation failed")
+		} else {
+			addFail("author validation failed: " + finding.Message)
+		}
 	case ResultReviewNeeded:
-		addReview("author validation requires human review")
+		if strings.TrimSpace(finding.Message) == "" {
+			addReview("author validation requires human review")
+		} else {
+			addReview("author validation requires human review: " + finding.Message)
+		}
 	}
 }
 
@@ -600,15 +608,25 @@ func textSignalsMissingActionableContent(value string) bool {
 	if text == "" {
 		return false
 	}
-	missing := strings.Contains(text, "missing") ||
-		strings.Contains(text, "not provided") ||
-		strings.Contains(text, "not supplied") ||
-		strings.Contains(text, "needed before use")
 	specific := strings.Contains(text, "exact") ||
 		strings.Contains(text, "concrete") ||
 		strings.Contains(text, "wording") ||
+		strings.Contains(text, "content") ||
 		strings.Contains(text, "convention text") ||
 		strings.Contains(text, "actionable")
+	noSpecificContent := specific && (strings.Contains(text, "no actionable") ||
+		strings.Contains(text, "no concrete") ||
+		strings.Contains(text, "no exact") ||
+		strings.Contains(text, "no convention content") ||
+		strings.Contains(text, "no content"))
+	missing := strings.Contains(text, "missing") ||
+		strings.Contains(text, "unavailable") ||
+		strings.Contains(text, "absent") ||
+		strings.Contains(text, "not available") ||
+		strings.Contains(text, "not provided") ||
+		strings.Contains(text, "not supplied") ||
+		strings.Contains(text, "needed before use") ||
+		noSpecificContent
 	return missing && specific
 }
 

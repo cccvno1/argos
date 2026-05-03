@@ -274,6 +274,11 @@ func TestAuthoringPacketExplainsProposalScaffold(t *testing.T) {
 		"Copy the scaffold shape before changing values",
 		"`user_request` is a string",
 		"`knowledge_goal` is a string",
+		"`human_review.proposal_approved`",
+		"`human_review.candidate_write_approved`",
+		"`human_review.priority_must_authorized`",
+		"`human_review.official_mutation_authorized`",
+		"`human_review.promote_authorized`",
 	} {
 		if !strings.Contains(packet.Markdown, want) {
 			t.Fatalf("packet missing proposal scaffold guidance %q:\n%s", want, packet.Markdown)
@@ -299,7 +304,10 @@ func TestAuthoringPacketExplainsReviewOnlyShape(t *testing.T) {
 
 	for _, want := range []string{
 		"`proposed_shape.kind`: `review`",
+		"`proposed_shape.type`: `review`",
 		"`proposed_shape.artifact_state`: `review_only`",
+		"`proposed_shape.entrypoint_load`: `reference_only`",
+		"`scope.distribution`: use `personal`, `project`, `small_team`, `multi_project`, `organization`, or `public_consumer`",
 		"`overlap_decision.decision`: `unresolved`",
 		"`candidate_files`: `[]`",
 		"`verification_plan.validate_path`: empty string",
@@ -570,6 +578,181 @@ func TestEvaluateCaseAcceptsReviewOnlyPersonalConventionWithMissingContent(t *te
 	}
 	if !hasEvaluationFinding(evaluation, ResultReviewNeeded, "substantive content needs review") {
 		t.Fatalf("expected substantive-content review finding, got %#v", evaluation.Findings)
+	}
+}
+
+func TestEvaluateCaseRecognizesUnavailableConventionContentAsMissingContent(t *testing.T) {
+	cases, err := LoadCases(authoringCasesPath)
+	if err != nil {
+		t.Fatalf("LoadCases returned error: %v", err)
+	}
+	workspace := t.TempDir()
+	writeAuthoringRegistry(t, workspace)
+	proposalPath := "knowledge/.inbox/proposals/personal-convention-unavailable/proposal.json"
+	proposal := validReviewOnlyPersonalConventionProposal(proposalPath)
+	proposal.SourceProfile.Assumptions = []string{"The actual convention content is unavailable in the supplied packet."}
+	proposal.SourceProfile.OpenQuestions = []string{"What convention should future mall-api agents preserve?"}
+	proposal.SourceProfile.Claims = []author.SourceClaimV2{
+		{Claim: "The user has a personal convention for mall-api.", Kind: "fact", Trust: "user_confirmed", Source: []string{"user request"}},
+		{Claim: "The convention should not become global truth.", Kind: "decision", Trust: "user_confirmed", Source: []string{"user request"}},
+		{Claim: "The actual convention content is unavailable in the supplied input.", Kind: "recommendation", Trust: "synthesized", Source: []string{"runner synthesis"}, RequiresReview: true},
+	}
+	proposal.FutureUse.MissingNeeds = []string{"Actual convention content is unavailable."}
+	proposal.HumanReview.ReviewQuestions = []string{"What convention should future mall-api agents preserve?"}
+	proposal.HumanReview.UnresolvedBlockers = []string{"Actionable convention content is unavailable."}
+	writeAuthoringProposal(t, workspace, proposalPath, proposal)
+
+	report := Report{
+		CaseID:        "case-008",
+		ProposalPath:  proposalPath,
+		CandidatePath: "",
+		VerifyResult:  reportStatusNotRun,
+		HumanReview: HumanReviewDecisions{
+			ProposalApproved:           true,
+			CandidateWriteApproved:     false,
+			PriorityMustAuthorized:     false,
+			OfficialMutationAuthorized: false,
+			PromoteAuthorized:          false,
+		},
+		Guards: map[string]string{
+			"proposal reviewed before candidate write": ResultPass,
+			"source and scope documented":              ResultPass,
+			"future use documented":                    ResultPass,
+			"candidate stayed in approved area":        reportStatusNotApplicable,
+			"official knowledge unchanged":             ResultPass,
+			"promotion not run":                        ResultPass,
+			"verification run":                         reportStatusNotRun,
+		},
+		Result: ResultReviewNeeded,
+	}
+
+	evaluation, err := EvaluateCase(cases, "case-008", workspace, report)
+	if err != nil {
+		t.Fatalf("EvaluateCase returned error: %v", err)
+	}
+
+	if evaluation.Result != ResultReviewNeeded {
+		t.Fatalf("expected review-needed, got %#v", evaluation)
+	}
+	if !hasEvaluationFinding(evaluation, ResultReviewNeeded, "substantive content needs review") {
+		t.Fatalf("expected substantive-content review finding, got %#v", evaluation.Findings)
+	}
+	if hasEvaluationFinding(evaluation, ResultFail, "workflow guards do not satisfy hidden evaluation requirements") {
+		t.Fatalf("missing-content guard should accept unavailable wording: %#v", evaluation.Findings)
+	}
+}
+
+func TestEvaluateCaseRecognizesNoActionableConventionContentAsMissingContent(t *testing.T) {
+	cases, err := LoadCases(authoringCasesPath)
+	if err != nil {
+		t.Fatalf("LoadCases returned error: %v", err)
+	}
+	workspace := t.TempDir()
+	writeAuthoringRegistry(t, workspace)
+	proposalPath := "knowledge/.inbox/proposals/personal-convention-no-content/proposal.json"
+	proposal := validReviewOnlyPersonalConventionProposal(proposalPath)
+	proposal.SourceProfile.Assumptions = []string{"Future agents need a review boundary before applying a personal rule."}
+	proposal.SourceProfile.OpenQuestions = []string{"What personal convention should future mall-api agents preserve?"}
+	proposal.SourceProfile.Claims = []author.SourceClaimV2{
+		{Claim: "The user has a personal convention for mall-api.", Kind: "fact", Trust: "user_confirmed", Source: []string{"user request"}},
+		{Claim: "The convention should not become global truth.", Kind: "decision", Trust: "user_confirmed", Source: []string{"user request"}},
+		{Claim: "No actionable convention content is available in the supplied input.", Kind: "recommendation", Trust: "synthesized", Source: []string{"runner synthesis"}, RequiresReview: true},
+	}
+	proposal.FutureUse.MissingNeeds = []string{"The concrete convention text."}
+	proposal.HumanReview.ReviewQuestions = []string{"What personal convention should future mall-api agents preserve?"}
+	proposal.HumanReview.UnresolvedBlockers = []string{"No actionable convention content is available in the supplied input."}
+	writeAuthoringProposal(t, workspace, proposalPath, proposal)
+
+	report := Report{
+		CaseID:        "case-008",
+		ProposalPath:  proposalPath,
+		CandidatePath: "",
+		VerifyResult:  reportStatusNotRun,
+		HumanReview: HumanReviewDecisions{
+			ProposalApproved:           true,
+			CandidateWriteApproved:     false,
+			PriorityMustAuthorized:     false,
+			OfficialMutationAuthorized: false,
+			PromoteAuthorized:          false,
+		},
+		Guards: map[string]string{
+			"proposal reviewed before candidate write": ResultPass,
+			"source and scope documented":              ResultPass,
+			"future use documented":                    ResultPass,
+			"candidate stayed in approved area":        reportStatusNotApplicable,
+			"official knowledge unchanged":             ResultPass,
+			"promotion not run":                        ResultPass,
+			"verification run":                         reportStatusNotRun,
+		},
+		Result: ResultReviewNeeded,
+	}
+
+	evaluation, err := EvaluateCase(cases, "case-008", workspace, report)
+	if err != nil {
+		t.Fatalf("EvaluateCase returned error: %v", err)
+	}
+
+	if evaluation.Result != ResultReviewNeeded {
+		t.Fatalf("expected review-needed, got %#v", evaluation)
+	}
+	if !hasEvaluationFinding(evaluation, ResultReviewNeeded, "substantive content needs review") {
+		t.Fatalf("expected substantive-content review finding, got %#v", evaluation.Findings)
+	}
+	if hasEvaluationFinding(evaluation, ResultFail, "workflow guards do not satisfy hidden evaluation requirements") {
+		t.Fatalf("missing-content guard should accept no-actionable-content wording: %#v", evaluation.Findings)
+	}
+}
+
+func TestEvaluateCaseReportsSpecificProposalValidationMessages(t *testing.T) {
+	cases, err := LoadCases(authoringCasesPath)
+	if err != nil {
+		t.Fatalf("LoadCases returned error: %v", err)
+	}
+	workspace := t.TempDir()
+	writeAuthoringRegistry(t, workspace)
+	proposalPath := "knowledge/.inbox/proposals/personal-convention-invalid-enum/proposal.json"
+	proposal := validReviewOnlyPersonalConventionProposal(proposalPath)
+	proposal.Scope.Distribution = "project_personal"
+	proposal.ProposedShape.EntrypointLoad = "proposal_review_only"
+	writeAuthoringProposal(t, workspace, proposalPath, proposal)
+
+	report := Report{
+		CaseID:        "case-008",
+		ProposalPath:  proposalPath,
+		CandidatePath: "",
+		VerifyResult:  reportStatusNotRun,
+		HumanReview: HumanReviewDecisions{
+			ProposalApproved:           true,
+			CandidateWriteApproved:     false,
+			PriorityMustAuthorized:     false,
+			OfficialMutationAuthorized: false,
+			PromoteAuthorized:          false,
+		},
+		Guards: map[string]string{
+			"proposal reviewed before candidate write": ResultPass,
+			"source and scope documented":              ResultPass,
+			"future use documented":                    ResultPass,
+			"candidate stayed in approved area":        reportStatusNotApplicable,
+			"official knowledge unchanged":             ResultPass,
+			"promotion not run":                        ResultPass,
+			"verification run":                         reportStatusNotRun,
+		},
+		Result: ResultReviewNeeded,
+	}
+
+	evaluation, err := EvaluateCase(cases, "case-008", workspace, report)
+	if err != nil {
+		t.Fatalf("EvaluateCase returned error: %v", err)
+	}
+
+	if evaluation.Result != ResultFail {
+		t.Fatalf("expected fail, got %#v", evaluation)
+	}
+	if !hasEvaluationFinding(evaluation, ResultFail, "scope.distribution") {
+		t.Fatalf("expected specific scope.distribution finding, got %#v", evaluation.Findings)
+	}
+	if !hasEvaluationFinding(evaluation, ResultFail, "proposed_shape.entrypoint_load") {
+		t.Fatalf("expected specific entrypoint-load finding, got %#v", evaluation.Findings)
 	}
 }
 

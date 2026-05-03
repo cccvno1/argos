@@ -279,6 +279,15 @@ func buildProposalScaffold(response InspectResponse, req InspectRequest) Proposa
 		},
 	}
 
+	if requestLooksConsumerFacing(req) {
+		proposal.Audience.Primary = "consumer_agent"
+		proposal.Audience.AgentActionsSupported = []string{
+			"help developers use or integrate with the documented project interface",
+			"separate observed interface facts from user interpretation before advising consumers",
+			"respect source trust, applicability, and human review boundaries",
+		}
+	}
+
 	if reviewOnly {
 		proposal.ProposedShape.Kind = "review"
 		proposal.ProposedShape.Type = "review"
@@ -301,6 +310,32 @@ func buildProposalScaffold(response InspectResponse, req InspectRequest) Proposa
 	}
 
 	return proposal
+}
+
+func requestLooksConsumerFacing(req InspectRequest) bool {
+	text := strings.ToLower(strings.Join(append([]string{
+		req.Goal,
+		req.FutureTask,
+		req.Query,
+	}, append(append([]string{}, req.Tags...), req.Files...)...), " "))
+	if text == "" {
+		return false
+	}
+	hasConsumerIntent := strings.Contains(text, "interface") ||
+		strings.Contains(text, "interfaces") ||
+		strings.Contains(text, "consumer") ||
+		strings.Contains(text, "called by") ||
+		strings.Contains(text, "callers") ||
+		strings.Contains(text, "developers use") ||
+		strings.Contains(text, "integrate") ||
+		strings.Contains(text, "integration") ||
+		strings.Contains(text, "business-capability") ||
+		strings.Contains(text, "business points")
+	hasSourceSignal := strings.Contains(text, "internal/api") ||
+		strings.Contains(text, "api") ||
+		strings.Contains(text, "consumer") ||
+		strings.Contains(text, "interface")
+	return hasConsumerIntent && hasSourceSignal
 }
 
 func overlapIDs(overlap ...[]OverlapMatch) []string {

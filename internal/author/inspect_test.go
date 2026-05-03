@@ -1,6 +1,7 @@
 package author
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -107,6 +108,65 @@ func TestInspectIncludesValidProposalV2Scaffold(t *testing.T) {
 	}
 	if hasFinding(ValidateProposalV2(proposal), "fail", "") {
 		t.Fatalf("scaffold has failing findings: %#v", ValidateProposalV2(proposal))
+	}
+
+	data, err := json.Marshal(proposal)
+	if err != nil {
+		t.Fatalf("marshal scaffold: %v", err)
+	}
+	for _, want := range []string{
+		`"proposal_approved":false`,
+		`"candidate_write_approved":false`,
+		`"priority_must_authorized":false`,
+		`"official_mutation_authorized":false`,
+		`"promote_authorized":false`,
+	} {
+		if !strings.Contains(string(data), want) {
+			t.Fatalf("scaffold JSON missing human review boundary %s: %s", want, string(data))
+		}
+	}
+}
+
+func TestInspectInfersConsumerAudienceForAPIConsumerKnowledge(t *testing.T) {
+	root := t.TempDir()
+	writeAuthorRegistry(t, root)
+
+	result, err := Inspect(root, InspectRequest{
+		Project: "mall-api",
+		Goal:    "This project is called by many people. I want future agents to understand the business points and interfaces so they can help other developers use it.",
+		Files:   []string{"internal/api/README.md"},
+		Tags:    []string{"api", "consumer", "business-capability"},
+	})
+	if err != nil {
+		t.Fatalf("Inspect returned error: %v", err)
+	}
+
+	proposal := result.ProposalScaffold
+	if proposal.Audience.Primary != "consumer_agent" {
+		t.Fatalf("audience.primary = %q, want consumer_agent", proposal.Audience.Primary)
+	}
+	if !containsText(proposal.Audience.AgentActionsSupported, "help developers use or integrate with the documented project interface") {
+		t.Fatalf("consumer scaffold missing consumer action guidance: %#v", proposal.Audience.AgentActionsSupported)
+	}
+}
+
+func TestInspectKeepsImplementerAudienceForInternalAPISourceWithoutConsumerIntent(t *testing.T) {
+	root := t.TempDir()
+	writeAuthorRegistry(t, root)
+
+	result, err := Inspect(root, InspectRequest{
+		Project: "mall-api",
+		Goal:    "Refactor internal API handlers for implementation.",
+		Files:   []string{"internal/api/handler.go"},
+		Tags:    []string{"backend"},
+	})
+	if err != nil {
+		t.Fatalf("Inspect returned error: %v", err)
+	}
+
+	proposal := result.ProposalScaffold
+	if proposal.Audience.Primary != "implementer_agent" {
+		t.Fatalf("audience.primary = %q, want implementer_agent", proposal.Audience.Primary)
 	}
 }
 
@@ -378,6 +438,15 @@ Load supporting references only when needed.
 func hasOverlap(matches []OverlapMatch, kind string, id string) bool {
 	for _, match := range matches {
 		if match.Kind == kind && match.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func containsText(values []string, want string) bool {
+	for _, value := range values {
+		if strings.Contains(value, want) {
 			return true
 		}
 	}

@@ -109,11 +109,11 @@ type DeliveryV2 struct {
 
 type HumanReviewV2 struct {
 	ReviewQuestions            []string `json:"review_questions"`
-	ProposalApproved           bool     `json:"proposal_approved,omitempty"`
-	CandidateWriteApproved     bool     `json:"candidate_write_approved,omitempty"`
-	PriorityMustAuthorized     bool     `json:"priority_must_authorized,omitempty"`
-	OfficialMutationAuthorized bool     `json:"official_mutation_authorized,omitempty"`
-	PromoteAuthorized          bool     `json:"promote_authorized,omitempty"`
+	ProposalApproved           bool     `json:"proposal_approved"`
+	CandidateWriteApproved     bool     `json:"candidate_write_approved"`
+	PriorityMustAuthorized     bool     `json:"priority_must_authorized"`
+	OfficialMutationAuthorized bool     `json:"official_mutation_authorized"`
+	PromoteAuthorized          bool     `json:"promote_authorized"`
 	RequestedEdits             []string `json:"requested_edits,omitempty"`
 	UnresolvedBlockers         []string `json:"unresolved_blockers,omitempty"`
 }

@@ -102,6 +102,7 @@ func renderAuthoringPacketMarkdown(packet Packet) string {
 	fmt.Fprintf(&builder, "- Copy the scaffold shape before changing values; keep top-level field types unchanged.\n")
 	fmt.Fprintf(&builder, "- `user_request` is a string. Do not replace it with an object.\n")
 	fmt.Fprintf(&builder, "- `knowledge_goal` is a string. Put details in `source_profile`, `future_use`, `applicability`, and `human_review`.\n\n")
+	fmt.Fprintf(&builder, "- Keep human review decisions as top-level booleans under `human_review`: `human_review.proposal_approved`, `human_review.candidate_write_approved`, `human_review.priority_must_authorized`, `human_review.official_mutation_authorized`, and `human_review.promote_authorized`.\n\n")
 
 	fmt.Fprintf(&builder, "## Proposal Contract\n\n")
 	fmt.Fprintf(&builder, "- schema_version: `authoring.proposal.v2`\n")
@@ -114,6 +115,8 @@ func renderAuthoringPacketMarkdown(packet Packet) string {
 	fmt.Fprintf(&builder, "- `proposed_shape.kind`: `review`\n")
 	fmt.Fprintf(&builder, "- `proposed_shape.type`: `review`\n")
 	fmt.Fprintf(&builder, "- `proposed_shape.artifact_state`: `review_only`\n")
+	fmt.Fprintf(&builder, "- `proposed_shape.entrypoint_load`: `reference_only`\n")
+	fmt.Fprintf(&builder, "- `scope.distribution`: use `personal`, `project`, `small_team`, `multi_project`, `organization`, or `public_consumer`\n")
 	fmt.Fprintf(&builder, "- `overlap_decision.decision`: `unresolved`\n")
 	fmt.Fprintf(&builder, "- `candidate_files`: `[]`\n")
 	fmt.Fprintf(&builder, "- `verification_plan.validate_path`: empty string\n")
