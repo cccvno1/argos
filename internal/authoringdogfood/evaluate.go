@@ -140,9 +140,6 @@ func EvaluateCase(cases []Case, requestedID string, workspace string, report Rep
 	for _, finding := range author.ValidateProposalV2(proposal) {
 		addAuthorFinding(finding, addFail, addReview)
 	}
-	if proposalHasMissingSubstantiveContent(proposal) {
-		addReview("substantive content needs review before this candidate is usable knowledge")
-	}
 	if !tc.Approval.OfficialMutationAuthorized && proposal.Delivery.OfficialMutationAuthorized {
 		addFail("official knowledge mutation was not approved")
 	}
@@ -186,6 +183,7 @@ func EvaluateCase(cases []Case, requestedID string, workspace string, report Rep
 		addReview("reported author verify result did not match workspace verification")
 	}
 
+	addPublicAuthoringDiagnostics(proposal, addReview)
 	enforceHiddenOracle(tc, proposal, report, candidatePath, verifyRan, verifyResult, addFail, addReview)
 	return finalizeAuthoringEvaluation(tc, evaluation), nil
 }
@@ -415,6 +413,30 @@ func addAuthorFinding(finding author.Finding, addFail func(string), addReview fu
 	case ResultReviewNeeded:
 		addReview("author validation requires human review")
 	}
+}
+
+func addPublicAuthoringDiagnostics(proposal author.ProposalV2, addReview func(string)) {
+	if !hasNonEmptyString(proposal.SourceProfile.UserConfirmed) && hasClaimKind(proposal, "template") {
+		addReview("source trust needs review: human-stated design and observed template facts are not clearly separated")
+	}
+	if hasClaimKind(proposal, "assumption") && !hasNonEmptyString(proposal.SourceProfile.Assumptions) {
+		addReview("assumptions need review: assumption claims are not mirrored in the structured assumptions list")
+	}
+	if proposalV2LooksReviewOnlyForDogfood(proposal) {
+		addReview("artifact state needs review: proposal is waiting for a human decision before candidate writing")
+	}
+	if proposalHasMissingSubstantiveContent(proposal) {
+		addReview("substantive content needs review before this candidate is usable knowledge")
+	}
+}
+
+func proposalV2LooksReviewOnlyForDogfood(proposal author.ProposalV2) bool {
+	return proposal.ProposedShape.ArtifactState == "review_only" ||
+		proposal.ProposedShape.Kind == "review" ||
+		proposal.OverlapDecision.Decision == "unresolved" &&
+			!proposal.HumanReview.CandidateWriteApproved &&
+			len(proposal.CandidateFiles) == 0 &&
+			strings.TrimSpace(proposal.VerificationPlan.ValidatePath) == ""
 }
 
 func cleanWorkspaceRelativePath(path string) (string, bool) {

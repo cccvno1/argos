@@ -113,3 +113,21 @@ authoring contract around source state and artifact state:
    note or review blocker, not a passed knowledge candidate.
 4. Rerun the failed and false-green cases before returning to feature
    expansion.
+
+## Post-Fix Rerun
+
+Date: 2026-05-03
+Round Root: `/tmp/argos-authoring-tightening.Tjl59s`
+
+This was a coordinator-assisted re-evaluation of the previous fresh-runner
+reports and workspaces using the tightened binary. New runner packets were
+generated under the round root, but no new fresh runner sessions were launched
+for this pass.
+
+| Case | Status | Evaluation | Notes |
+| --- | --- | --- | --- |
+| `case-001` | `fail` | `fail` | Source-state diagnostic now names the human-stated design versus observed template split. |
+| `case-003` | `fail` | `fail` | Source-state gap remains for consumer-facing business intent versus observed API facts. |
+| `case-004` | `fail` | `fail` | Assumption-state gap remains for prose-only retry limitations. |
+| `case-005` | `review-needed` | `fail` | Old artifact still lacks the new review-only proposal shape; fresh runner rerun is still needed. |
+| `case-008` | `pass` | `pass` | Old artifact still passes because it frames scope reminders as content; content-readiness needs a fresh runner rerun and likely a stronger semantic gate. |

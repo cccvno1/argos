@@ -50,4 +50,6 @@ Use `none` for an intentionally absent candidate path and `not-run` when verific
 
 Result: `<replace-with-pass-fail-or-review-needed>`
 
+Readiness notes: `none | source-state review | artifact-state review | content-readiness review`
+
 Notes:

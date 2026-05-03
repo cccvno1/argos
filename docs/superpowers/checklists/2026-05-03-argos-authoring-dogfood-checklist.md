@@ -41,3 +41,4 @@ cp -R testdata/authoring-golden/fixtures/full/. "$ROUND_ROOT/case-001/"
 ## Evaluator Handoff
 
 Copy the evaluator JSON into the round report and classify each failure as `product`, `harness`, `runner`, `case`, or `blocked`.
+- Rerun the template, consumer-reference, observed-lesson, overlap, and personal-convention cases after source/artifact/content contract changes.

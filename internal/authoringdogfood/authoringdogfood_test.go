@@ -473,6 +473,35 @@ func TestEvaluateCaseFlagsPersonalConventionWithMissingContentAsReviewNeeded(t *
 	}
 }
 
+func TestEvaluateCaseUsesPublicDiagnosticCategories(t *testing.T) {
+	cases, err := LoadCases(authoringCasesPath)
+	if err != nil {
+		t.Fatalf("LoadCases returned error: %v", err)
+	}
+	workspace := t.TempDir()
+	writeAuthoringRegistry(t, workspace)
+	proposalPath := sampleProposalPath
+	proposal := validAuthoringProposal(sampleCandidatePath)
+	proposal.SourceProfile.UserConfirmed = nil
+	proposal.SourceProfile.Claims = []author.SourceClaimV2{
+		{Claim: "Template should guide future services.", Kind: "template", Trust: "observed", Source: []string{"templates/go-service"}},
+	}
+	writeAuthoringProposal(t, workspace, proposalPath, proposal)
+	writeCandidatePackage(t, workspace, sampleCandidatePath, "package:backend.go-service-template.v1", "Go Service Template Knowledge")
+
+	report := validAuthoringReport("case-001", ResultPass, proposalPath, sampleCandidatePath)
+
+	evaluation, err := EvaluateCase(cases, "case-001", workspace, report)
+	if err != nil {
+		t.Fatalf("EvaluateCase returned error: %v", err)
+	}
+
+	if !hasEvaluationFinding(evaluation, ResultReviewNeeded, "source trust needs review") {
+		t.Fatalf("expected source-trust diagnostic, got %#v", evaluation.Findings)
+	}
+	assertEvaluationFindingsOmit(t, evaluation, "source_profile.user_confirmed", "required_evidence_categories", "oracle")
+}
+
 func TestEvaluateCaseFailsProposalHumanReviewApprovalBypass(t *testing.T) {
 	cases, err := LoadCases(authoringCasesPath)
 	if err != nil {
