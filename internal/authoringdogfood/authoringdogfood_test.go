@@ -856,8 +856,9 @@ func TestAuthoringDogfoodRound0RecordsEvaluationLoop(t *testing.T) {
 
 	for _, want := range []string{
 		"# Argos Authoring Dogfood Round 0",
-		"Argos Commit: `record-before-run`",
-		"Status: `not-run`",
+		"Argos Commit:",
+		"Status:",
+		"Round Root:",
 		"## Runner Isolation",
 		"## Fixture Preparation",
 		"## Case Matrix",
@@ -869,6 +870,7 @@ func TestAuthoringDogfoodRound0RecordsEvaluationLoop(t *testing.T) {
 		"> \"$ROUND_ROOT/packets/case-001.md\"",
 		"## Evaluation Commands",
 		"## Results",
+		"Overall result:",
 		"## Failure Classification",
 		"`product`",
 		"`harness`",

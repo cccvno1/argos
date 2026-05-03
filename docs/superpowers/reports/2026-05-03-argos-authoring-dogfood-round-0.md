@@ -1,8 +1,9 @@
 # Argos Authoring Dogfood Round 0
 
 Date: 2026-05-03
-Argos Commit: `record-before-run`
-Status: `not-run`
+Argos Commit: `84ea0ec`
+Status: `evaluated-fail`
+Round Root: `/tmp/argos-authoring-dogfood.FblCEm`
 
 ## Purpose
 
@@ -31,7 +32,7 @@ cp -R testdata/authoring-golden/fixtures/full/. "$ROUND_ROOT/case-001/"
 
 | Case | Status | Packet | Runner Report | Evaluation |
 | --- | --- | --- | --- | --- |
-| `case-001` | `not-run` | `$ROUND_ROOT/packets/case-001.md` | `$ROUND_ROOT/reports/case-001.md` | `not-run` |
+| `case-001` | `fail` | `$ROUND_ROOT/packets/case-001.md` | `$ROUND_ROOT/reports/case-001.md` | `fail` |
 
 ## Evaluation Commands
 
@@ -41,7 +42,36 @@ cp -R testdata/authoring-golden/fixtures/full/. "$ROUND_ROOT/case-001/"
 
 ## Results
 
-No fresh-runner report has been evaluated yet.
+Overall result: `fail`
+
+Runner artifacts:
+
+- Packet: `/tmp/argos-authoring-dogfood.FblCEm/packets/case-001.md`
+- Workspace: `/tmp/argos-authoring-dogfood.FblCEm/case-001`
+- Runner report: `/tmp/argos-authoring-dogfood.FblCEm/reports/case-001.md`
+- Evaluation JSON: `/tmp/argos-authoring-dogfood.FblCEm/evaluation-case-001.json`
+
+Evaluator output:
+
+```json
+{
+  "case_id": "case-001",
+  "result": "fail",
+  "findings": [
+    {
+      "severity": "fail",
+      "message": "proposal evidence does not satisfy hidden evaluation requirements"
+    }
+  ]
+}
+```
+
+The fresh runner completed the visible flow: it wrote a proposal, wrote an inbox
+candidate package, kept official knowledge unchanged, did not run promote, and
+reported `author verify` as `pass`.
+
+The failure is that the proposal did not distinguish user-provided confirmation
+from observed template evidence strongly enough for the hidden evaluator.
 
 ## Failure Classification
 
@@ -53,4 +83,9 @@ No fresh-runner report has been evaluated yet.
 
 ## Next Development Decision
 
-Run `case-001` with a fresh runner using the generated packet and authoring report template, then evaluate the saved report.
+Classify `case-001` as `product`.
+
+Next development slice: make the authoring proposal contract and runner packet
+clearer about source trust for user-designed or user-confirmed material. A
+fresh runner should know how to represent a human-provided template separately
+from repository-observed facts before it writes candidate knowledge.
