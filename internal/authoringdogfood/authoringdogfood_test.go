@@ -217,6 +217,63 @@ func TestAuthoringPacketExplainsPublicSourceState(t *testing.T) {
 	assertAuthoringPacketOmitsHiddenTokens(t, packet.Markdown)
 }
 
+func TestAuthoringPacketExplainsProposalScaffold(t *testing.T) {
+	cases, err := LoadCases(authoringCasesPath)
+	if err != nil {
+		t.Fatalf("LoadCases returned error: %v", err)
+	}
+
+	packet, err := BuildPacket(cases, PacketOptions{
+		CaseID:      "case-001",
+		Workspace:   "/tmp/argos-authoring/ws",
+		ArgosBinary: "/tmp/argos",
+	})
+	if err != nil {
+		t.Fatalf("BuildPacket returned error: %v", err)
+	}
+
+	for _, want := range []string{
+		"`proposal_scaffold`",
+		"Copy the scaffold shape before changing values",
+		"`user_request` is a string",
+		"`knowledge_goal` is a string",
+	} {
+		if !strings.Contains(packet.Markdown, want) {
+			t.Fatalf("packet missing proposal scaffold guidance %q:\n%s", want, packet.Markdown)
+		}
+	}
+	assertAuthoringPacketOmitsHiddenTokens(t, packet.Markdown)
+}
+
+func TestAuthoringPacketExplainsReviewOnlyShape(t *testing.T) {
+	cases, err := LoadCases(authoringCasesPath)
+	if err != nil {
+		t.Fatalf("LoadCases returned error: %v", err)
+	}
+
+	packet, err := BuildPacket(cases, PacketOptions{
+		CaseID:      "case-005",
+		Workspace:   "/tmp/argos-authoring/ws",
+		ArgosBinary: "/tmp/argos",
+	})
+	if err != nil {
+		t.Fatalf("BuildPacket returned error: %v", err)
+	}
+
+	for _, want := range []string{
+		"`proposed_shape.kind`: `review`",
+		"`proposed_shape.artifact_state`: `review_only`",
+		"`overlap_decision.decision`: `unresolved`",
+		"`candidate_files`: `[]`",
+		"`verification_plan.validate_path`: empty string",
+	} {
+		if !strings.Contains(packet.Markdown, want) {
+			t.Fatalf("packet missing review-only shape guidance %q:\n%s", want, packet.Markdown)
+		}
+	}
+	assertAuthoringPacketOmitsHiddenTokens(t, packet.Markdown)
+}
+
 func TestParseMarkdownReportExtractsAuthoringArtifacts(t *testing.T) {
 	report, err := ParseMarkdownReport([]byte(sampleAuthoringReport("case-001", "pass")))
 	if err != nil {

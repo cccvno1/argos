@@ -97,11 +97,27 @@ func renderAuthoringPacketMarkdown(packet Packet) string {
 	fmt.Fprintf(&builder, "%s author verify --json --proposal <proposal-path> --path <candidate-path>\n", packet.ArgosBinary)
 	fmt.Fprintf(&builder, "```\n\n")
 
+	fmt.Fprintf(&builder, "## Proposal Scaffold\n\n")
+	fmt.Fprintf(&builder, "- `author inspect --json` returns `proposal_scaffold`, a canonical `authoring.proposal.v2` JSON shape.\n")
+	fmt.Fprintf(&builder, "- Copy the scaffold shape before changing values; keep top-level field types unchanged.\n")
+	fmt.Fprintf(&builder, "- `user_request` is a string. Do not replace it with an object.\n")
+	fmt.Fprintf(&builder, "- `knowledge_goal` is a string. Put details in `source_profile`, `future_use`, `applicability`, and `human_review`.\n\n")
+
 	fmt.Fprintf(&builder, "## Proposal Contract\n\n")
 	fmt.Fprintf(&builder, "- schema_version: `authoring.proposal.v2`\n")
 	fmt.Fprintf(&builder, "- Include `user_request`, `knowledge_goal`, `audience`, `scope`, `source_profile`, `proposed_shape`, `future_use`, `applicability`, `overlap_decision`, `delivery`, `candidate_files`, `verification_plan`, and `human_review`.\n")
 	fmt.Fprintf(&builder, "- Set `delivery.write_requires_human_approval` and `delivery.review_packet_required` to true.\n")
 	fmt.Fprintf(&builder, "- Keep `candidate_files` under the approved candidate path and delivery boundary.\n\n")
+
+	fmt.Fprintf(&builder, "## Review-Only Shape\n\n")
+	fmt.Fprintf(&builder, "When overlap, missing content, or human approval blocks candidate writing, write a proposal-only artifact and do not write a candidate. Use these canonical fields:\n\n")
+	fmt.Fprintf(&builder, "- `proposed_shape.kind`: `review`\n")
+	fmt.Fprintf(&builder, "- `proposed_shape.type`: `review`\n")
+	fmt.Fprintf(&builder, "- `proposed_shape.artifact_state`: `review_only`\n")
+	fmt.Fprintf(&builder, "- `overlap_decision.decision`: `unresolved`\n")
+	fmt.Fprintf(&builder, "- `candidate_files`: `[]`\n")
+	fmt.Fprintf(&builder, "- `verification_plan.validate_path`: empty string\n")
+	fmt.Fprintf(&builder, "- `human_review.candidate_write_approved`: `false`\n\n")
 
 	fmt.Fprintf(&builder, "## Source State Guidance\n\n")
 	fmt.Fprintf(&builder, "- Mark human-stated design or confirmation separately from observed workspace facts.\n")
@@ -129,6 +145,10 @@ func renderAuthoringPacketMarkdown(packet Packet) string {
 		fmt.Fprintf(&builder, "- %s: pass | fail | review-needed | not-applicable | not-run\n", authoringGuardReportLabel(guard))
 	}
 	fmt.Fprintf(&builder, "\n")
+	fmt.Fprintf(&builder, "Result semantics:\n")
+	fmt.Fprintf(&builder, "- `pass`: candidate is ready for review within the current human approval boundary.\n")
+	fmt.Fprintf(&builder, "- `review-needed`: approval, authorization, source state, artifact state, findability, or substantive content still needs a human decision.\n")
+	fmt.Fprintf(&builder, "- `fail`: workflow violated a boundary or an artifact cannot be inspected.\n\n")
 
 	return builder.String()
 }
