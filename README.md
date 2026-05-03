@@ -127,8 +127,8 @@ Authoring dogfood validates the write side from natural user requests:
 
 ```bash
 argos dogfood authoring cases --json
-argos dogfood authoring packet --case <case-handle> --workspace <fixture> --argos-binary <argos>
-argos dogfood authoring evaluate --case <case-handle> --report <report.md> --workspace <fixture> --json
+argos dogfood authoring packet --case <case-handle> --workspace <workspace> --argos-binary <argos>
+argos dogfood authoring evaluate --case <case-handle> --report <report.md> --workspace <workspace> --json
 ```
 
 Use the authoring dogfood checklist and report template for counted runs:
@@ -136,15 +136,16 @@ Use the authoring dogfood checklist and report template for counted runs:
 - `docs/superpowers/checklists/2026-05-03-argos-authoring-dogfood-checklist.md`
 - `docs/superpowers/templates/argos-authoring-dogfood-report.md`
 
-For each case, create a unique round root, then copy the fixture seed to a temp workspace.
-Generate a packet, start a fresh runner with the packet and template, save the
+For each case, create a unique round root, then generate a packet. The packet
+command seeds the selected public fixture into the temp workspace before it
+prints the runner packet. Start a fresh runner with the packet and template, save the
 runner report, run `dogfood authoring evaluate`, and record the evaluated result in the round report.
 The public fixture seed lives at
 `testdata/authoring-golden/fixtures/full`.
 
 ```bash
 ROUND_ROOT=$(mktemp -d /tmp/argos-authoring-dogfood.XXXXXX)
-mkdir -p "$ROUND_ROOT/packets" "$ROUND_ROOT/reports" "$ROUND_ROOT/case-001"
+mkdir -p "$ROUND_ROOT/packets" "$ROUND_ROOT/reports"
 ```
 
 The checklist is authoritative for exact packet and report paths. Counted runs

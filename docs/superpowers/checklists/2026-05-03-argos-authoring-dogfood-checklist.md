@@ -21,13 +21,15 @@ Use this checklist to run authoring dogfood without leaking hidden expectations 
 
 ```bash
 ROUND_ROOT=$(mktemp -d /tmp/argos-authoring-dogfood.XXXXXX)
-mkdir -p "$ROUND_ROOT/packets" "$ROUND_ROOT/reports" "$ROUND_ROOT/case-001"
+mkdir -p "$ROUND_ROOT/packets" "$ROUND_ROOT/reports"
 go build -o "$ROUND_ROOT/argos" ./cmd/argos
 "$ROUND_ROOT/argos" dogfood authoring cases --json
-cp -R testdata/authoring-golden/fixtures/full/. "$ROUND_ROOT/case-001/"
 "$ROUND_ROOT/argos" dogfood authoring packet --case case-001 --workspace "$ROUND_ROOT/case-001" --argos-binary "$ROUND_ROOT/argos" > "$ROUND_ROOT/packets/case-001.md"
 "$ROUND_ROOT/argos" dogfood authoring evaluate --case case-001 --report "$ROUND_ROOT/reports/case-001.md" --workspace "$ROUND_ROOT/case-001" --json
 ```
+
+The packet command seeds the selected public fixture into `$ROUND_ROOT/case-001`
+before printing the runner packet.
 
 ## Runner Requirements
 

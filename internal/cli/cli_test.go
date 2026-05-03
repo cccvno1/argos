@@ -615,13 +615,14 @@ func TestRunDogfoodAuthoringCasesReturnsNaturalPublicInput(t *testing.T) {
 
 func TestRunDogfoodAuthoringPacketReturnsMarkdownWithoutHiddenData(t *testing.T) {
 	chdir(t, repoRootForCLITest(t))
+	workspace := t.TempDir()
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	code := Run([]string{
 		"dogfood", "authoring", "packet",
 		"--case", "case-001",
-		"--workspace", "/tmp/argos-authoring",
+		"--workspace", workspace,
 		"--argos-binary", "/tmp/argos",
 	}, &stdout, &stderr)
 
@@ -645,6 +646,33 @@ func TestRunDogfoodAuthoringPacketReturnsMarkdownWithoutHiddenData(t *testing.T)
 	for _, forbidden := range hiddenAuthoringDogfoodTokens() {
 		if strings.Contains(output, forbidden) {
 			t.Fatalf("authoring packet leaked %q in output: %s", forbidden, output)
+		}
+	}
+}
+
+func TestRunDogfoodAuthoringPacketSeedsFixtureWorkspace(t *testing.T) {
+	chdir(t, repoRootForCLITest(t))
+	workspace := t.TempDir()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{
+		"dogfood", "authoring", "packet",
+		"--case", "case-003",
+		"--workspace", workspace,
+		"--argos-binary", "/tmp/argos",
+	}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stderr=%q stdout=%q", code, stderr.String(), stdout.String())
+	}
+	for _, rel := range []string{
+		"knowledge/domains.yaml",
+		"knowledge/projects.yaml",
+		"internal/api/README.md",
+	} {
+		if _, err := os.Stat(filepath.Join(workspace, filepath.FromSlash(rel))); err != nil {
+			t.Fatalf("packet command did not seed fixture file %s: %v", rel, err)
 		}
 	}
 }

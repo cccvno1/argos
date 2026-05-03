@@ -1607,9 +1607,9 @@ func TestAuthoringDogfoodChecklistDefinesFreshRunnerWorkflow(t *testing.T) {
 		"ROUND_ROOT=$(mktemp -d /tmp/argos-authoring-dogfood.XXXXXX)",
 		"> \"$ROUND_ROOT/packets/case-001.md\"",
 		"dogfood authoring evaluate --case case-001",
-		"mkdir -p \"$ROUND_ROOT/packets\" \"$ROUND_ROOT/reports\" \"$ROUND_ROOT/case-001\"",
+		"mkdir -p \"$ROUND_ROOT/packets\" \"$ROUND_ROOT/reports\"",
 		"$ROUND_ROOT/reports/case-001.md",
-		"cp -R testdata/authoring-golden/fixtures/full/.",
+		"The packet command seeds the selected public fixture into `$ROUND_ROOT/case-001`",
 		"Start a fresh runner with `$ROUND_ROOT/packets/case-001.md`",
 		"Fresh runner saves the completed report at `$ROUND_ROOT/reports/case-001.md`.",
 		"authoring.proposal.v2",
@@ -1624,8 +1624,12 @@ func TestAuthoringDogfoodChecklistDefinesFreshRunnerWorkflow(t *testing.T) {
 		}
 	}
 	assertTextOrder(t, "checklist", text,
-		"mkdir -p \"$ROUND_ROOT/packets\" \"$ROUND_ROOT/reports\" \"$ROUND_ROOT/case-001\"",
+		"mkdir -p \"$ROUND_ROOT/packets\" \"$ROUND_ROOT/reports\"",
 		"go build -o \"$ROUND_ROOT/argos\" ./cmd/argos",
+	)
+	assertTextOrder(t, "checklist", text,
+		"go build -o \"$ROUND_ROOT/argos\" ./cmd/argos",
+		"dogfood authoring packet --case case-001",
 	)
 	assertAuthoringProcessDocOmitsHiddenTokens(t, "checklist", text)
 	assertAuthoringProcessDocOmitsFixedRoundPaths(t, "checklist", text)
@@ -1696,9 +1700,9 @@ func TestREADMEExplainsAuthoringDogfoodRoundWorkflow(t *testing.T) {
 		"docs/superpowers/templates/argos-authoring-dogfood-report.md",
 		"docs/superpowers/checklists/2026-05-03-argos-authoring-dogfood-checklist.md",
 		"testdata/authoring-golden/fixtures/full",
-		"copy the fixture seed to a temp workspace",
+		"command seeds the selected public fixture into the temp workspace",
 		"ROUND_ROOT=$(mktemp -d /tmp/argos-authoring-dogfood.XXXXXX)",
-		"start a fresh runner",
+		"Start a fresh runner",
 		"dogfood authoring evaluate",
 		"record the evaluated result in the round report",
 		"$ROUND_ROOT/packets/case-001.md",
@@ -1744,8 +1748,12 @@ func TestAuthoringDogfoodProcessAssetsUseAlignedPacketAndReportPaths(t *testing.
 		if !strings.Contains(text, "ROUND_ROOT=$(mktemp -d /tmp/argos-authoring-dogfood.XXXXXX)") {
 			t.Fatalf("%s missing unique round root setup", label)
 		}
+		mkdirCommand := "mkdir -p \"$ROUND_ROOT/packets\" \"$ROUND_ROOT/reports\" \"$ROUND_ROOT/case-001\""
+		if label == "checklist" {
+			mkdirCommand = "mkdir -p \"$ROUND_ROOT/packets\" \"$ROUND_ROOT/reports\""
+		}
 		assertTextOrder(t, label, text,
-			"mkdir -p \"$ROUND_ROOT/packets\" \"$ROUND_ROOT/reports\" \"$ROUND_ROOT/case-001\"",
+			mkdirCommand,
 			"go build -o \"$ROUND_ROOT/argos\" ./cmd/argos",
 		)
 		assertAuthoringProcessDocOmitsFixedRoundPaths(t, label, text)

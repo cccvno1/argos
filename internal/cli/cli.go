@@ -24,6 +24,7 @@ import (
 const (
 	defaultDogfoodCasesPath          = "testdata/discovery-golden/cases.json"
 	defaultAuthoringDogfoodCasesPath = "testdata/authoring-golden/cases.json"
+	defaultAuthoringDogfoodFixtures  = "testdata/authoring-golden/fixtures"
 )
 
 func Run(args []string, stdout io.Writer, stderr io.Writer) int {
@@ -398,6 +399,10 @@ func runDogfoodAuthoringPacket(args []string, stdout io.Writer, stderr io.Writer
 	if err != nil {
 		fmt.Fprintf(stderr, "dogfood authoring packet: %v\n", err)
 		return 2
+	}
+	if err := authoringdogfood.SeedFixtureWorkspace(defaultAuthoringDogfoodFixtures, packet.Fixture, packet.Workspace); err != nil {
+		fmt.Fprintf(stderr, "dogfood authoring packet: seed workspace: %v\n", err)
+		return 1
 	}
 	if *jsonOut {
 		return printJSON(stdout, stderr, packet)
