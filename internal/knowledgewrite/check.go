@@ -68,13 +68,13 @@ func ValidateDesign(design KnowledgeDesign) []Finding {
 		addFail("scope.distribution must be personal, project, small_team, multi_project, organization, or public_consumer")
 	}
 	validateSources(design.Sources, addFail, addReview)
-	validateDraftOutput(design.DraftOutput, design.WriteBoundary, addFail, addReview)
+	validateDraftOutput(design.DraftOutput, design.Review, addFail, addReview)
 	validateFutureUse(design.FutureUse, addFail, addReview)
 	if len(nonEmpty(design.Applicability.WhenToUse)) == 0 || len(nonEmpty(design.Applicability.WhenNotToUse)) == 0 {
 		addReview("applicability must include when_to_use and when_not_to_use")
 	}
 	validateExistingKnowledge(design.ExistingKnowledge, addFail, addReview)
-	validateWriteBoundary(design.WriteBoundary, addFail)
+	validateWriteBoundary(design.WriteBoundary, design.Review, addFail)
 	validateDraftFilesAndPlan(design, addFail, addReview)
 	if len(nonEmpty(design.Review.Questions)) == 0 {
 		addReview("review.questions should include reviewer decisions")
@@ -204,7 +204,7 @@ func validateSources(source Sources, addFail func(string), addReview func(string
 	}
 }
 
-func validateDraftOutput(output DraftOutput, boundary WriteBoundary, addFail func(string), addReview func(string)) {
+func validateDraftOutput(output DraftOutput, review Review, addFail func(string), addReview func(string)) {
 	if strings.TrimSpace(output.Kind) == "" || strings.TrimSpace(output.Type) == "" || strings.TrimSpace(output.ID) == "" {
 		addFail("draft_output must include kind, type, and id")
 	}
@@ -223,7 +223,7 @@ func validateDraftOutput(output DraftOutput, boundary WriteBoundary, addFail fun
 	if strings.TrimSpace(output.Status) == "" || strings.TrimSpace(output.Priority) == "" {
 		addFail("draft_output must include status and priority")
 	}
-	if strings.TrimSpace(output.Priority) == "must" && !boundary.PriorityMustApproved {
+	if strings.TrimSpace(output.Priority) == "must" && !review.PriorityMustApproved {
 		addFail("priority: must requires explicit approval")
 	}
 	if strings.TrimSpace(output.EntrypointLoad) != "" && !validEntrypointLoad(output.EntrypointLoad) {
@@ -259,7 +259,7 @@ func validateExistingKnowledge(existing ExistingKnowledgeDecision, addFail func(
 	}
 }
 
-func validateWriteBoundary(boundary WriteBoundary, addFail func(string)) {
+func validateWriteBoundary(boundary WriteBoundary, review Review, addFail func(string)) {
 	if boundary.Path != "inbox" && boundary.Path != "official_review" {
 		addFail("write_boundary.path must be inbox or official_review")
 	}
@@ -269,7 +269,7 @@ func validateWriteBoundary(boundary WriteBoundary, addFail func(string)) {
 	if !boundary.ReviewPacketRequired {
 		addFail("write_boundary.review_packet_required must be true")
 	}
-	if boundary.Path == "official_review" && !boundary.OfficialWriteApproved {
+	if boundary.Path == "official_review" && !review.OfficialWriteApproved {
 		addFail("official writing requires explicit approval")
 	}
 }

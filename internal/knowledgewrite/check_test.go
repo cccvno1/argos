@@ -67,6 +67,39 @@ func TestCheckKnowledgeRejectsDraftOutsideWriteBoundary(t *testing.T) {
 	}
 }
 
+func TestValidateDesignUsesReviewApprovalForPriorityMust(t *testing.T) {
+	design := validKnowledgeDesign()
+	design.DraftOutput.Priority = "must"
+	design.Review.PriorityMustApproved = true
+	design.WriteBoundary.PriorityMustApproved = false
+
+	findings := ValidateDesign(design)
+
+	if hasFindingWithSeverity(findings, "fail", "priority: must") {
+		t.Fatalf("priority must should be approved by review.priority_must_approved: %#v", findings)
+	}
+}
+
+func TestValidateDesignUsesReviewApprovalForOfficialReview(t *testing.T) {
+	design := validKnowledgeDesign()
+	design.WriteBoundary.Path = "official_review"
+	design.WriteBoundary.OfficialWriteApproved = false
+	design.Review.OfficialWriteApproved = true
+	design.DraftOutput.Path = "knowledge/packages/mall-api/redis-cache"
+	design.CheckPlan.ValidatePath = "knowledge/packages/mall-api/redis-cache"
+	design.DraftFiles = []DraftFile{{
+		Path:    "knowledge/packages/mall-api/redis-cache/KNOWLEDGE.md",
+		Purpose: "entrypoint",
+		Load:    "read_before_implementation",
+	}}
+
+	findings := ValidateDesign(design)
+
+	if hasFindingWithSeverity(findings, "fail", "official writing requires explicit approval") {
+		t.Fatalf("official review should be approved by review.official_write_approved: %#v", findings)
+	}
+}
+
 func validKnowledgeDesign() KnowledgeDesign {
 	return KnowledgeDesign{
 		SchemaVersion: KnowledgeDesignSchemaVersion,
@@ -200,6 +233,15 @@ Use reviewed Redis cache guidance for future backend implementation.
 func hasFinding(findings []Finding, text string) bool {
 	for _, finding := range findings {
 		if strings.Contains(finding.Message, text) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasFindingWithSeverity(findings []Finding, severity string, text string) bool {
+	for _, finding := range findings {
+		if finding.Severity == severity && strings.Contains(finding.Message, text) {
 			return true
 		}
 	}
