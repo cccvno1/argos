@@ -10,11 +10,11 @@ import (
 	"strings"
 
 	"argos/internal/adapters"
-	"argos/internal/author"
 	"argos/internal/authoringdogfood"
 	"argos/internal/dogfood"
 	"argos/internal/index"
 	"argos/internal/knowledge"
+	"argos/internal/knowledgewrite"
 	"argos/internal/mcp"
 	"argos/internal/query"
 	"argos/internal/registry"
@@ -145,8 +145,6 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			Files:   files,
 		})
 		return printJSON(stdout, stderr, result)
-	case "author":
-		return runAuthor(args[1:], stdout, stderr)
 	case "knowledge":
 		return runKnowledge(args[1:], stdout, stderr)
 	case "dogfood":
@@ -167,7 +165,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	case "promote":
 		flags := flag.NewFlagSet("promote", flag.ContinueOnError)
 		flags.SetOutput(stderr)
-		path := flags.String("path", "", "candidate item or package path")
+		path := flags.String("path", "", "draft item or package path")
 		if err := flags.Parse(args[1:]); err != nil {
 			return 2
 		}
@@ -180,7 +178,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			fmt.Fprintf(stderr, "get current directory: %v\n", err)
 			return 1
 		}
-		target, err := promoteCandidate(root, *path, stderr)
+		target, err := publishDraft(root, *path, stderr)
 		if err != nil {
 			fmt.Fprintf(stderr, "promote: %v\n", err)
 			return 1
@@ -196,119 +194,6 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		printUsage(stderr)
 		return 2
 	}
-}
-
-func runAuthor(args []string, stdout io.Writer, stderr io.Writer) int {
-	if len(args) == 0 {
-		fmt.Fprintln(stderr, "author: subcommand is required")
-		printUsage(stderr)
-		return 2
-	}
-	switch args[0] {
-	case "inspect":
-		return runAuthorInspect(args[1:], stdout, stderr)
-	case "verify":
-		return runAuthorVerify(args[1:], stdout, stderr)
-	default:
-		fmt.Fprintf(stderr, "author: unknown subcommand %q\n", args[0])
-		printUsage(stderr)
-		return 2
-	}
-}
-
-func runAuthorInspect(args []string, stdout io.Writer, stderr io.Writer) int {
-	flags := flag.NewFlagSet("author inspect", flag.ContinueOnError)
-	flags.SetOutput(stderr)
-	jsonOut := flags.Bool("json", false, "print JSON output")
-	project := flags.String("project", "", "project id")
-	goal := flags.String("goal", "", "knowledge authoring goal")
-	mode := flags.String("mode", "", "authoring mode")
-	futureTask := flags.String("future-task", "", "future retrieval task")
-	phase := flags.String("phase", "", "workflow phase")
-	queryText := flags.String("query", "", "search query")
-	candidatePath := flags.String("candidate-path", "", "candidate knowledge path")
-	var files multiValueFlag
-	var domains multiValueFlag
-	var tags multiValueFlag
-	flags.Var(&files, "files", "file path relevant to the current task; may be repeated")
-	flags.Var(&domains, "domains", "domain relevant to the current task; may be repeated")
-	flags.Var(&tags, "tags", "tag relevant to the current task; may be repeated")
-	if err := flags.Parse(args); err != nil {
-		return 2
-	}
-	if !*jsonOut {
-		fmt.Fprintln(stderr, "author inspect: --json is required")
-		return 2
-	}
-	if strings.TrimSpace(*project) == "" {
-		fmt.Fprintln(stderr, "author inspect: --project is required")
-		return 2
-	}
-	if strings.TrimSpace(*goal) == "" {
-		fmt.Fprintln(stderr, "author inspect: --goal is required")
-		return 2
-	}
-
-	root, err := os.Getwd()
-	if err != nil {
-		fmt.Fprintf(stderr, "author inspect: get current directory: %v\n", err)
-		return 1
-	}
-	result, err := author.Inspect(root, author.InspectRequest{
-		Project:       *project,
-		Goal:          *goal,
-		Mode:          *mode,
-		FutureTask:    *futureTask,
-		Phase:         *phase,
-		Query:         *queryText,
-		Files:         files,
-		Domains:       domains,
-		Tags:          tags,
-		CandidatePath: *candidatePath,
-	})
-	if err != nil {
-		fmt.Fprintf(stderr, "author inspect: %v\n", err)
-		return 1
-	}
-	return printJSON(stdout, stderr, result)
-}
-
-func runAuthorVerify(args []string, stdout io.Writer, stderr io.Writer) int {
-	flags := flag.NewFlagSet("author verify", flag.ContinueOnError)
-	flags.SetOutput(stderr)
-	jsonOut := flags.Bool("json", false, "print JSON output")
-	proposalPath := flags.String("proposal", "", "proposal JSON path")
-	candidatePath := flags.String("path", "", "candidate item or package path")
-	if err := flags.Parse(args); err != nil {
-		return 2
-	}
-	if !*jsonOut {
-		fmt.Fprintln(stderr, "author verify: --json is required")
-		return 2
-	}
-	if strings.TrimSpace(*proposalPath) == "" {
-		fmt.Fprintln(stderr, "author verify: --proposal is required")
-		return 2
-	}
-	if strings.TrimSpace(*candidatePath) == "" {
-		fmt.Fprintln(stderr, "author verify: --path is required")
-		return 2
-	}
-
-	root, err := os.Getwd()
-	if err != nil {
-		fmt.Fprintf(stderr, "author verify: get current directory: %v\n", err)
-		return 1
-	}
-	result, err := author.Verify(root, author.VerifyRequest{
-		ProposalPath:  *proposalPath,
-		CandidatePath: *candidatePath,
-	})
-	if err != nil {
-		fmt.Fprintf(stderr, "author verify: %v\n", err)
-		return 1
-	}
-	return printJSON(stdout, stderr, result)
 }
 
 func runDogfood(args []string, stdout io.Writer, stderr io.Writer) int {
@@ -569,6 +454,12 @@ func runKnowledge(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 2
 	}
 	switch args[0] {
+	case "design":
+		return runKnowledgeDesign(args[1:], stdout, stderr)
+	case "check":
+		return runKnowledgeCheck(args[1:], stdout, stderr)
+	case "publish":
+		return runKnowledgePublish(args[1:], stdout, stderr)
 	case "find":
 		return runKnowledgeFind(args[1:], stdout, stderr)
 	case "list":
@@ -582,6 +473,123 @@ func runKnowledge(args []string, stdout io.Writer, stderr io.Writer) int {
 		printUsage(stderr)
 		return 2
 	}
+}
+
+func runKnowledgeDesign(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("knowledge design", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	jsonOut := flags.Bool("json", false, "print JSON output")
+	project := flags.String("project", "", "project id")
+	intent := flags.String("intent", "", "knowledge intent")
+	futureTask := flags.String("future-task", "", "future task this knowledge should support")
+	phase := flags.String("phase", "", "workflow phase")
+	queryText := flags.String("query", "", "search query")
+	draftPath := flags.String("draft-path", "", "draft knowledge path")
+	var files multiValueFlag
+	var domains multiValueFlag
+	var tags multiValueFlag
+	flags.Var(&files, "files", "file path relevant to the knowledge intent; may be repeated")
+	flags.Var(&domains, "domains", "domain relevant to the knowledge intent; may be repeated")
+	flags.Var(&tags, "tags", "tag relevant to the knowledge intent; may be repeated")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if !*jsonOut {
+		fmt.Fprintln(stderr, "knowledge design: --json is required")
+		return 2
+	}
+	if strings.TrimSpace(*project) == "" {
+		fmt.Fprintln(stderr, "knowledge design: --project is required")
+		return 2
+	}
+	if strings.TrimSpace(*intent) == "" {
+		fmt.Fprintln(stderr, "knowledge design: --intent is required")
+		return 2
+	}
+	root, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(stderr, "knowledge design: get current directory: %v\n", err)
+		return 1
+	}
+	result, err := knowledgewrite.Design(root, knowledgewrite.DesignRequest{
+		Project:    *project,
+		Intent:     *intent,
+		FutureTask: *futureTask,
+		Phase:      *phase,
+		Query:      *queryText,
+		Files:      files,
+		Domains:    domains,
+		Tags:       tags,
+		DraftPath:  *draftPath,
+	})
+	if err != nil {
+		fmt.Fprintf(stderr, "knowledge design: %v\n", err)
+		return 1
+	}
+	return printJSON(stdout, stderr, result)
+}
+
+func runKnowledgeCheck(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("knowledge check", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	jsonOut := flags.Bool("json", false, "print JSON output")
+	designPath := flags.String("design", "", "knowledge design JSON path")
+	draftPath := flags.String("draft", "", "draft item or package path")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if !*jsonOut {
+		fmt.Fprintln(stderr, "knowledge check: --json is required")
+		return 2
+	}
+	if strings.TrimSpace(*designPath) == "" {
+		fmt.Fprintln(stderr, "knowledge check: --design is required")
+		return 2
+	}
+	if strings.TrimSpace(*draftPath) == "" {
+		fmt.Fprintln(stderr, "knowledge check: --draft is required")
+		return 2
+	}
+	root, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(stderr, "knowledge check: get current directory: %v\n", err)
+		return 1
+	}
+	result, err := knowledgewrite.Check(root, knowledgewrite.CheckRequest{
+		DesignPath: *designPath,
+		DraftPath:  *draftPath,
+	})
+	if err != nil {
+		fmt.Fprintf(stderr, "knowledge check: %v\n", err)
+		return 1
+	}
+	return printJSON(stdout, stderr, result)
+}
+
+func runKnowledgePublish(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("knowledge publish", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	draftPath := flags.String("path", "", "draft item or package path")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if strings.TrimSpace(*draftPath) == "" {
+		fmt.Fprintln(stderr, "knowledge publish: --path is required")
+		return 2
+	}
+	root, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(stderr, "knowledge publish: get current directory: %v\n", err)
+		return 1
+	}
+	target, err := publishDraft(root, *draftPath, stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "knowledge publish: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "published %s\n", target)
+	fmt.Fprintln(stdout, "run argos index to refresh query results")
+	return 0
 }
 
 func runKnowledgeFind(args []string, stdout io.Writer, stderr io.Writer) int {
@@ -860,12 +868,12 @@ func loadAndValidateKnowledge(root string, stderr io.Writer, scope validationSco
 	return items, nil
 }
 
-func promoteCandidate(root string, relPath string, stderr io.Writer) (string, error) {
+func publishDraft(root string, relPath string, stderr io.Writer) (string, error) {
 	clean := filepath.Clean(relPath)
 	if filepath.IsAbs(relPath) || clean == "." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) || clean == ".." {
-		return "", fmt.Errorf("%s: candidate path must be relative and inside workspace", relPath)
+		return "", fmt.Errorf("%s: draft path must be relative and inside workspace", relPath)
 	}
-	target, err := promotionTarget(clean)
+	target, err := publishTarget(clean)
 	if err != nil {
 		return "", err
 	}
@@ -882,15 +890,15 @@ func promoteCandidate(root string, relPath string, stderr io.Writer) (string, er
 		return "", fmt.Errorf("create target parent: %w", err)
 	}
 	if err := os.Rename(filepath.Join(root, clean), targetAbs); err != nil {
-		return "", fmt.Errorf("move candidate: %w", err)
+		return "", fmt.Errorf("move draft: %w", err)
 	}
 	if _, err := loadAndValidateKnowledge(root, stderr, validationScope{}); err != nil {
-		return "", fmt.Errorf("official validation failed after promotion: %w", err)
+		return "", fmt.Errorf("official validation failed after publish: %w", err)
 	}
 	return target, nil
 }
 
-func promotionTarget(clean string) (string, error) {
+func publishTarget(clean string) (string, error) {
 	slash := filepath.ToSlash(clean)
 	for _, mapping := range []struct {
 		inbox    string
@@ -902,12 +910,12 @@ func promotionTarget(clean string) (string, error) {
 		if strings.HasPrefix(slash, mapping.inbox) {
 			rest := strings.TrimPrefix(slash, mapping.inbox)
 			if rest == "" || strings.Contains(rest, "../") {
-				return "", fmt.Errorf("%s: invalid inbox candidate path", clean)
+				return "", fmt.Errorf("%s: invalid inbox draft path", clean)
 			}
 			return filepath.FromSlash(mapping.official + rest), nil
 		}
 	}
-	return "", fmt.Errorf("%s: candidate must be under knowledge/.inbox/items or knowledge/.inbox/packages", clean)
+	return "", fmt.Errorf("%s: draft must be under knowledge/.inbox/items or knowledge/.inbox/packages", clean)
 }
 
 func printUsage(w io.Writer) {
@@ -920,17 +928,16 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  index")
 	fmt.Fprintln(w, "  install-adapters")
 	fmt.Fprintln(w, "  context")
-	fmt.Fprintln(w, "  author")
 	fmt.Fprintln(w, "  knowledge")
 	fmt.Fprintln(w, "  dogfood")
 	fmt.Fprintln(w, "  mcp")
-	fmt.Fprintln(w, "  promote")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Examples:")
+	fmt.Fprintln(w, "  argos knowledge design --json --project <project> --intent <intent>")
+	fmt.Fprintln(w, "  argos knowledge check --json --design <design.json> --draft <draft>")
+	fmt.Fprintln(w, "  argos knowledge publish --path <draft>")
 	fmt.Fprintln(w, "  argos knowledge list --json --project <project>")
 	fmt.Fprintln(w, "  argos knowledge find --json --project <project> --task <task>")
 	fmt.Fprintln(w, "  argos knowledge read --json <id>")
 	fmt.Fprintln(w, "  argos knowledge cite --json <id>...")
-	fmt.Fprintln(w, "  argos author inspect --json --project <project> --goal <goal>")
-	fmt.Fprintln(w, "  argos author verify --json --proposal <proposal.json> --path <candidate>")
 }

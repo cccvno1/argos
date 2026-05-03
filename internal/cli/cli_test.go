@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"argos/internal/author"
 	"argos/internal/index"
 )
 
@@ -1084,195 +1083,84 @@ func TestRunKnowledgeFindRequiresIndex(t *testing.T) {
 	}
 }
 
-func TestRunAuthorInspectReturnsAuthoringPolicyJSON(t *testing.T) {
+func TestRunKnowledgeDesignReturnsWriteGuidance(t *testing.T) {
 	root := t.TempDir()
-	writeCLIAuthorRegistry(t, root)
-	chdir(t, root)
-
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	code := Run([]string{
-		"author", "inspect",
-		"--json",
+	initWorkspace(t, root)
+	code := runInDir(t, root, []string{
+		"knowledge", "design", "--json",
 		"--project", "mall-api",
-		"--goal", "document product list cache ttl",
+		"--intent", "Create Redis cache best practices for future backend agents.",
 	}, &stdout, &stderr)
-
 	if code != 0 {
-		t.Fatalf("expected exit code 0, got %d stderr=%q", code, stderr.String())
-	}
-	if stderr.String() != "" {
-		t.Fatalf("expected empty stderr, got %q", stderr.String())
+		t.Fatalf("code = %d, stderr = %s", code, stderr.String())
 	}
 	var result struct {
-		Project string `json:"project"`
-		Policy  struct {
-			PriorityMust string `json:"priority_must"`
-		} `json:"policy"`
-		RecommendedNextSteps []struct {
-			Step string `json:"step"`
-		} `json:"recommended_next_steps"`
-		AuthoringPacket struct {
-			State             string `json:"state"`
-			RecommendedAction string `json:"recommended_action"`
-			CandidateAllowed  bool   `json:"candidate_allowed"`
-			Commands          struct {
-				WriteProposal   string `json:"write_proposal"`
-				VerifyCandidate string `json:"verify_candidate"`
-			} `json:"commands"`
-		} `json:"authoring_packet"`
+		WriteGuidance struct {
+			State        string `json:"state"`
+			NextAction   string `json:"next_action"`
+			DraftAllowed bool   `json:"draft_allowed"`
+		} `json:"write_guidance"`
+		KnowledgeDesignTemplate struct {
+			SchemaVersion string `json:"schema_version"`
+			Sources       any    `json:"sources"`
+		} `json:"knowledge_design_template"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
-		t.Fatalf("invalid JSON: %v\n%s", err, stdout.String())
+		t.Fatalf("parse JSON: %v\n%s", err, stdout.String())
 	}
-	if result.Project != "mall-api" {
-		t.Fatalf("unexpected project: %s", stdout.String())
+	if result.WriteGuidance.State != "ready_to_design" {
+		t.Fatalf("unexpected write guidance: %s", stdout.String())
 	}
-	if result.Policy.PriorityMust != "requires_explicit_authorization" {
-		t.Fatalf("unexpected priority_must policy: %s", stdout.String())
+	if result.WriteGuidance.DraftAllowed {
+		t.Fatalf("design must not approve draft writing: %s", stdout.String())
 	}
-	if len(result.RecommendedNextSteps) == 0 || result.RecommendedNextSteps[0].Step != "write_knowledge_design_proposal" {
-		t.Fatalf("unexpected next step: %s", stdout.String())
+	if result.KnowledgeDesignTemplate.SchemaVersion != "knowledge.design.v1" {
+		t.Fatalf("unexpected schema: %s", stdout.String())
 	}
-	if result.AuthoringPacket.State != "ready_for_proposal" {
-		t.Fatalf("unexpected authoring packet state: %s", stdout.String())
+	assertNoRemovedWriteTerms(t, stdout.String())
+}
+
+func TestRunKnowledgeCheckRequiresDesignAndDraft(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"knowledge", "check", "--json", "--design", "design.json"}, &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("code = %d, stderr = %s", code, stderr.String())
 	}
-	if result.AuthoringPacket.RecommendedAction != "write_proposal" {
-		t.Fatalf("unexpected authoring packet action: %s", stdout.String())
-	}
-	if result.AuthoringPacket.CandidateAllowed {
-		t.Fatalf("inspect must not authorize candidate writing: %s", stdout.String())
-	}
-	if result.AuthoringPacket.Commands.WriteProposal == "" || result.AuthoringPacket.Commands.VerifyCandidate == "" {
-		t.Fatalf("authoring packet should include write and verify command guidance: %s", stdout.String())
+	if !strings.Contains(stderr.String(), "knowledge check: --draft is required") {
+		t.Fatalf("unexpected stderr: %s", stderr.String())
 	}
 }
 
-func TestRunAuthorInspectRequiresJSONProjectAndGoal(t *testing.T) {
-	tests := []struct {
-		name string
-		args []string
-		want string
-	}{
-		{name: "missing json", args: []string{"author", "inspect", "--project", "mall-api", "--goal", "document product list cache ttl"}, want: "author inspect: --json is required"},
-		{name: "missing project", args: []string{"author", "inspect", "--json", "--goal", "document product list cache ttl"}, want: "author inspect: --project is required"},
-		{name: "missing goal", args: []string{"author", "inspect", "--json", "--project", "mall-api"}, want: "author inspect: --goal is required"},
+func TestRunAuthorCommandIsRemovedFromPublicCLI(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"author", "inspect", "--json", "--project", "mall-api", "--goal", "x"}, &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("code = %d, stderr = %s", code, stderr.String())
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var stdout bytes.Buffer
-			var stderr bytes.Buffer
-			code := Run(tt.args, &stdout, &stderr)
-
-			if code != 2 {
-				t.Fatalf("expected exit code 2, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
-			}
-			if stdout.String() != "" {
-				t.Fatalf("expected empty stdout, got %q", stdout.String())
-			}
-			if !strings.Contains(stderr.String(), tt.want) {
-				t.Fatalf("stderr = %q, want %q", stderr.String(), tt.want)
-			}
-		})
+	if !strings.Contains(stderr.String(), "unknown command: author") {
+		t.Fatalf("expected unknown command, got stderr = %s", stderr.String())
 	}
 }
 
-func TestRunAuthorFlagHelpWritesUsage(t *testing.T) {
-	tests := []struct {
-		name string
-		args []string
-		want string
-	}{
-		{name: "inspect", args: []string{"author", "inspect", "--help"}, want: "Usage of author inspect:"},
-		{name: "verify", args: []string{"author", "verify", "--help"}, want: "Usage of author verify:"},
+func TestUsageUsesWriteVocabulary(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run(nil, &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("code = %d", code)
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var stdout bytes.Buffer
-			var stderr bytes.Buffer
-			code := Run(tt.args, &stdout, &stderr)
-
-			if code != 2 {
-				t.Fatalf("expected exit code 2, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
-			}
-			if stdout.String() != "" {
-				t.Fatalf("expected empty stdout, got %q", stdout.String())
-			}
-			if !strings.Contains(stderr.String(), tt.want) {
-				t.Fatalf("stderr = %q, want %q", stderr.String(), tt.want)
-			}
-		})
+	body := stderr.String()
+	for _, want := range []string{
+		"argos knowledge design --json --project <project> --intent <intent>",
+		"argos knowledge check --json --design <design.json> --draft <draft>",
+		"argos knowledge publish --path <draft>",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("usage missing %q:\n%s", want, body)
+		}
 	}
-}
-
-func TestRunAuthorVerifyReturnsPassJSON(t *testing.T) {
-	root := t.TempDir()
-	writeCLIAuthorRegistry(t, root)
-	candidatePath := "knowledge/.inbox/items/backend/cache.md"
-	writeCLIFile(t, root, candidatePath, validCLIAuthorCandidate())
-	proposalPath := "knowledge/.inbox/proposals/product-list-cache/proposal.json"
-	writeCLIAuthorProposal(t, root, proposalPath, validCLIAuthorProposal(candidatePath))
-	chdir(t, root)
-
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	code := Run([]string{
-		"author", "verify",
-		"--json",
-		"--proposal", proposalPath,
-		"--path", candidatePath,
-	}, &stdout, &stderr)
-
-	if code != 0 {
-		t.Fatalf("expected exit code 0, got %d stderr=%q stdout=%q", code, stderr.String(), stdout.String())
-	}
-	if stderr.String() != "" {
-		t.Fatalf("expected empty stderr, got %q", stderr.String())
-	}
-	var result struct {
-		Result    string `json:"result"`
-		Candidate struct {
-			Validation string `json:"validation"`
-		} `json:"candidate"`
-	}
-	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
-		t.Fatalf("invalid JSON: %v\n%s", err, stdout.String())
-	}
-	if result.Result != "pass" {
-		t.Fatalf("expected pass result, got %s", stdout.String())
-	}
-	if result.Candidate.Validation != "pass" {
-		t.Fatalf("expected candidate validation pass, got %s", stdout.String())
-	}
-}
-
-func TestRunAuthorVerifyRequiresJSONProposalAndPath(t *testing.T) {
-	tests := []struct {
-		name string
-		args []string
-		want string
-	}{
-		{name: "missing json", args: []string{"author", "verify", "--proposal", "knowledge/.inbox/proposals/product-list-cache/proposal.json", "--path", "knowledge/.inbox/items/backend/cache.md"}, want: "author verify: --json is required"},
-		{name: "missing proposal", args: []string{"author", "verify", "--json", "--path", "knowledge/.inbox/items/backend/cache.md"}, want: "author verify: --proposal is required"},
-		{name: "missing path", args: []string{"author", "verify", "--json", "--proposal", "knowledge/.inbox/proposals/product-list-cache/proposal.json"}, want: "author verify: --path is required"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var stdout bytes.Buffer
-			var stderr bytes.Buffer
-			code := Run(tt.args, &stdout, &stderr)
-
-			if code != 2 {
-				t.Fatalf("expected exit code 2, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
-			}
-			if stdout.String() != "" {
-				t.Fatalf("expected empty stdout, got %q", stdout.String())
-			}
-			if !strings.Contains(stderr.String(), tt.want) {
-				t.Fatalf("stderr = %q, want %q", stderr.String(), tt.want)
-			}
-		})
-	}
+	assertNoRemovedWriteTerms(t, body)
 }
 
 func TestRunIndexRejectsInvalidKnowledgeWithoutReplacingExistingIndex(t *testing.T) {
@@ -1790,8 +1678,20 @@ business_domains: [account]
 	writeCLIFile(t, root, "knowledge/types.yaml", "types: [rule, package]\n")
 }
 
-func writeCLIAuthorRegistry(t *testing.T, root string) {
+func initWorkspace(t *testing.T, root string) {
 	t.Helper()
+	for _, dir := range []string{
+		"knowledge/.inbox/items",
+		"knowledge/.inbox/packages",
+		"knowledge/.inbox/designs",
+		"knowledge/items",
+		"knowledge/packages",
+		"argos/generated",
+	} {
+		if err := os.MkdirAll(filepath.Join(root, filepath.FromSlash(dir)), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", dir, err)
+		}
+	}
 	writeCLIFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend, database]
 business_domains: [catalog]
 `)
@@ -1837,74 +1737,6 @@ Refresh token auth guidance.
 Full body implementation detail: refresh token endpoints must rotate tokens and require auth middleware.
 `)
 	writeCLIFile(t, root, "knowledge/packages/backend/auth-refresh/KNOWLEDGE.md", validCLIPackage("package:backend.auth-refresh.v1"))
-}
-
-func writeCLIAuthorProposal(t *testing.T, root string, rel string, proposal author.Proposal) {
-	t.Helper()
-	data, err := json.MarshalIndent(proposal, "", "  ")
-	if err != nil {
-		t.Fatalf("marshal proposal: %v", err)
-	}
-	writeCLIFile(t, root, rel, string(data))
-}
-
-func validCLIAuthorProposal(candidatePath string) author.Proposal {
-	return author.Proposal{
-		SchemaVersion:  author.ProposalSchemaVersion,
-		KnowledgeGoal:  "Document product list cache TTL guidance.",
-		AuthoringMode:  author.ModeUserSpecified,
-		Project:        "mall-api",
-		ProposedShape:  author.ProposedShape{Kind: "item", Type: "rule", Title: "Product list cache TTL rule", ID: "rule:backend.cache.v1", Path: candidatePath, Status: "draft", Priority: "should"},
-		SourceAndTrust: author.SourceAndTrust{UserProvided: []string{"Human supplied the cache TTL requirement."}},
-		FutureRetrievalContract: author.FutureRetrievalContract{
-			Tasks:           []string{"implement product list cache"},
-			Phases:          []string{"implementation"},
-			Files:           []string{"internal/catalog/products.go"},
-			FileGlobs:       []string{"internal/catalog/**"},
-			QueryPhrases:    []string{"product list cache ttl"},
-			Projects:        []string{"mall-api"},
-			TechDomains:     []string{"backend"},
-			BusinessDomains: []string{"catalog"},
-			Tags:            []string{"cache"},
-			ExpectedUse:     "Find this guidance before changing product list cache behavior.",
-		},
-		Applicability: author.Applicability{
-			WhenToUse:    []string{"When implementing product list cache behavior."},
-			WhenNotToUse: []string{"When changing unrelated warehouse scanning behavior."},
-		},
-		OverlapDecision: author.OverlapDecision{Decision: "create_new", Reason: "No official knowledge covers product list cache TTLs."},
-		Delivery:        author.Delivery{Path: "inbox", RequiresHumanApproval: true},
-		CandidateFiles:  []author.CandidateFile{{Path: candidatePath, Purpose: "Candidate knowledge item.", Load: "autoload"}},
-		VerificationPlan: author.VerificationPlan{
-			ValidatePath: candidatePath,
-			FindabilityScenarios: []author.FindabilityScenario{{
-				Project: "mall-api",
-				Phase:   "implementation",
-				Task:    "implement product list cache ttl",
-				Query:   "product list cache ttl",
-				Files:   []string{"internal/catalog/products.go"},
-			}},
-		},
-	}
-}
-
-func validCLIAuthorCandidate() string {
-	return `---
-id: rule:backend.cache.v1
-title: Product list cache TTL rule
-type: rule
-tech_domains: [backend]
-business_domains: [catalog]
-projects: [mall-api]
-status: draft
-priority: should
-updated_at: 2026-05-02
-tags: [cache]
-applies_to:
-  files: [internal/catalog/**]
----
-Product list cache TTL guidance for backend work.
-`
 }
 
 func validCLIPackage(id string) string {
@@ -1969,6 +1801,32 @@ func chdir(t *testing.T, dir string) {
 			t.Fatalf("restore working directory to %s: %v", previous, err)
 		}
 	})
+}
+
+func runInDir(t *testing.T, dir string, args []string, stdout io.Writer, stderr io.Writer) int {
+	t.Helper()
+	chdir(t, dir)
+	return Run(args, stdout, stderr)
+}
+
+func assertNoRemovedWriteTerms(t *testing.T, body string) {
+	t.Helper()
+	for _, term := range []string{
+		"authoring_packet",
+		"proposal_scaffold",
+		"source_profile",
+		"proposed_shape",
+		"overlap_decision",
+		"verification_plan",
+		"human_review",
+		"artifact_state",
+		"author inspect",
+		"author verify",
+	} {
+		if strings.Contains(body, term) {
+			t.Fatalf("body contains removed write term %q:\n%s", term, body)
+		}
+	}
 }
 
 func repoRootForCLITest(t *testing.T) string {

@@ -17,7 +17,7 @@ published knowledge.
 
 The agent performs the Argos operations under the hood: reading source context,
 checking existing knowledge, proposing a knowledge shape, writing inbox
-candidates after approval, validating files, promoting reviewed knowledge, and
+drafts after approval, validating files, publishing reviewed knowledge, and
 refreshing the local index.
 
 ## Relationship To Workflow Systems
@@ -155,101 +155,27 @@ including `$ROUND_ROOT/packets/case-001.md` and
 
 ## Agent Knowledge Authoring
 
-Argos write-side UX is agent-operated. Humans describe the engineering
-knowledge they want future agents to have, then review a Knowledge Design
-Proposal and verification packet. Agents run the commands.
-
-Authoring v2 proposals describe mixed source and trust through `source_profile`
-instead of forcing a single authoring mode. A proposal should name the future
-agent audience, scope, future-use triggers, negative triggers, source profile,
-applicability boundaries, delivery path, and human review decisions.
-
 Single knowledge items live under `knowledge/items/`.
 
 Structured knowledge packages live under `knowledge/packages/` and use
 `KNOWLEDGE.md` as their indexed entrypoint. Optional package directories include
 `references/`, `examples/`, `checklists/`, `scripts/`, and `assets/`.
 
-Authoring inboxes keep reviewed-but-unpromoted work separate:
+Draft knowledge lives under `knowledge/.inbox/items/` or
+`knowledge/.inbox/packages/` until explicit publication.
 
-- `knowledge/.inbox/proposals/` stores Knowledge Design Proposals.
-- `knowledge/.inbox/items/` stores item candidates.
-- `knowledge/.inbox/packages/` stores package candidates.
+### Designing And Publishing Knowledge
 
-The durable flow is:
+When the user explicitly asks to create durable knowledge, use the write flow:
 
-1. The human describes reusable engineering knowledge, source material, a
-   decision, or a lesson.
-2. The agent inspects existing knowledge, authoring policy, and the agent-ready
-   authoring packet:
-
-   ```bash
-   argos author inspect --json \
-     --project mall-api \
-     --goal "create product-list cache engineering knowledge" \
-     --future-task "implement product list cache" \
-     --phase implementation \
-     --files internal/catalog/products.go
-   ```
-
-The `authoring_packet` in the inspect response gives the agent the next safe
-action, suggested proposal and candidate paths, stop conditions, human review
-questions, and the subsequent `author verify` command. Inspect never approves
-candidate writing; candidate files still require human review of the proposal.
-
-3. The agent turns that inspection output into a Knowledge Design Proposal under
-   `knowledge/.inbox/proposals/`.
-4. The human reviews the proposal and decides whether the agent should write an
-   inbox candidate.
-5. After approval, the agent writes candidate knowledge under
-   `knowledge/.inbox/items/` or `knowledge/.inbox/packages/`.
-6. The agent verifies the candidate against the approved proposal:
-
-   ```bash
-   argos author verify --json \
-     --proposal knowledge/.inbox/proposals/product-list-cache/proposal.json \
-     --path knowledge/.inbox/packages/backend/product-list-cache
-   ```
-
-7. The human reviews the verification packet. Verification checks the proposal
-   contract, candidate validation, policy gates, and discoverability through the
-   normal query path. It does not promote candidates or mutate the official
-   index.
-
-Official knowledge should not be mutated silently. Inbox candidates are the
-default path for AI-authored or imported knowledge. Promotion remains explicit:
-
-```bash
-argos promote --path knowledge/.inbox/packages/backend/product-list-cache
-argos index
-```
-
-## Agent Knowledge Authoring Skill
-
-Argos keeps the installable skill source at `skills/capture-knowledge/` with
-frontmatter name `capture-knowledge` for compatibility with existing skill
-triggers.
-
-Use this skill when a user asks an agent to author durable reusable project
-knowledge. The skill is proposal-first and agent-facing. It guides the agent to:
-
-- understand authoring intent and gather enough context for accurate knowledge
-- run or emulate `argos author inspect --json`
-- check existing `knowledge/items/`, `knowledge/packages/`, and
-  `knowledge/.inbox/` content
-- distinguish facts, assumptions, examples, counterexamples, and validation
-  evidence
-- produce a Knowledge Design Proposal before writing files
-- ask whether overlap means create new, update existing, or stop
-- ask for an inbox candidate or PR-style delivery path
-- write inbox candidates only after approval
-- run `argos author verify --json --proposal <proposal.json> --path <candidate>`
-- present a review packet without promoting automatically
-
-Human-facing documentation written through the skill should match the user's
-language. Argos protocol fields stay stable: frontmatter keys, IDs, paths,
-required section headings, commands, filenames, and technical identifiers are
-not translated.
+1. Run `argos knowledge design --json --project <project> --intent <intent>`.
+2. Write the returned `knowledge_design_template` to `write_guidance.design_path`.
+3. Ask the human to review the design and set `review.draft_write_approved`.
+4. Write draft knowledge only after review approves draft writing.
+5. Run `argos knowledge check --json --design <design.json> --draft <draft-path>`.
+6. Publish only after explicit authorization with `argos knowledge publish --path <draft-path>`.
+7. Run `argos index`.
+8. Confirm the new knowledge is discoverable with `argos knowledge find --json`.
 
 ## MCP
 
@@ -290,9 +216,9 @@ argos init
 argos validate
 argos validate --inbox
 argos validate --path <path>
-argos author inspect --json --project <project> --goal <goal>
-argos author verify --json --proposal <proposal.json> --path <candidate>
-argos promote --path <candidate>
+argos knowledge design --json --project <project> --intent <intent>
+argos knowledge check --json --design <design.json> --draft <draft>
+argos knowledge publish --path <draft>
 argos index
 argos install-adapters
 argos context --json --project <project>
