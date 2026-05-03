@@ -3,6 +3,7 @@ package mcp
 import (
 	"bytes"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"argos/internal/discoverytest"
 	"argos/internal/index"
 	"argos/internal/knowledge"
+	"argos/internal/knowledgewrite"
 	"argos/internal/query"
 	"argos/internal/workspace"
 )
@@ -177,6 +179,51 @@ func TestToolCallArgosDesignKnowledgeRejectsUnknownFields(t *testing.T) {
 		t.Fatalf("HandleLine returned error: %v", err)
 	}
 	assertToolErrorContains(t, out.Bytes(), "invalid arguments for argos_design_knowledge")
+}
+
+func TestToolCallArgosCheckKnowledgeReturnsCheckResult(t *testing.T) {
+	root := t.TempDir()
+	if err := workspace.Init(root); err != nil {
+		t.Fatalf("init workspace: %v", err)
+	}
+	draftPath := "knowledge/.inbox/packages/backend/redis"
+	draftID := "package:backend.redis.v1"
+	writeMCPFile(t, root, draftPath+"/KNOWLEDGE.md", validMCPDraftPackage(draftID))
+	designPath := writeMCPDesign(t, root, "knowledge/.inbox/designs/backend/redis/design.json", validMCPKnowledgeDesign(draftPath, draftID))
+
+	server := NewServerWithRoot(root, nil)
+	var out bytes.Buffer
+	line := []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_check_knowledge","arguments":{"design":"` + designPath + `","draft":"` + draftPath + `"}}}`)
+	if err := server.HandleLine(line, &out); err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+	text := toolTextResult(t, out.Bytes())
+	for _, want := range []string{`"result"`, `"design"`, `"draft"`, `"policy"`, `"findability"`} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("check response missing %s: %s", want, text)
+		}
+	}
+	assertNoRemovedWriteTerms(t, text)
+}
+
+func TestToolCallArgosCheckKnowledgeRejectsUnknownFields(t *testing.T) {
+	server := NewServerWithRoot(t.TempDir(), nil)
+	var out bytes.Buffer
+	line := []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_check_knowledge","arguments":{"design":"design.json","draft":"knowledge/.inbox/packages/backend/redis","unexpected":true}}}`)
+	if err := server.HandleLine(line, &out); err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+	assertToolErrorContains(t, out.Bytes(), "invalid arguments for argos_check_knowledge")
+}
+
+func TestToolCallArgosCheckKnowledgeRejectsUnsafeDraftPath(t *testing.T) {
+	server := NewServerWithRoot(t.TempDir(), nil)
+	var out bytes.Buffer
+	line := []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"argos_check_knowledge","arguments":{"design":"knowledge/.inbox/designs/backend/redis/design.json","draft":"../outside"}}}`)
+	if err := server.HandleLine(line, &out); err != nil {
+		t.Fatalf("HandleLine returned error: %v", err)
+	}
+	assertToolErrorContains(t, out.Bytes(), "check knowledge: draft must stay inside workspace")
 }
 
 func TestToolCallUnknownToolReturnsInvalidParams(t *testing.T) {
@@ -1115,6 +1162,136 @@ func removedWriteTerms() []string {
 		strings.Join([]string{"argos", "author", "inspect"}, " "),
 		strings.Join([]string{"argos", "author", "verify"}, " "),
 	}
+}
+
+func writeMCPFile(t *testing.T, root string, rel string, body string) {
+	t.Helper()
+	path := filepath.Join(root, filepath.FromSlash(rel))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", filepath.Dir(path), err)
+	}
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
+func writeMCPDesign(t *testing.T, root string, rel string, design knowledgewrite.KnowledgeDesign) string {
+	t.Helper()
+	body, err := json.MarshalIndent(design, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal design: %v", err)
+	}
+	writeMCPFile(t, root, rel, string(body)+"\n")
+	return rel
+}
+
+func validMCPKnowledgeDesign(draftPath string, draftID string) knowledgewrite.KnowledgeDesign {
+	return knowledgewrite.KnowledgeDesign{
+		SchemaVersion: knowledgewrite.KnowledgeDesignSchemaVersion,
+		UserRequest:   "Create Redis cache best practices for future backend agents.",
+		KnowledgeGoal: "Document Redis cache best practices.",
+		Project:       "mall-api",
+		Audience: knowledgewrite.Audience{
+			Primary:               "implementer_agent",
+			AgentActionsSupported: []string{"implement Redis cache behavior"},
+		},
+		Scope: knowledgewrite.Scope{
+			Stability:    "reviewed",
+			Distribution: "project",
+			TechDomains:  []string{"backend"},
+		},
+		Sources: knowledgewrite.Sources{
+			UserInput: []string{"User requested Redis cache best practices."},
+			Claims: []knowledgewrite.SourceClaim{{
+				Claim:  "Redis cache best practices are needed for backend agents.",
+				Kind:   "fact",
+				Source: []string{"user request"},
+				Trust:  "user_input",
+			}},
+		},
+		DraftOutput: knowledgewrite.DraftOutput{
+			Kind:           "package",
+			Type:           "package",
+			Title:          "Redis Cache Best Practices",
+			ID:             draftID,
+			Path:           draftPath,
+			Status:         "draft",
+			Priority:       "should",
+			Rationale:      "A package can hold cache guidance plus future references.",
+			EntrypointLoad: "read_before_implementation",
+			DraftState:     "draft",
+		},
+		FutureUse: knowledgewrite.FutureUse{
+			TriggerRequests:  []string{"implement Redis cache behavior"},
+			NegativeTriggers: []string{"unrelated authentication work"},
+			QueryPhrases:     []string{"redis cache best practices"},
+			ExpectedUse:      "Future agents should read this before implementing Redis cache behavior.",
+			CitationPolicy:   "cite_after_use",
+		},
+		Applicability: knowledgewrite.Applicability{
+			WhenToUse:    []string{"When implementing Redis-backed caching."},
+			WhenNotToUse: []string{"When changing unrelated auth behavior."},
+		},
+		ExistingKnowledge: knowledgewrite.ExistingKnowledgeDecision{
+			Decision: "create_new",
+			Reason:   "No existing knowledge covers this exact Redis cache guidance.",
+		},
+		WriteBoundary: knowledgewrite.WriteBoundary{
+			Path:                        "inbox",
+			WriteRequiresReviewApproval: true,
+			ReviewPacketRequired:        true,
+		},
+		DraftFiles: []knowledgewrite.DraftFile{{
+			Path:    draftPath + "/KNOWLEDGE.md",
+			Purpose: "Package entrypoint.",
+			Load:    "read_before_implementation",
+		}},
+		CheckPlan: knowledgewrite.CheckPlan{
+			ValidatePath: draftPath,
+			FindabilityChecks: []knowledgewrite.FindabilityCheckScenario{{
+				Project: "mall-api",
+				Phase:   "implementation",
+				Task:    "implement Redis cache behavior",
+				Query:   "redis cache best practices",
+			}},
+		},
+		Review: knowledgewrite.Review{
+			Questions:          []string{"Is draft writing approved?"},
+			DesignApproved:     true,
+			DraftWriteApproved: true,
+		},
+	}
+}
+
+func validMCPDraftPackage(id string) string {
+	return `---
+id: ` + id + `
+title: Redis Cache Best Practices
+type: package
+tech_domains: [backend]
+business_domains: []
+projects: []
+status: draft
+priority: should
+tags: [redis, cache]
+updated_at: 2026-05-04
+---
+## Purpose
+
+Document Redis cache best practices for backend agents.
+
+## When To Use
+
+Use when implementing Redis cache behavior.
+
+## Start Here
+
+Read this before implementing Redis cache behavior.
+
+## Load On Demand
+
+- references/redis-cache.md when deeper cache tradeoffs are needed.
+`
 }
 
 func assertSuccessID(t *testing.T, resp testResponse, id string) {
