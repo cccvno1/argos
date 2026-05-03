@@ -290,6 +290,48 @@ func TestInspectProposalScaffoldUsesReviewOnlyForUnresolvedOverlap(t *testing.T)
 	}
 }
 
+func TestInspectUsesReviewOnlyPacketWhenPersonalConventionContentIsMissing(t *testing.T) {
+	root := t.TempDir()
+	writeAuthorRegistry(t, root)
+
+	result, err := Inspect(root, InspectRequest{
+		Project: "mall-api",
+		Goal:    "I have a personal convention for this project. Preserve it for future agents without making it global truth.",
+		Tags:    []string{"personal", "project-convention"},
+	})
+	if err != nil {
+		t.Fatalf("Inspect returned error: %v", err)
+	}
+
+	proposal := result.ProposalScaffold
+	if proposal.ProposedShape.ArtifactState != "review_only" {
+		t.Fatalf("artifact_state = %q, want review_only: %#v", proposal.ProposedShape.ArtifactState, proposal.ProposedShape)
+	}
+	if proposal.Scope.Distribution != "personal" {
+		t.Fatalf("distribution = %q, want personal", proposal.Scope.Distribution)
+	}
+	if proposal.HumanReview.CandidateWriteApproved {
+		t.Fatalf("missing-content scaffold must not approve candidate writing: %#v", proposal.HumanReview)
+	}
+	if len(proposal.CandidateFiles) != 0 {
+		t.Fatalf("missing-content scaffold should not contain candidate files: %#v", proposal.CandidateFiles)
+	}
+
+	packet := result.AuthoringPacket
+	if packet.State != "review_only" {
+		t.Fatalf("packet state = %q, want review_only: %#v", packet.State, packet)
+	}
+	if packet.RecommendedAction != "write_review_only_proposal" {
+		t.Fatalf("packet action = %q, want write_review_only_proposal: %#v", packet.RecommendedAction, packet)
+	}
+	if !containsText(packet.HumanReviewQuestions, "What exact convention should future agents preserve?") {
+		t.Fatalf("packet should ask for exact convention content: %#v", packet.HumanReviewQuestions)
+	}
+	if !containsText(packet.StopConditions, "Do not write candidate files until human_review.candidate_write_approved is true.") {
+		t.Fatalf("packet missing candidate stop condition: %#v", packet.StopConditions)
+	}
+}
+
 func TestInspectFindsOfficialAndInboxOverlap(t *testing.T) {
 	root := t.TempDir()
 	writeAuthorRegistry(t, root)

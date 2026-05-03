@@ -53,6 +53,9 @@ func buildAuthoringPacket(response InspectResponse, req InspectRequest) Authorin
 		if pathRiskBlocksCandidate(response.PathRisk) {
 			reason = "The requested candidate path requires review before candidate writing: " + pathRiskReviewReason(response.PathRisk) + "."
 		}
+		if requestLooksMissingSubstantiveContent(req) {
+			reason = "Substantive convention content is missing; write a review-only proposal and ask for the exact convention before candidate writing."
+		}
 		proposalPath = proposal.ProposedShape.Path
 		candidatePath = ""
 	}

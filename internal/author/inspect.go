@@ -163,7 +163,8 @@ func buildProposalScaffold(response InspectResponse, req InspectRequest) Proposa
 	reviewPath := filepath.ToSlash(filepath.Join("knowledge/.inbox/proposals", project, slug, "proposal.json"))
 	overlapIDs := overlapIDs(response.Overlap.Official, response.Overlap.Inbox)
 	pathRiskBlocks := pathRiskBlocksCandidate(response.PathRisk)
-	reviewOnly := len(overlapIDs) > 0 || pathRiskBlocks
+	missingContent := requestLooksMissingSubstantiveContent(req)
+	reviewOnly := len(overlapIDs) > 0 || pathRiskBlocks || missingContent
 
 	source := SourceProfileV2{
 		UserConfirmed: []string{"User request: " + goal},
@@ -205,6 +206,17 @@ func buildProposalScaffold(response InspectResponse, req InspectRequest) Proposa
 			Kind:   "fact",
 			Trust:  "observed",
 			Source: []string{"argos author inspect path risk"},
+		})
+	}
+	if missingContent {
+		source.Assumptions = []string{"The exact convention content was not provided in the inspect request."}
+		source.OpenQuestions = []string{"What exact convention should future agents preserve?"}
+		source.Claims = append(source.Claims, SourceClaimV2{
+			Claim:          "The exact actionable convention content is missing and must be reviewed before candidate writing.",
+			Kind:           "recommendation",
+			Trust:          "synthesized",
+			Source:         []string{"argos author inspect"},
+			RequiresReview: true,
 		})
 	}
 
@@ -300,6 +312,12 @@ func buildProposalScaffold(response InspectResponse, req InspectRequest) Proposa
 		}
 	}
 
+	if missingContent {
+		proposal.Scope.Distribution = "personal"
+		proposal.FutureUse.MissingNeeds = []string{"Exact convention content."}
+		proposal.HumanReview.ReviewQuestions = []string{"What exact convention should future agents preserve?"}
+	}
+
 	if reviewOnly {
 		proposal.ProposedShape.Kind = "review"
 		proposal.ProposedShape.Type = "review"
@@ -308,7 +326,15 @@ func buildProposalScaffold(response InspectResponse, req InspectRequest) Proposa
 		proposal.ProposedShape.Status = "review"
 		proposal.ProposedShape.Priority = "may"
 		proposal.ProposedShape.Rationale = "Existing related knowledge requires a human decision before candidate writing."
-		if len(overlapIDs) > 0 && pathRiskBlocks {
+		if missingContent && len(overlapIDs) > 0 && pathRiskBlocks {
+			proposal.ProposedShape.Rationale = "Existing related knowledge, the supplied candidate path, and missing convention content require human review before candidate writing."
+		} else if missingContent && len(overlapIDs) > 0 {
+			proposal.ProposedShape.Rationale = "Existing related knowledge and missing convention content require human review before candidate writing."
+		} else if missingContent && pathRiskBlocks {
+			proposal.ProposedShape.Rationale = "The supplied candidate path and missing convention content require human review before candidate writing."
+		} else if missingContent {
+			proposal.ProposedShape.Rationale = "The exact convention content must be reviewed before candidate writing."
+		} else if len(overlapIDs) > 0 && pathRiskBlocks {
 			proposal.ProposedShape.Rationale = "Existing related knowledge and the supplied candidate path require human review before candidate writing."
 		} else if pathRiskBlocks {
 			proposal.ProposedShape.Rationale = "The supplied candidate path requires human review before candidate writing."
@@ -317,7 +343,15 @@ func buildProposalScaffold(response InspectResponse, req InspectRequest) Proposa
 		proposal.ProposedShape.ArtifactState = "review_only"
 		proposal.OverlapDecision.Decision = "unresolved"
 		proposal.OverlapDecision.Reason = "author inspect found existing related knowledge: " + strings.Join(overlapIDs, ", ")
-		if len(overlapIDs) > 0 && pathRiskBlocks {
+		if missingContent && len(overlapIDs) > 0 && pathRiskBlocks {
+			proposal.OverlapDecision.Reason += "; blocked candidate path: " + pathRiskReviewReason(response.PathRisk) + "; exact convention content is missing"
+		} else if missingContent && len(overlapIDs) > 0 {
+			proposal.OverlapDecision.Reason += "; exact convention content is missing"
+		} else if missingContent && pathRiskBlocks {
+			proposal.OverlapDecision.Reason = "author inspect blocked candidate path: " + pathRiskReviewReason(response.PathRisk) + "; exact convention content is missing"
+		} else if missingContent {
+			proposal.OverlapDecision.Reason = "author inspect needs exact convention content before candidate writing."
+		} else if len(overlapIDs) > 0 && pathRiskBlocks {
 			proposal.OverlapDecision.Reason += "; blocked candidate path: " + pathRiskReviewReason(response.PathRisk)
 		} else if pathRiskBlocks {
 			proposal.OverlapDecision.Reason = "author inspect blocked candidate path: " + pathRiskReviewReason(response.PathRisk)
@@ -332,6 +366,9 @@ func buildProposalScaffold(response InspectResponse, req InspectRequest) Proposa
 		}
 		if pathRiskBlocks {
 			proposal.HumanReview.UnresolvedBlockers = append(proposal.HumanReview.UnresolvedBlockers, "Provide an allowed inbox candidate path before candidate writing.")
+		}
+		if missingContent {
+			proposal.HumanReview.UnresolvedBlockers = append(proposal.HumanReview.UnresolvedBlockers, "Provide the exact convention content before candidate writing.")
 		}
 	}
 
@@ -362,6 +399,25 @@ func requestLooksConsumerFacing(req InspectRequest) bool {
 		strings.Contains(text, "consumer") ||
 		strings.Contains(text, "interface")
 	return hasConsumerIntent && hasSourceSignal
+}
+
+func requestLooksMissingSubstantiveContent(req InspectRequest) bool {
+	text := strings.ToLower(strings.Join(append([]string{
+		req.Goal,
+		req.FutureTask,
+		req.Query,
+	}, append(append([]string{}, req.Tags...), req.Files...)...), " "))
+	if text == "" {
+		return false
+	}
+	hasConventionIntent := strings.Contains(text, "personal convention") ||
+		strings.Contains(text, "project convention") ||
+		strings.Contains(text, "project-convention") ||
+		strings.Contains(text, "preserve it for future agents")
+	hasNoConcreteContent := strings.Contains(text, "i have a personal convention") ||
+		strings.Contains(text, "preserve it") ||
+		strings.Contains(text, "without making it global truth")
+	return hasConventionIntent && hasNoConcreteContent
 }
 
 func overlapIDs(overlap ...[]OverlapMatch) []string {
