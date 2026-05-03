@@ -71,6 +71,85 @@ func TestInspectReportsRegistryPolicyAndNoIndex(t *testing.T) {
 	}
 }
 
+func TestInspectIncludesValidProposalV2Scaffold(t *testing.T) {
+	root := t.TempDir()
+	writeAuthorRegistry(t, root)
+
+	result, err := Inspect(root, InspectRequest{
+		Project: "mall-api",
+		Goal:    "Create reusable Redis draft practices for future agents.",
+	})
+	if err != nil {
+		t.Fatalf("Inspect returned error: %v", err)
+	}
+
+	proposal := result.ProposalScaffold
+	if proposal.SchemaVersion != ProposalV2SchemaVersion {
+		t.Fatalf("schema = %q, want %q", proposal.SchemaVersion, ProposalV2SchemaVersion)
+	}
+	if proposal.UserRequest != "Create reusable Redis draft practices for future agents." {
+		t.Fatalf("user_request = %q", proposal.UserRequest)
+	}
+	if proposal.KnowledgeGoal == "" {
+		t.Fatalf("knowledge_goal is empty in scaffold: %#v", proposal)
+	}
+	if proposal.Project != "mall-api" {
+		t.Fatalf("project = %q, want mall-api", proposal.Project)
+	}
+	if proposal.ProposedShape.Kind != "package" {
+		t.Fatalf("kind = %q, want package", proposal.ProposedShape.Kind)
+	}
+	if proposal.ProposedShape.ArtifactState != "candidate" {
+		t.Fatalf("artifact_state = %q, want candidate", proposal.ProposedShape.ArtifactState)
+	}
+	if proposal.VerificationPlan.ValidatePath != proposal.ProposedShape.Path {
+		t.Fatalf("validate_path = %q, want proposed path %q", proposal.VerificationPlan.ValidatePath, proposal.ProposedShape.Path)
+	}
+	if hasFinding(ValidateProposalV2(proposal), "fail", "") {
+		t.Fatalf("scaffold has failing findings: %#v", ValidateProposalV2(proposal))
+	}
+}
+
+func TestInspectProposalScaffoldUsesReviewOnlyForUnresolvedOverlap(t *testing.T) {
+	root := t.TempDir()
+	writeAuthorRegistry(t, root)
+	writeAuthorFile(t, root, "knowledge/items/backend/cache.md", authorItem("rule:backend.cache.v1", "active", "Cache TTL Rule"))
+
+	result, err := Inspect(root, InspectRequest{
+		Project: "mall-api",
+		Goal:    "Create another cache TTL rule that may overlap existing cache knowledge.",
+	})
+	if err != nil {
+		t.Fatalf("Inspect returned error: %v", err)
+	}
+
+	proposal := result.ProposalScaffold
+	if proposal.ProposedShape.Kind != "review" {
+		t.Fatalf("kind = %q, want review", proposal.ProposedShape.Kind)
+	}
+	if proposal.ProposedShape.Type != "review" {
+		t.Fatalf("type = %q, want review", proposal.ProposedShape.Type)
+	}
+	if proposal.ProposedShape.ArtifactState != "review_only" {
+		t.Fatalf("artifact_state = %q, want review_only", proposal.ProposedShape.ArtifactState)
+	}
+	if proposal.OverlapDecision.Decision != "unresolved" {
+		t.Fatalf("overlap decision = %q, want unresolved", proposal.OverlapDecision.Decision)
+	}
+	if !proposal.OverlapDecision.HumanChoiceRequired {
+		t.Fatalf("human choice should be required for review-only scaffold: %#v", proposal.OverlapDecision)
+	}
+	if len(proposal.CandidateFiles) != 0 {
+		t.Fatalf("candidate files = %#v, want none", proposal.CandidateFiles)
+	}
+	if proposal.VerificationPlan.ValidatePath != "" {
+		t.Fatalf("validate path = %q, want empty", proposal.VerificationPlan.ValidatePath)
+	}
+	if hasFinding(ValidateProposalV2(proposal), "fail", "") {
+		t.Fatalf("review-only scaffold has failing findings: %#v", ValidateProposalV2(proposal))
+	}
+}
+
 func TestInspectFindsOfficialAndInboxOverlap(t *testing.T) {
 	root := t.TempDir()
 	writeAuthorRegistry(t, root)
