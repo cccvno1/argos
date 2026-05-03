@@ -56,7 +56,7 @@ intent -> knowledge_design -> draft_knowledge -> check -> publish
 The public AI-facing vocabulary must use this pipeline consistently in CLI JSON,
 MCP tools, adapter guidance, dogfood packets, report templates, and docs.
 
-Replace old public authoring names directly:
+Remove the old authoring vocabulary from the live implementation:
 
 - `authoring_packet`
 - `proposal_scaffold`
@@ -71,10 +71,11 @@ Replace old public authoring names directly:
 - `artifact_state`
 
 Because the project is not in production, there is no migration or compatibility
-requirement for the old public vocabulary. The first-release public surface
-should expose only the new vocabulary. Internal Go package names may change in
-the same slice or in small mechanical follow-ups, but no public JSON, MCP
-schema, adapter, dogfood asset, or help text should keep the old names.
+requirement for the old vocabulary. The first-release implementation should use
+only the new vocabulary in code identifiers, JSON, MCP schemas, CLI commands,
+help text, adapters, dogfood assets, tests, and current docs. The only allowed
+remaining occurrences are historical specs, reports, or changelog-style records
+that describe previous work.
 
 ## Goals
 
@@ -120,10 +121,9 @@ Use these names in all public authoring surfaces.
 | human review | review |
 | artifact state | draft state |
 
-Internal Go type names may be renamed when that keeps the implementation clear.
-If a private name temporarily survives to keep one slice reviewable, it must not
-appear in public JSON, MCP schemas, adapter text, dogfood templates, help text,
-or docs.
+The rename is not a public veneer. Internal Go package names, type names, field
+names, helper names, test names, and fixture-facing keys should move to the new
+vocabulary as part of the module closure.
 
 ## Public CLI Surface
 
@@ -279,9 +279,8 @@ Response:
 ## Knowledge Design Schema
 
 Introduce `knowledge.design.v1` as the canonical public design schema. The
-existing `authoring.proposal.v2` implementation can inform the code changes, but
-the first-release public schema should not expose `authoring.proposal.v2` or its
-old field names.
+existing design/check implementation can inform behavior, but the first-release
+schema and implementation should use the new names throughout the live module.
 
 Top-level fields:
 
@@ -315,7 +314,7 @@ Keep these names because they are already direct enough:
 - `future_use`
 - `applicability`
 
-Rename the less direct fields:
+Remove the less direct field names and use:
 
 - `source_profile` to `sources`
 - `proposed_shape` to `draft_output`
@@ -388,7 +387,8 @@ The design schema should include:
 }
 ```
 
-This replaces public `human_review` wording with a shorter task word.
+This uses the shorter task word `review` everywhere in the live authoring
+module.
 
 ## Data Flow
 
@@ -524,8 +524,9 @@ Unit tests:
 
 - design response emits `write_guidance` and `knowledge_design_template` using
   new public names;
-- old public names are absent from new MCP responses and generated dogfood
-  packets;
+- removed authoring terms are absent from live write-side code, test names,
+  CLI help, MCP responses, generated adapters, dogfood packets, report
+  templates, and current docs;
 - design-only states block draft writing;
 - missing content becomes design-only instead of an invalid draft;
 - existing knowledge overlap becomes design-only or requires a decision;
@@ -581,7 +582,8 @@ controlled slices.
 - Introduce `knowledge.design.v1` public schema.
 - Return `write_guidance` and `knowledge_design_template`.
 - Add canonical CLI commands under `argos knowledge`.
-- Remove old public response field names from canonical JSON responses.
+- Remove old write-side vocabulary from live code, tests, CLI help, public JSON,
+  MCP schemas, adapters, dogfood assets, and current docs.
 - Remove old write-side public CLI verbs and help text.
 
 ### Slice 2: AI Entry And Harness Contract
@@ -606,6 +608,8 @@ The write-side module is first-release complete when:
 
 - public authoring vocabulary is consistent across CLI JSON, MCP, adapters,
   dogfood packet, report template, and docs;
+- removed authoring terms no longer appear in the live write-side module,
+  except historical specs, reports, or changelog-style records;
 - AI-facing entrypoints exist for design and check;
 - generated adapters tell agents when to start the write flow and when not to;
 - dogfood evaluator enforces write guidance instead of only checking final
