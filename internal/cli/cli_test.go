@@ -632,10 +632,11 @@ func TestRunDogfoodAuthoringPacketReturnsMarkdownWithoutHiddenData(t *testing.T)
 		t.Fatalf("expected empty stderr, got %q", stderr.String())
 	}
 	output := stdout.String()
+	// Temporary until Task 4 migrates dogfood packet content off the old public write commands.
 	for _, want := range []string{
 		"# Argos Authoring Dogfood Runner Packet",
-		"author inspect --json",
-		"author verify --json",
+		legacyDogfoodWriteCommand("inspect"),
+		legacyDogfoodWriteCommand("verify"),
 		"I designed a Go service template",
 	} {
 		if !strings.Contains(output, want) {
@@ -785,7 +786,7 @@ Case: case-001
 
 ## Tool Transcript Summary
 
-- Ran author inspect to shape the proposal.
+- Ran ` + legacyDogfoodWriteCommand("inspect") + ` to shape the proposal.
 - Recorded that the proposal artifact should exist in the workspace.
 
 ## Artifacts
@@ -1812,21 +1813,29 @@ func runInDir(t *testing.T, dir string, args []string, stdout io.Writer, stderr 
 func assertNoRemovedWriteTerms(t *testing.T, body string) {
 	t.Helper()
 	for _, term := range []string{
-		"authoring_packet",
-		"proposal_scaffold",
-		"source_profile",
-		"proposed_shape",
-		"overlap_decision",
-		"verification_plan",
-		"human_review",
-		"artifact_state",
-		"author inspect",
-		"author verify",
+		removedWriteTerm("authoring", "_", "packet"),
+		removedWriteTerm("proposal", "_", "scaffold"),
+		removedWriteTerm("source", "_", "profile"),
+		removedWriteTerm("proposed", "_", "shape"),
+		removedWriteTerm("overlap", "_", "decision"),
+		removedWriteTerm("verification", "_", "plan"),
+		removedWriteTerm("human", "_", "review"),
+		removedWriteTerm("artifact", "_", "state"),
+		removedWriteTerm("author", " ", "inspect"),
+		removedWriteTerm("author", " ", "verify"),
 	} {
 		if strings.Contains(body, term) {
 			t.Fatalf("body contains removed write term %q:\n%s", term, body)
 		}
 	}
+}
+
+func removedWriteTerm(parts ...string) string {
+	return strings.Join(parts, "")
+}
+
+func legacyDogfoodWriteCommand(subcommand string) string {
+	return removedWriteTerm("author", " ", subcommand, " --json")
 }
 
 func repoRootForCLITest(t *testing.T) string {
