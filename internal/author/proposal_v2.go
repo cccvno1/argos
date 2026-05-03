@@ -231,6 +231,9 @@ func validateSourceProfileV2(source SourceProfileV2, addFail func(string), addRe
 			addReview("assumption claim requires source_profile.assumptions")
 		}
 	}
+	if !sourceProfileHasSubstantiveContent(source) && len(nonEmpty(source.OpenQuestions)) > 0 {
+		addReview("substantive knowledge content is missing; resolve open questions before candidate writing")
+	}
 }
 
 func validSourceClaimKindV2(kind string) bool {
@@ -490,6 +493,22 @@ func pathWithinAuthoringRootV2(path string, root string) bool {
 func hasAnySourceV2(source SourceProfileV2) bool {
 	return len(nonEmpty(source.UserConfirmed)) > 0 ||
 		len(nonEmpty(source.Observed)) > 0 ||
+		len(nonEmpty(source.Imported)) > 0 ||
+		len(nonEmpty(source.Synthesized)) > 0 ||
+		len(nonEmpty(source.Templates)) > 0 ||
+		len(nonEmpty(source.Examples)) > 0
+}
+
+func sourceProfileHasSubstantiveContent(source SourceProfileV2) bool {
+	for _, claim := range source.Claims {
+		if claim.RequiresReview || claim.Kind == "question" {
+			continue
+		}
+		if strings.TrimSpace(claim.Claim) != "" && claim.Kind != "assumption" {
+			return true
+		}
+	}
+	return len(nonEmpty(source.Observed)) > 0 ||
 		len(nonEmpty(source.Imported)) > 0 ||
 		len(nonEmpty(source.Synthesized)) > 0 ||
 		len(nonEmpty(source.Templates)) > 0 ||

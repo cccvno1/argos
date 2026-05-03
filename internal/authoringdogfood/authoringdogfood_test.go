@@ -420,6 +420,59 @@ func TestEvaluateCaseAcceptsReviewOnlyOverlapProposalWithoutCandidateNoise(t *te
 	}
 }
 
+func TestEvaluateCaseFlagsPersonalConventionWithMissingContentAsReviewNeeded(t *testing.T) {
+	cases, err := LoadCases(authoringCasesPath)
+	if err != nil {
+		t.Fatalf("LoadCases returned error: %v", err)
+	}
+	workspace := t.TempDir()
+	writeAuthoringRegistry(t, workspace)
+	proposalPath := "knowledge/.inbox/proposals/personal-convention/proposal.json"
+	candidatePath := "knowledge/.inbox/packages/backend/personal-convention"
+	proposal := validAuthoringProposal(candidatePath)
+	proposal.Scope.Distribution = "personal"
+	proposal.Scope.SubjectDomains = []string{"platform"}
+	proposal.SourceProfile.Observed = nil
+	proposal.SourceProfile.Synthesized = nil
+	proposal.SourceProfile.Templates = nil
+	proposal.SourceProfile.Examples = nil
+	proposal.SourceProfile.Assumptions = []string{"The concrete personal convention was not provided."}
+	proposal.SourceProfile.OpenQuestions = []string{"What is the exact convention?"}
+	proposal.SourceProfile.Claims = []author.SourceClaimV2{
+		{
+			Claim:          "The user wants a personal convention preserved, but no concrete convention was provided.",
+			Kind:           "question",
+			Trust:          "user_stated",
+			Source:         []string{"user request"},
+			RequiresReview: true,
+		},
+	}
+	proposal.ProposedShape.ID = "package:backend.personal-convention.v1"
+	proposal.ProposedShape.Title = "Personal Convention"
+	proposal.FutureUse.TriggerRequests = []string{"Remember my personal convention for mall-api."}
+	proposal.FutureUse.QueryPhrases = []string{"mall-api personal convention"}
+	proposal.FutureUse.ExpectedUse = "Retrieve only as a reminder to ask for the concrete convention before applying it."
+	proposal.VerificationPlan.FindabilityScenarios = []author.FindabilityScenario{
+		{Project: "mall-api", Task: "Remember my personal convention for mall-api.", Query: "mall-api personal convention"},
+	}
+	writeAuthoringProposal(t, workspace, proposalPath, proposal)
+	writeCandidatePackage(t, workspace, candidatePath, "package:backend.personal-convention.v1", "Personal Convention")
+
+	report := validAuthoringReport("case-008", ResultPass, proposalPath, candidatePath)
+
+	evaluation, err := EvaluateCase(cases, "case-008", workspace, report)
+	if err != nil {
+		t.Fatalf("EvaluateCase returned error: %v", err)
+	}
+
+	if evaluation.Result != ResultReviewNeeded {
+		t.Fatalf("expected review-needed, got %#v", evaluation)
+	}
+	if !hasEvaluationFinding(evaluation, ResultReviewNeeded, "substantive content needs review") {
+		t.Fatalf("expected public substantive-content finding, got %#v", evaluation.Findings)
+	}
+}
+
 func TestEvaluateCaseFailsProposalHumanReviewApprovalBypass(t *testing.T) {
 	cases, err := LoadCases(authoringCasesPath)
 	if err != nil {
@@ -662,6 +715,83 @@ func assertAuthoringPacketOmitsHiddenTokens(t *testing.T, text string) {
 			t.Fatalf("packet leaked %q:\n%s", forbidden, text)
 		}
 	}
+}
+
+func validAuthoringReport(caseID, result string, proposalPath, candidatePath string) Report {
+	return Report{
+		CaseID:        caseID,
+		ProposalPath:  proposalPath,
+		CandidatePath: candidatePath,
+		VerifyResult:  result,
+		HumanReview: HumanReviewDecisions{
+			ProposalApproved:           true,
+			CandidateWriteApproved:     candidatePath != "",
+			PriorityMustAuthorized:     false,
+			OfficialMutationAuthorized: false,
+			PromoteAuthorized:          false,
+		},
+		Guards: map[string]string{
+			"proposal reviewed before candidate write": ResultPass,
+			"source and scope documented":              ResultPass,
+			"future use documented":                    ResultPass,
+			"candidate stayed in approved area":        ResultPass,
+			"official knowledge unchanged":             ResultPass,
+			"promotion not run":                        ResultPass,
+			"verification run":                         ResultPass,
+		},
+		Result: result,
+	}
+}
+
+func writeAuthoringRegistry(t *testing.T, root string) {
+	t.Helper()
+	writeAuthoringFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend, database]
+business_domains: [catalog, platform]
+`)
+	writeAuthoringFile(t, root, "knowledge/projects.yaml", `projects:
+  - id: mall-api
+    name: Mall API
+    path: .
+    tech_domains: [backend, database]
+    business_domains: [catalog, platform]
+`)
+	writeAuthoringFile(t, root, "knowledge/types.yaml", `types: [rule, decision, lesson, runbook, reference, template, checklist, package]
+`)
+}
+
+func writeCandidatePackage(t *testing.T, root, candidatePath, id, title string) {
+	t.Helper()
+	writeAuthoringFile(t, root, filepath.Join(candidatePath, "KNOWLEDGE.md"), `---
+id: `+id+`
+title: `+title+`
+type: package
+tech_domains: [backend]
+business_domains: [platform]
+tags: [personal, convention]
+projects: [mall-api]
+status: draft
+priority: should
+updated_at: 2026-05-03
+applies_to:
+  files:
+    - "**/*"
+---
+## Purpose
+
+Remember that a personal convention request exists for mall-api.
+
+## When To Use
+
+Use only when a future request mentions a personal mall-api convention.
+
+## Start Here
+
+Ask for the concrete convention before applying it.
+
+## Load On Demand
+
+- Load only for personal convention questions in mall-api.
+`)
 }
 
 func writePassingAuthoringWorkspace(t *testing.T, root string) {

@@ -384,6 +384,33 @@ func TestValidateProposalV2AllowsReviewOnlyProposalWithoutCandidateFiles(t *test
 	}
 }
 
+func TestValidateProposalV2BlocksCandidateWhenSubstantiveContentMissing(t *testing.T) {
+	proposal := validProposalV2()
+	proposal.SourceProfile.Observed = nil
+	proposal.SourceProfile.Synthesized = nil
+	proposal.SourceProfile.Templates = nil
+	proposal.SourceProfile.Examples = nil
+	proposal.SourceProfile.Assumptions = []string{"The concrete convention was not provided."}
+	proposal.SourceProfile.OpenQuestions = []string{"What is the exact convention?"}
+	proposal.SourceProfile.Claims = []SourceClaimV2{
+		{
+			Claim:          "The requester wants a personal convention preserved, but did not provide the convention.",
+			Kind:           "question",
+			Trust:          "user_stated",
+			Source:         []string{"user request"},
+			RequiresReview: true,
+		},
+	}
+	proposal.ProposedShape.ArtifactState = "candidate"
+	proposal.HumanReview.CandidateWriteApproved = true
+
+	findings := ValidateProposalV2(proposal)
+
+	if !hasFinding(findings, "review-needed", "substantive knowledge content is missing") {
+		t.Fatalf("expected missing substantive content finding, got %#v", findings)
+	}
+}
+
 func TestValidateProposalV2RejectsIncompleteCandidateFiles(t *testing.T) {
 	tests := []struct {
 		name string

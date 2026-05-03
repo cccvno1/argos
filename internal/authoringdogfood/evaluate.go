@@ -140,6 +140,9 @@ func EvaluateCase(cases []Case, requestedID string, workspace string, report Rep
 	for _, finding := range author.ValidateProposalV2(proposal) {
 		addAuthorFinding(finding, addFail, addReview)
 	}
+	if proposalHasMissingSubstantiveContent(proposal) {
+		addReview("substantive content needs review before this candidate is usable knowledge")
+	}
 	if !tc.Approval.OfficialMutationAuthorized && proposal.Delivery.OfficialMutationAuthorized {
 		addFail("official knowledge mutation was not approved")
 	}
@@ -489,6 +492,26 @@ func hasAnySourceEvidence(proposal author.ProposalV2) bool {
 		hasNonEmptyString(source.Synthesized) ||
 		hasNonEmptyString(source.Templates) ||
 		hasNonEmptyString(source.Examples)
+}
+
+func proposalHasMissingSubstantiveContent(proposal author.ProposalV2) bool {
+	return !hasSubstantiveAuthoringClaim(proposal) && hasNonEmptyString(proposal.SourceProfile.OpenQuestions)
+}
+
+func hasSubstantiveAuthoringClaim(proposal author.ProposalV2) bool {
+	for _, claim := range proposal.SourceProfile.Claims {
+		if claim.RequiresReview || claim.Kind == "question" || claim.Kind == "assumption" {
+			continue
+		}
+		if strings.TrimSpace(claim.Claim) != "" {
+			return true
+		}
+	}
+	return hasNonEmptyString(proposal.SourceProfile.Observed) ||
+		hasNonEmptyString(proposal.SourceProfile.Imported) ||
+		hasNonEmptyString(proposal.SourceProfile.Synthesized) ||
+		hasNonEmptyString(proposal.SourceProfile.Templates) ||
+		hasNonEmptyString(proposal.SourceProfile.Examples)
 }
 
 func hasObservedClaimSource(proposal author.ProposalV2) bool {
