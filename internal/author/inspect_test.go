@@ -127,6 +127,63 @@ func TestInspectIncludesValidProposalV2Scaffold(t *testing.T) {
 	}
 }
 
+func TestInspectIncludesAuthoringPacketForProposalPath(t *testing.T) {
+	root := t.TempDir()
+	writeAuthorRegistry(t, root)
+
+	result, err := Inspect(root, InspectRequest{
+		Project:    "mall-api",
+		Goal:       "Create reusable Redis draft practices for future agents.",
+		FutureTask: "design Redis cache practices",
+		Phase:      "planning",
+		Query:      "redis cache practices",
+		Tags:       []string{"redis", "cache"},
+	})
+	if err != nil {
+		t.Fatalf("Inspect returned error: %v", err)
+	}
+
+	packet := result.AuthoringPacket
+	if packet.State != "ready_for_proposal" {
+		t.Fatalf("state = %q, want ready_for_proposal: %#v", packet.State, packet)
+	}
+	if packet.RecommendedAction != "write_proposal" {
+		t.Fatalf("recommended_action = %q, want write_proposal: %#v", packet.RecommendedAction, packet)
+	}
+	if packet.ProposalPath != "knowledge/.inbox/proposals/mall-api/create-reusable-redis-draft-practices-for-future-agents/proposal.json" {
+		t.Fatalf("proposal_path = %q", packet.ProposalPath)
+	}
+	if packet.CandidatePath != result.ProposalScaffold.ProposedShape.Path {
+		t.Fatalf("candidate_path = %q, want scaffold path %q", packet.CandidatePath, result.ProposalScaffold.ProposedShape.Path)
+	}
+	if packet.CandidateAllowed {
+		t.Fatalf("inspect must not authorize candidate writing: %#v", packet)
+	}
+	if packet.ReviewOnly {
+		t.Fatalf("normal packet should not be review-only: %#v", packet)
+	}
+	if !containsText(packet.StopConditions, "Do not write candidate files until human_review.candidate_write_approved is true.") {
+		t.Fatalf("packet missing candidate stop condition: %#v", packet.StopConditions)
+	}
+	if !containsText(packet.ProposalFocus, "Separate user-stated intent, observed facts, imported facts, synthesized guidance, assumptions, and open questions.") {
+		t.Fatalf("packet missing source-separation focus: %#v", packet.ProposalFocus)
+	}
+	if packet.Commands.VerifyCandidate == "" || !strings.Contains(packet.Commands.VerifyCandidate, "--proposal "+packet.ProposalPath) || !strings.Contains(packet.Commands.VerifyCandidate, "--path "+packet.CandidatePath) {
+		t.Fatalf("verify command does not reference proposal and candidate paths: %#v", packet.Commands)
+	}
+	if len(packet.HumanReviewQuestions) == 0 {
+		t.Fatalf("packet should include human review questions: %#v", packet)
+	}
+
+	data, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal inspect response: %v", err)
+	}
+	if !strings.Contains(string(data), `"authoring_packet"`) {
+		t.Fatalf("inspect JSON missing authoring_packet: %s", string(data))
+	}
+}
+
 func TestInspectInfersConsumerAudienceForAPIConsumerKnowledge(t *testing.T) {
 	root := t.TempDir()
 	writeAuthorRegistry(t, root)
