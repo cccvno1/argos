@@ -521,6 +521,41 @@ func TestVerifyFailsWhenStoredLatestCheckDidNotPass(t *testing.T) {
 	}
 }
 
+func TestVerifyFailsWhenDesignChangesAfterDesignApproval(t *testing.T) {
+	root := t.TempDir()
+	record := startPublishableTestRecord(t, root)
+	recordDesignAndDraftApprovals(t, root, record.ProvenanceID)
+	writeTestFile(t, root, "knowledge/.inbox/designs/mall-api/redis-cache/design.json", strings.Replace(validProvenanceDesignJSON(), "Create Redis cache best practices.", "Create updated Redis cache best practices.", 1))
+	if _, err := RecordCheck(root, record.ProvenanceID); err != nil {
+		t.Fatalf("RecordCheck returned error: %v", err)
+	}
+	if _, err := RecordDecision(root, record.ProvenanceID, DecisionInput{
+		Stage:      StagePublish,
+		Decision:   DecisionApproved,
+		DecidedBy:  "chenchi",
+		Role:       "knowledge_owner",
+		Source:     "conversation",
+		Reason:     "Publish approved.",
+		RecordedBy: "codex",
+	}); err != nil {
+		t.Fatalf("record publish decision: %v", err)
+	}
+
+	result, err := Verify(root, record.ProvenanceID)
+	if err != nil {
+		t.Fatalf("Verify returned error: %v", err)
+	}
+	if result.Result != "fail" {
+		t.Fatalf("expected verify fail, got %#v", result)
+	}
+	if !containsFinding(result.Findings, "design decision hashes do not match current record") {
+		t.Fatalf("expected design decision hash finding, got %#v", result.Findings)
+	}
+	if !containsFinding(result.Findings, "draft_write decision hashes do not match current record") {
+		t.Fatalf("expected draft_write decision hash finding, got %#v", result.Findings)
+	}
+}
+
 func TestRecordCheckDoesNotOverwriteExistingCheckNumber(t *testing.T) {
 	root := t.TempDir()
 	record := startPublishableTestRecord(t, root)

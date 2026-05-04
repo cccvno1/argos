@@ -579,12 +579,14 @@ func requireApprovedDecision(findings *[]string, decisions []Decision, stage str
 			*findings = append(*findings, stage+" decision must be approved")
 			return
 		}
-		if stage == StagePublish {
-			if decision.Hashes.DesignSHA256 != hashes.DesignSHA256 ||
-				decision.Hashes.DraftTreeSHA256 != hashes.DraftTreeSHA256 ||
-				decision.Hashes.LatestCheckSHA256 != hashes.LatestCheckSHA256 {
-				*findings = append(*findings, "publish decision hashes do not match current record")
-			}
+		if decision.Hashes.DesignSHA256 != hashes.DesignSHA256 {
+			*findings = append(*findings, stage+" decision hashes do not match current record")
+			return
+		}
+		if stage == StagePublish &&
+			(decision.Hashes.DraftTreeSHA256 != hashes.DraftTreeSHA256 ||
+				decision.Hashes.LatestCheckSHA256 != hashes.LatestCheckSHA256) {
+			*findings = append(*findings, "publish decision hashes do not match current record")
 		}
 		return
 	}
