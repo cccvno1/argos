@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -34,7 +35,11 @@ func Start(root string, req StartRequest) (Record, error) {
 	if err != nil {
 		return Record{}, err
 	}
-	design, err := knowledgewrite.LoadDesign(filepath.Join(root, designPath))
+	designAbs, err := resolvedPathInsideRoot(root, designPath)
+	if err != nil {
+		return Record{}, err
+	}
+	design, err := knowledgewrite.LoadDesign(designAbs)
 	if err != nil {
 		return Record{}, err
 	}
@@ -43,37 +48,53 @@ func Start(root string, req StartRequest) (Record, error) {
 		return Record{}, err
 	}
 
-	id := newProvenanceID(design.Project, design.DraftOutput.Title)
-	record := Record{
-		SchemaVersion: SchemaVersion,
-		ProvenanceID:  id,
-		State:         StateDraft,
-		Subject: Subject{
-			Kind:         strings.TrimSpace(design.DraftOutput.Kind),
-			KnowledgeID:  strings.TrimSpace(design.DraftOutput.ID),
-			Project:      strings.TrimSpace(design.Project),
-			DesignPath:   filepath.ToSlash(designPath),
-			DraftPath:    filepath.ToSlash(draftPath),
-			OfficialPath: officialPathForDraft(draftPath),
-		},
-		Hashes: Hashes{
-			DesignSHA256: designHash,
-		},
-		CreatedAt: time.Now().UTC().Format(time.RFC3339),
-		CreatedBy: strings.TrimSpace(req.CreatedBy),
-	}
-	if record.CreatedBy == "" {
-		record.CreatedBy = "unknown"
-	}
-
-	dir := filepath.Join(root, "knowledge", ".inbox", "provenance", id)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return Record{}, fmt.Errorf("create provenance dir: %w", err)
-	}
-	if err := writeRecord(filepath.Join(dir, "provenance.json"), record); err != nil {
+	rootDir, err := safeMkdirAllInsideRoot(root, filepath.Join("knowledge", ".inbox", "provenance"))
+	if err != nil {
 		return Record{}, err
 	}
-	return record, nil
+	for attempt := 0; attempt < 16; attempt++ {
+		id, err := newProvenanceID(design.Project, design.DraftOutput.Title)
+		if err != nil {
+			return Record{}, err
+		}
+		record := Record{
+			SchemaVersion: SchemaVersion,
+			ProvenanceID:  id,
+			State:         StateDraft,
+			Subject: Subject{
+				Kind:         strings.TrimSpace(design.DraftOutput.Kind),
+				KnowledgeID:  strings.TrimSpace(design.DraftOutput.ID),
+				Project:      strings.TrimSpace(design.Project),
+				DesignPath:   filepath.ToSlash(designPath),
+				DraftPath:    filepath.ToSlash(draftPath),
+				OfficialPath: officialPathForDraft(draftPath),
+			},
+			Hashes: Hashes{
+				DesignSHA256: designHash,
+			},
+			CreatedAt: time.Now().UTC().Format(time.RFC3339),
+			CreatedBy: strings.TrimSpace(req.CreatedBy),
+		}
+		if record.CreatedBy == "" {
+			record.CreatedBy = "unknown"
+		}
+		dir := filepath.Join(rootDir, id)
+		if err := os.Mkdir(dir, 0o755); err != nil {
+			if errors.Is(err, os.ErrExist) {
+				continue
+			}
+			return Record{}, fmt.Errorf("create provenance dir: %w", err)
+		}
+		if err := writeRecordExclusive(filepath.Join(dir, "provenance.json"), record); err != nil {
+			_ = os.Remove(dir)
+			if errors.Is(err, os.ErrExist) {
+				continue
+			}
+			return Record{}, err
+		}
+		return record, nil
+	}
+	return Record{}, fmt.Errorf("could not allocate unique provenance id")
 }
 
 func Load(root string, idOrPath string) (Loaded, error) {
@@ -98,12 +119,12 @@ func Load(root string, idOrPath string) (Loaded, error) {
 }
 
 func tryLoad(root string, candidate string, original string) (Loaded, bool, error) {
-	abs := filepath.Join(root, candidate)
+	abs, ok, err := existingPathInsideRoot(root, candidate)
+	if err != nil || !ok {
+		return Loaded{}, ok, err
+	}
 	info, err := os.Stat(abs)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return Loaded{}, false, nil
-		}
 		return Loaded{}, false, fmt.Errorf("stat %s: %w", filepath.ToSlash(candidate), err)
 	}
 	if info.IsDir() {
@@ -131,10 +152,19 @@ func tryLoad(root string, candidate string, original string) (Loaded, bool, erro
 			if len(found) == 1 {
 				return found[0], true, nil
 			}
+			if len(found) > 1 {
+				var paths []string
+				for _, match := range found {
+					paths = append(paths, match.Path)
+				}
+				return Loaded{}, false, fmt.Errorf("ambiguous provenance id %q matched %d records: %s", original, len(found), strings.Join(paths, ", "))
+			}
 			return Loaded{}, false, nil
 		}
-		candidate = filepath.Join(candidate, "provenance.json")
-		abs = filepath.Join(root, candidate)
+		abs, ok, err = existingPathInsideRoot(root, filepath.Join(candidate, "provenance.json"))
+		if err != nil || !ok {
+			return Loaded{}, ok, err
+		}
 	}
 	loaded, err := readRecord(root, abs)
 	if err != nil {
@@ -144,7 +174,15 @@ func tryLoad(root string, candidate string, original string) (Loaded, bool, erro
 }
 
 func readRecord(root string, absPath string) (Loaded, error) {
-	data, err := os.ReadFile(absPath)
+	rel, err := relPathInsideRoot(root, absPath)
+	if err != nil {
+		return Loaded{}, err
+	}
+	safeAbs, err := resolvedPathInsideRoot(root, rel)
+	if err != nil {
+		return Loaded{}, err
+	}
+	data, err := os.ReadFile(safeAbs)
 	if err != nil {
 		return Loaded{}, fmt.Errorf("read provenance: %w", err)
 	}
@@ -152,31 +190,57 @@ func readRecord(root string, absPath string) (Loaded, error) {
 	if err := json.Unmarshal(data, &record); err != nil {
 		return Loaded{}, fmt.Errorf("parse provenance JSON: %w", err)
 	}
-	rel, err := filepath.Rel(root, absPath)
-	if err != nil {
-		return Loaded{}, fmt.Errorf("resolve provenance path: %w", err)
-	}
 	return Loaded{Record: record, Path: filepath.ToSlash(rel), Dir: filepath.ToSlash(filepath.Dir(rel))}, nil
 }
 
 func writeRecord(path string, record Record) error {
+	data, err := marshalRecord(record)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o644)
+}
+
+func writeRecordExclusive(path string, record Record) error {
+	data, err := marshalRecord(record)
+	if err != nil {
+		return err
+	}
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+	if err != nil {
+		return fmt.Errorf("write provenance: %w", err)
+	}
+	defer file.Close()
+	if _, err := file.Write(data); err != nil {
+		return fmt.Errorf("write provenance: %w", err)
+	}
+	return nil
+}
+
+func marshalRecord(record Record) ([]byte, error) {
 	data, err := json.MarshalIndent(record, "", "  ")
 	if err != nil {
-		return fmt.Errorf("marshal provenance: %w", err)
+		return nil, fmt.Errorf("marshal provenance: %w", err)
 	}
-	return os.WriteFile(path, append(data, '\n'), 0o644)
+	return append(data, '\n'), nil
 }
 
-func newProvenanceID(project string, title string) string {
-	return "prov-" + time.Now().UTC().Format("20060102") + "-" + slug(project+"-"+title) + "-" + randomHex(4)
+func newProvenanceID(project string, title string) (string, error) {
+	suffix, err := randomHex(4)
+	if err != nil {
+		return "", err
+	}
+	return "prov-" + time.Now().UTC().Format("20060102") + "-" + slug(project+"-"+title) + "-" + suffix, nil
 }
 
-func randomHex(bytes int) string {
+var randomBytes = rand.Read
+
+func randomHex(bytes int) (string, error) {
 	buf := make([]byte, bytes)
-	if _, err := rand.Read(buf); err != nil {
-		return "00000000"
+	if _, err := randomBytes(buf); err != nil {
+		return "", fmt.Errorf("generate random provenance id: %w", err)
 	}
-	return hex.EncodeToString(buf)
+	return hex.EncodeToString(buf), nil
 }
 
 func slug(value string) string {
@@ -214,4 +278,85 @@ func officialPathForDraft(draftPath string) string {
 	default:
 		return slash
 	}
+}
+
+func safeMkdirAllInsideRoot(root string, relDir string) (string, error) {
+	clean, err := cleanRelPath(relDir)
+	if err != nil {
+		return "", err
+	}
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return "", fmt.Errorf("resolve workspace root: %w", err)
+	}
+	rootResolved, err := filepath.EvalSymlinks(rootAbs)
+	if err != nil {
+		return "", fmt.Errorf("resolve workspace root symlinks: %w", err)
+	}
+	current := rootResolved
+	for _, part := range strings.Split(filepath.ToSlash(clean), "/") {
+		if part == "" {
+			continue
+		}
+		current = filepath.Join(current, part)
+		info, err := os.Lstat(current)
+		if err == nil {
+			if info.Mode()&os.ModeSymlink != 0 {
+				return "", fmt.Errorf("%s: path must not contain symlinks", filepath.ToSlash(clean))
+			}
+			if !info.IsDir() {
+				return "", fmt.Errorf("%s exists but is not a directory", filepath.ToSlash(clean))
+			}
+			continue
+		}
+		if !os.IsNotExist(err) {
+			return "", fmt.Errorf("stat %s: %w", filepath.ToSlash(clean), err)
+		}
+		if err := os.Mkdir(current, 0o755); err != nil {
+			return "", fmt.Errorf("create %s: %w", filepath.ToSlash(clean), err)
+		}
+	}
+	return current, nil
+}
+
+func existingPathInsideRoot(root string, relPath string) (string, bool, error) {
+	clean, err := cleanRelPath(relPath)
+	if err != nil {
+		return "", false, err
+	}
+	raw := filepath.Join(root, clean)
+	if _, err := os.Lstat(raw); err != nil {
+		if os.IsNotExist(err) {
+			return "", false, nil
+		}
+		return "", false, fmt.Errorf("stat %s: %w", filepath.ToSlash(clean), err)
+	}
+	resolved, err := resolvedPathInsideRoot(root, clean)
+	if err != nil {
+		return "", false, err
+	}
+	return resolved, true, nil
+}
+
+func relPathInsideRoot(root string, absPath string) (string, error) {
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return "", fmt.Errorf("resolve workspace root: %w", err)
+	}
+	rootResolved, err := filepath.EvalSymlinks(rootAbs)
+	if err != nil {
+		return "", fmt.Errorf("resolve workspace root symlinks: %w", err)
+	}
+	targetResolved, err := filepath.EvalSymlinks(absPath)
+	if err != nil {
+		return "", fmt.Errorf("resolve provenance path symlinks: %w", err)
+	}
+	rel, err := filepath.Rel(rootResolved, targetResolved)
+	if err != nil {
+		return "", fmt.Errorf("resolve provenance path: %w", err)
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return "", fmt.Errorf("%s: resolved path must stay inside workspace", filepath.ToSlash(absPath))
+	}
+	return filepath.ToSlash(rel), nil
 }

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestHashFileChangesWhenFileChanges(t *testing.T) {
@@ -193,6 +194,168 @@ func TestStartCreatesInboxProvenanceRecord(t *testing.T) {
 	}
 	if loaded.Record.ProvenanceID != record.ProvenanceID {
 		t.Fatalf("loaded wrong record: %#v", loaded.Record)
+	}
+}
+
+func TestStartRejectsSymlinkedDesignBeforeParsing(t *testing.T) {
+	root := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "design.json")
+	if err := os.WriteFile(outside, []byte(`{not-json`), 0o644); err != nil {
+		t.Fatalf("write outside design: %v", err)
+	}
+	link := filepath.Join(root, "knowledge/.inbox/designs/mall-api/redis-cache/design.json")
+	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+		t.Fatalf("mkdir design parent: %v", err)
+	}
+	if err := os.Symlink(outside, link); err != nil {
+		t.Fatalf("symlink design: %v", err)
+	}
+
+	_, err := Start(root, StartRequest{
+		DesignPath: "knowledge/.inbox/designs/mall-api/redis-cache/design.json",
+		DraftPath:  "knowledge/.inbox/packages/mall-api/redis-cache",
+		CreatedBy:  "codex",
+	})
+	if err == nil {
+		t.Fatalf("expected symlinked design error")
+	}
+	if strings.Contains(err.Error(), "parse design JSON") {
+		t.Fatalf("design was parsed before symlink rejection: %v", err)
+	}
+}
+
+func TestStartRejectsSymlinkedProvenanceRoot(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, root, "knowledge/.inbox/designs/mall-api/redis-cache/design.json", `{
+  "schema_version": "knowledge.design.v1",
+  "project": "mall-api",
+  "draft_output": {
+    "kind": "package",
+    "id": "package:mall-api.redis-cache.v1",
+    "path": "knowledge/.inbox/packages/mall-api/redis-cache"
+  }
+}`)
+	outside := t.TempDir()
+	inbox := filepath.Join(root, "knowledge/.inbox")
+	if err := os.MkdirAll(inbox, 0o755); err != nil {
+		t.Fatalf("mkdir inbox: %v", err)
+	}
+	if err := os.Symlink(outside, filepath.Join(inbox, "provenance")); err != nil {
+		t.Fatalf("symlink provenance root: %v", err)
+	}
+
+	if _, err := Start(root, StartRequest{
+		DesignPath: "knowledge/.inbox/designs/mall-api/redis-cache/design.json",
+		DraftPath:  "knowledge/.inbox/packages/mall-api/redis-cache",
+		CreatedBy:  "codex",
+	}); err == nil {
+		t.Fatalf("expected symlinked provenance root error")
+	}
+	entries, err := os.ReadDir(outside)
+	if err != nil {
+		t.Fatalf("read outside provenance dir: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("expected outside provenance dir to remain empty, got %d entries", len(entries))
+	}
+}
+
+func TestLoadRejectsSymlinkedProvenanceRecord(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	writeTestFile(t, outside, "provenance.json", `{
+  "schema_version": "knowledge.provenance.v1",
+  "provenance_id": "prov-outside",
+  "state": "draft",
+  "subject": {},
+  "hashes": {},
+  "created_at": "2026-05-04T00:00:00Z",
+  "created_by": "codex"
+}`)
+	inboxRoot := filepath.Join(root, "knowledge/.inbox/provenance")
+	if err := os.MkdirAll(inboxRoot, 0o755); err != nil {
+		t.Fatalf("mkdir inbox provenance: %v", err)
+	}
+	if err := os.Symlink(outside, filepath.Join(inboxRoot, "prov-outside")); err != nil {
+		t.Fatalf("symlink provenance record: %v", err)
+	}
+
+	if _, err := Load(root, "prov-outside"); err == nil {
+		t.Fatalf("expected symlinked provenance load error")
+	}
+}
+
+func TestStartRetriesDuplicateProvenanceID(t *testing.T) {
+	originalRandomBytes := randomBytes
+	defer func() { randomBytes = originalRandomBytes }()
+	calls := 0
+	randomBytes = func(buf []byte) (int, error) {
+		calls++
+		if calls == 1 {
+			copy(buf, []byte{0x01, 0x02, 0x03, 0x04})
+			return len(buf), nil
+		}
+		copy(buf, []byte{0x05, 0x06, 0x07, 0x08})
+		return len(buf), nil
+	}
+
+	root := t.TempDir()
+	writeTestFile(t, root, "knowledge/.inbox/designs/mall-api/redis-cache/design.json", `{
+  "schema_version": "knowledge.design.v1",
+  "project": "mall-api",
+  "draft_output": {
+    "kind": "package",
+    "title": "Redis Cache",
+    "id": "package:mall-api.redis-cache.v1",
+    "path": "knowledge/.inbox/packages/mall-api/redis-cache"
+  }
+}`)
+	existingID := "prov-" + time.Now().UTC().Format("20060102") + "-mall-api-redis-cache-01020304"
+	writeTestFile(t, root, "knowledge/.inbox/provenance/"+existingID+"/provenance.json", `{"existing":true}`)
+
+	record, err := Start(root, StartRequest{
+		DesignPath: "knowledge/.inbox/designs/mall-api/redis-cache/design.json",
+		DraftPath:  "knowledge/.inbox/packages/mall-api/redis-cache",
+		CreatedBy:  "codex",
+	})
+	if err != nil {
+		t.Fatalf("Start returned error: %v", err)
+	}
+	if record.ProvenanceID == existingID {
+		t.Fatalf("expected duplicate id retry, got %s", record.ProvenanceID)
+	}
+	if calls != 2 {
+		t.Fatalf("expected two random calls, got %d", calls)
+	}
+	existing, err := os.ReadFile(filepath.Join(root, "knowledge/.inbox/provenance", existingID, "provenance.json"))
+	if err != nil {
+		t.Fatalf("read existing provenance: %v", err)
+	}
+	if string(existing) != `{"existing":true}` {
+		t.Fatalf("existing provenance was overwritten: %s", string(existing))
+	}
+}
+
+func TestLoadAmbiguousPublishedProvenanceID(t *testing.T) {
+	root := t.TempDir()
+	for _, knowledgeID := range []string{"package_one", "package_two"} {
+		writeTestFile(t, root, "knowledge/provenance/"+knowledgeID+"/prov-duplicate/provenance.json", `{
+  "schema_version": "knowledge.provenance.v1",
+  "provenance_id": "prov-duplicate",
+  "state": "published",
+  "subject": {},
+  "hashes": {},
+  "created_at": "2026-05-04T00:00:00Z",
+  "created_by": "codex"
+}`)
+	}
+
+	_, err := Load(root, "prov-duplicate")
+	if err == nil {
+		t.Fatalf("expected ambiguous provenance id error")
+	}
+	if !strings.Contains(err.Error(), "ambiguous provenance id") {
+		t.Fatalf("expected ambiguous provenance id error, got %v", err)
 	}
 }
 
