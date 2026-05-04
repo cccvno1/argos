@@ -49,7 +49,7 @@ func Knowledge(root string, req Request) (Result, error) {
 		if record.State == provenance.StatePublished {
 			publishedByKnowledgeID[record.KnowledgeID] = true
 		}
-		status, err := provenance.Status(root, record.ProvenanceID)
+		status, err := provenance.Status(root, record.Path)
 		if err != nil {
 			return Result{}, err
 		}
@@ -97,7 +97,7 @@ func addStatusItems(result *Result, status provenance.StatusResult, includePubli
 		return
 	}
 
-	action := strings.Join(status.Actions, "; ")
+	action := statusAction(status)
 	for _, finding := range status.Findings {
 		result.Summary.Open++
 		switch finding.Severity {
@@ -130,6 +130,14 @@ func addStatusItems(result *Result, status provenance.StatusResult, includePubli
 			Action:       action,
 		})
 	}
+}
+
+func statusAction(status provenance.StatusResult) string {
+	action := strings.Join(status.Actions, "; ")
+	if action == "" {
+		return "inspect provenance status"
+	}
+	return action
 }
 
 func resultStatus(summary Summary) string {

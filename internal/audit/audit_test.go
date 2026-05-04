@@ -56,6 +56,58 @@ func TestKnowledgeOfficialMissingPublishedProvenanceIsProblem(t *testing.T) {
 	}
 }
 
+func TestKnowledgeUsesListedRecordPathWhenDuplicateIDExists(t *testing.T) {
+	root, provenanceID := createAuditProvenanceThroughCheck(t, "mall-api")
+	if _, err := provenance.RecordDecision(root, provenanceID, provenance.DecisionInput{
+		Stage:      provenance.StagePublish,
+		Decision:   provenance.DecisionApproved,
+		DecidedBy:  "chenchi",
+		Role:       "knowledge_owner",
+		Source:     "conversation",
+		Reason:     "publish approved.",
+		RecordedBy: "codex",
+	}); err != nil {
+		t.Fatalf("record publish decision: %v", err)
+	}
+	if _, _, err := provenance.PreparePublishMove(root, provenanceID, "codex"); err != nil {
+		t.Fatalf("prepare publish move: %v", err)
+	}
+	writeAuditProvenanceJSON(t, root, "knowledge/.inbox/provenance/"+provenanceID+"/provenance.json", provenance.Record{
+		SchemaVersion: provenance.SchemaVersion,
+		ProvenanceID:  provenanceID,
+		State:         provenance.StateDraft,
+		Subject: provenance.Subject{
+			Kind:         "package",
+			KnowledgeID:  "package:other-api.redis-cache.v1",
+			Project:      "other-api",
+			DesignPath:   "knowledge/.inbox/designs/other-api/redis-cache/design.json",
+			DraftPath:    "knowledge/.inbox/packages/other-api/redis-cache",
+			OfficialPath: "knowledge/packages/other-api/redis-cache",
+		},
+		CreatedAt: "2026-05-04T00:00:00Z",
+		CreatedBy: "legacy",
+	})
+
+	result, err := Knowledge(root, Request{Project: "mall-api"})
+	if err != nil {
+		t.Fatalf("Knowledge returned error: %v", err)
+	}
+	if len(result.Items) == 0 {
+		t.Fatalf("expected audit items for published record with missing official target")
+	}
+	for _, item := range result.Items {
+		if item.Project != "mall-api" {
+			t.Fatalf("audit used duplicate record instead of filtered path: %#v", result.Items)
+		}
+		if item.Path == "knowledge/.inbox/provenance/"+provenanceID {
+			t.Fatalf("audit used inbox duplicate path instead of listed published path: %#v", result.Items)
+		}
+		if item.Action != "inspect provenance status" {
+			t.Fatalf("expected fallback action for status with no actions, got %#v", item)
+		}
+	}
+}
+
 func createAuditProvenanceThroughCheck(t *testing.T, project string) (string, string) {
 	t.Helper()
 	root := t.TempDir()
@@ -234,6 +286,15 @@ func writeAuditFile(t *testing.T, root string, rel string, body string) {
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatalf("write %s: %v", path, err)
 	}
+}
+
+func writeAuditProvenanceJSON(t *testing.T, root string, rel string, record provenance.Record) {
+	t.Helper()
+	data, err := json.MarshalIndent(record, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal provenance: %v", err)
+	}
+	writeAuditFile(t, root, rel, string(data)+"\n")
 }
 
 func auditHasItem(items []Item, category string, provenanceID string) bool {
