@@ -170,12 +170,14 @@ func tryLoad(root string, candidate string, original string) (Loaded, bool, erro
 			}
 			return Loaded{}, false, nil
 		}
-		abs, ok, err = existingPathInsideRoot(root, filepath.Join(candidate, "provenance.json"))
+		recordPath := filepath.Join(candidate, "provenance.json")
+		_, ok, err = existingPathInsideRoot(root, recordPath)
 		if err != nil || !ok {
 			return Loaded{}, ok, err
 		}
+		candidate = recordPath
 	}
-	loaded, err := readRecord(root, abs)
+	loaded, err := readRecord(root, candidate)
 	if err != nil {
 		return Loaded{}, false, err
 	}
@@ -183,12 +185,14 @@ func tryLoad(root string, candidate string, original string) (Loaded, bool, erro
 }
 
 func readRecord(root string, absPath string) (Loaded, error) {
-	rel, err := relPathInsideRoot(root, absPath)
+	rel, safeAbs, err := lexicalPathInsideRoot(root, absPath)
 	if err != nil {
 		return Loaded{}, err
 	}
-	safeAbs, err := resolvedPathInsideRoot(root, rel)
-	if err != nil {
+	if !isProvenanceRecordPath(rel) {
+		return Loaded{}, fmt.Errorf("%s: provenance record must be under knowledge/.inbox/provenance or knowledge/provenance", filepath.ToSlash(rel))
+	}
+	if err := rejectSymlinkPath(root, rel); err != nil {
 		return Loaded{}, err
 	}
 	data, err := os.ReadFile(safeAbs)
@@ -200,6 +204,69 @@ func readRecord(root string, absPath string) (Loaded, error) {
 		return Loaded{}, fmt.Errorf("parse provenance JSON: %w", err)
 	}
 	return Loaded{Record: record, Path: filepath.ToSlash(rel), Dir: filepath.ToSlash(filepath.Dir(rel))}, nil
+}
+
+func lexicalPathInsideRoot(root string, path string) (string, string, error) {
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return "", "", fmt.Errorf("resolve workspace root: %w", err)
+	}
+	var absPath string
+	if filepath.IsAbs(path) {
+		absPath, err = filepath.Abs(path)
+	} else {
+		absPath, err = filepath.Abs(filepath.Join(rootAbs, path))
+	}
+	if err != nil {
+		return "", "", fmt.Errorf("resolve provenance path: %w", err)
+	}
+	rel, err := filepath.Rel(rootAbs, absPath)
+	if err != nil {
+		return "", "", fmt.Errorf("resolve provenance path: %w", err)
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return "", "", fmt.Errorf("%s: path must stay inside workspace", filepath.ToSlash(path))
+	}
+	clean, err := cleanRelPath(rel)
+	if err != nil {
+		return "", "", err
+	}
+	return filepath.ToSlash(clean), filepath.Join(rootAbs, clean), nil
+}
+
+func isProvenanceRecordPath(rel string) bool {
+	slash := filepath.ToSlash(filepath.Clean(rel))
+	if filepath.Base(slash) != "provenance.json" {
+		return false
+	}
+	return strings.HasPrefix(slash, "knowledge/.inbox/provenance/") ||
+		strings.HasPrefix(slash, "knowledge/provenance/")
+}
+
+func rejectSymlinkPath(root string, rel string) error {
+	clean, err := cleanRelPath(rel)
+	if err != nil {
+		return err
+	}
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return fmt.Errorf("resolve workspace root: %w", err)
+	}
+	current := rootAbs
+	for _, part := range strings.Split(filepath.ToSlash(clean), "/") {
+		if part == "" {
+			continue
+		}
+		current = filepath.Join(current, part)
+		info, err := os.Lstat(current)
+		if err != nil {
+			return fmt.Errorf("stat %s: %w", filepath.ToSlash(clean), err)
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("%s: path must not contain symlinks", filepath.ToSlash(clean))
+		}
+	}
+	return nil
 }
 
 func writeRecord(path string, record Record) error {

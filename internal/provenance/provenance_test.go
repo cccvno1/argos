@@ -320,6 +320,34 @@ func TestLoadRejectsSymlinkedProvenanceRecord(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsSymlinkedProvenanceJSON(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, root, "knowledge/items/not-provenance/provenance.json", `{
+  "schema_version": "knowledge.provenance.v1",
+  "provenance_id": "prov-link",
+  "state": "draft",
+  "subject": {},
+  "hashes": {},
+  "created_at": "2026-05-04T00:00:00Z",
+  "created_by": "codex"
+}`)
+	recordDir := filepath.Join(root, "knowledge/.inbox/provenance/prov-link")
+	if err := os.MkdirAll(recordDir, 0o755); err != nil {
+		t.Fatalf("mkdir provenance record: %v", err)
+	}
+	if err := os.Symlink(filepath.Join(root, "knowledge/items/not-provenance/provenance.json"), filepath.Join(recordDir, "provenance.json")); err != nil {
+		t.Fatalf("symlink provenance.json: %v", err)
+	}
+
+	_, err := Load(root, "prov-link")
+	if err == nil {
+		t.Fatalf("expected symlinked provenance.json load error")
+	}
+	if !strings.Contains(err.Error(), "path must not contain symlinks") {
+		t.Fatalf("expected symlink rejection, got %v", err)
+	}
+}
+
 func TestStartRetriesDuplicateProvenanceID(t *testing.T) {
 	originalRandomBytes := randomBytes
 	defer func() { randomBytes = originalRandomBytes }()
