@@ -1399,7 +1399,16 @@ func TestRunKnowledgeCheckReturnsJSONStatus(t *testing.T) {
 
 func TestKnowledgeWritePublishAndFindbackFlow(t *testing.T) {
 	root := t.TempDir()
-	initWorkspace(t, root)
+	chdir(t, root)
+	runOK(t, root, []string{"init"})
+	runOK(t, root, []string{
+		"project", "add",
+		"--id", "mall-api",
+		"--name", "Mall API",
+		"--path", "services/mall-api",
+		"--tech-domain", "backend",
+		"--business-domain", "account",
+	})
 
 	designOutput := runOK(t, root, []string{
 		"knowledge", "design", "--json",
@@ -2180,7 +2189,7 @@ id: package:mall-api.redis-cache.v1
 title: Redis Cache Best Practices
 type: package
 tech_domains: [backend]
-business_domains: [catalog]
+business_domains: [account]
 projects: [mall-api]
 status: draft
 priority: should
