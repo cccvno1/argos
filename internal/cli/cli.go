@@ -969,6 +969,14 @@ type validationScope struct {
 	Path  string
 }
 
+type knowledgeStorageScope string
+
+const (
+	knowledgeStorageOfficial knowledgeStorageScope = "official"
+	knowledgeStorageInbox    knowledgeStorageScope = "inbox"
+	knowledgeStorageUnknown  knowledgeStorageScope = "unknown"
+)
+
 func loadAndValidateKnowledge(root string, stderr io.Writer, scope validationScope) ([]knowledge.Item, error) {
 	reg, err := registry.Load(root)
 	if err != nil {
@@ -991,6 +999,7 @@ func loadAndValidateKnowledge(root string, stderr io.Writer, scope validationSco
 	}
 
 	errs := knowledge.ValidateItems(items, reg)
+	errs = append(errs, validateKnowledgeStorageScope(items, storageScopeForValidation(scope))...)
 	for _, err := range errs {
 		fmt.Fprintln(stderr, err)
 	}
@@ -1000,6 +1009,54 @@ func loadAndValidateKnowledge(root string, stderr io.Writer, scope validationSco
 		return nil, err
 	}
 	return items, nil
+}
+
+func storageScopeForValidation(scope validationScope) knowledgeStorageScope {
+	if strings.TrimSpace(scope.Path) != "" {
+		return storageScopeForPath(scope.Path)
+	}
+	if scope.Inbox {
+		return knowledgeStorageInbox
+	}
+	return knowledgeStorageOfficial
+}
+
+func storageScopeForPath(path string) knowledgeStorageScope {
+	slash := filepath.ToSlash(filepath.Clean(strings.TrimSpace(path)))
+	if slash == "." || slash == "" {
+		return knowledgeStorageUnknown
+	}
+	if slash == "knowledge/.inbox/items" ||
+		slash == "knowledge/.inbox/packages" ||
+		strings.HasPrefix(slash, "knowledge/.inbox/items/") ||
+		strings.HasPrefix(slash, "knowledge/.inbox/packages/") {
+		return knowledgeStorageInbox
+	}
+	if slash == "knowledge/items" ||
+		slash == "knowledge/packages" ||
+		strings.HasPrefix(slash, "knowledge/items/") ||
+		strings.HasPrefix(slash, "knowledge/packages/") {
+		return knowledgeStorageOfficial
+	}
+	return knowledgeStorageUnknown
+}
+
+func validateKnowledgeStorageScope(items []knowledge.Item, scope knowledgeStorageScope) []error {
+	var errs []error
+	for _, item := range items {
+		status := strings.TrimSpace(item.Status)
+		switch scope {
+		case knowledgeStorageInbox:
+			if status != "draft" {
+				errs = append(errs, fmt.Errorf("%s: inbox knowledge must use status: draft; publish active knowledge through argos knowledge publish", item.Path))
+			}
+		case knowledgeStorageOfficial:
+			if status == "draft" {
+				errs = append(errs, fmt.Errorf("%s: official knowledge must not use status: draft; publish from inbox or set status: active after review", item.Path))
+			}
+		}
+	}
+	return errs
 }
 
 func publishDraft(root string, relPath string, stderr io.Writer) (string, error) {

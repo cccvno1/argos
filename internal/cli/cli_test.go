@@ -2030,6 +2030,108 @@ Use short-lived access tokens.
 	}
 }
 
+func TestRunValidateRejectsOfficialDraftStatus(t *testing.T) {
+	root := t.TempDir()
+	writeCLIRegistry(t, root)
+	writeCLIFile(t, root, "knowledge/items/backend/draft.md", `---
+id: rule:backend.draft.v1
+title: Draft Official Rule
+type: rule
+tech_domains: [backend]
+business_domains: [account]
+projects: []
+status: draft
+priority: should
+updated_at: 2026-05-04
+---
+Official roots must not carry draft status.
+`)
+	chdir(t, root)
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"validate"}, &stdout, &stderr)
+
+	if code != 1 {
+		t.Fatalf("expected exit code 1, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "official knowledge must not use status: draft") {
+		t.Fatalf("expected official draft error, got %q", stderr.String())
+	}
+}
+
+func TestRunValidateInboxRejectsActiveStatus(t *testing.T) {
+	root := t.TempDir()
+	writeCLIRegistry(t, root)
+	writeCLIFile(t, root, "knowledge/.inbox/items/backend/active.md", `---
+id: rule:backend.active-draft.v1
+title: Active Inbox Rule
+type: rule
+tech_domains: [backend]
+business_domains: [account]
+projects: []
+status: active
+priority: should
+updated_at: 2026-05-04
+---
+Inbox roots must carry draft status.
+`)
+	chdir(t, root)
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"validate", "--inbox"}, &stdout, &stderr)
+
+	if code != 1 {
+		t.Fatalf("expected exit code 1, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "inbox knowledge must use status: draft") {
+		t.Fatalf("expected inbox status error, got %q", stderr.String())
+	}
+}
+
+func TestRunValidatePathDerivesStorageScope(t *testing.T) {
+	root := t.TempDir()
+	writeCLIRegistry(t, root)
+	writeCLIFile(t, root, "knowledge/.inbox/items/backend/active.md", `---
+id: rule:backend.active-draft.v1
+title: Active Inbox Rule
+type: rule
+tech_domains: [backend]
+business_domains: [account]
+projects: []
+status: active
+priority: should
+updated_at: 2026-05-04
+---
+Inbox roots must carry draft status.
+`)
+	writeCLIFile(t, root, "knowledge/items/backend/draft.md", `---
+id: rule:backend.official-draft.v1
+title: Draft Official Rule
+type: rule
+tech_domains: [backend]
+business_domains: [account]
+projects: []
+status: draft
+priority: should
+updated_at: 2026-05-04
+---
+Official roots must not carry draft status.
+`)
+	chdir(t, root)
+
+	var inboxStdout, inboxStderr bytes.Buffer
+	inboxCode := Run([]string{"validate", "--path", "knowledge/.inbox/items/backend/active.md"}, &inboxStdout, &inboxStderr)
+	if inboxCode != 1 || !strings.Contains(inboxStderr.String(), "inbox knowledge must use status: draft") {
+		t.Fatalf("expected inbox path status error, code=%d stderr=%q", inboxCode, inboxStderr.String())
+	}
+
+	var officialStdout, officialStderr bytes.Buffer
+	officialCode := Run([]string{"validate", "--path", "knowledge/items/backend/draft.md"}, &officialStdout, &officialStderr)
+	if officialCode != 1 || !strings.Contains(officialStderr.String(), "official knowledge must not use status: draft") {
+		t.Fatalf("expected official path status error, code=%d stderr=%q", officialCode, officialStderr.String())
+	}
+}
+
 func writeCLIFile(t *testing.T, root, rel, body string) {
 	t.Helper()
 
