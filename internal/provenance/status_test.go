@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"argos/internal/knowledgewrite"
@@ -110,6 +111,42 @@ func TestStatusEvidenceReportsMissingRequiredHashes(t *testing.T) {
 	}
 	if status.Evidence.LatestCheck == "pass" {
 		t.Fatalf("expected non-pass latest check evidence with missing check hash, got %#v", status)
+	}
+}
+
+func TestStatusEvidenceReportsChangedDecisionHashes(t *testing.T) {
+	root, id := createStatusWorkspaceThroughCheck(t)
+	recordStatusPublishApproval(t, root, id)
+	loaded, err := Load(root, id)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	loaded.Record.Hashes.DesignSHA256 = strings.Repeat("a", 64)
+	loaded.Record.Hashes.DraftTreeSHA256 = strings.Repeat("b", 64)
+	loaded.Record.Hashes.LatestCheckSHA256 = strings.Repeat("c", 64)
+	recordPath, err := resolvedPathInsideRoot(root, loaded.Path)
+	if err != nil {
+		t.Fatalf("resolve record path: %v", err)
+	}
+	if err := writeRecord(recordPath, loaded.Record); err != nil {
+		t.Fatalf("write record: %v", err)
+	}
+
+	status, err := Status(root, id)
+	if err != nil {
+		t.Fatalf("Status returned error: %v", err)
+	}
+	if status.Evidence.DesignDecision == "pass" {
+		t.Fatalf("expected non-pass design decision evidence with stale approval hashes, got %#v", status)
+	}
+	if status.Evidence.DraftWriteDecision == "pass" {
+		t.Fatalf("expected non-pass draft-write decision evidence with stale approval hashes, got %#v", status)
+	}
+	if status.Evidence.PublishDecision == "pass" {
+		t.Fatalf("expected non-pass publish decision evidence with stale approval hashes, got %#v", status)
+	}
+	if !statusHasCategory(status.Findings, "decision_mismatch") {
+		t.Fatalf("expected decision_mismatch finding, got %#v", status.Findings)
 	}
 }
 

@@ -116,6 +116,13 @@ func officialTargetEvidence(root string, record Record) string {
 
 func applyVerifyFindingEvidence(evidence *StatusEvidence, record Record, message string) {
 	switch {
+	case strings.Contains(message, "design decision hashes do not match current record"):
+		evidence.DesignDecision = "changed"
+	case strings.Contains(message, "draft_write decision hashes do not match current record") ||
+		strings.Contains(message, "draft-write decision hashes do not match current record"):
+		evidence.DraftWriteDecision = "changed"
+	case strings.Contains(message, "publish decision hashes do not match current record"):
+		evidence.PublishDecision = "changed"
 	case strings.Contains(message, "design hash is required"):
 		evidence.DesignBound = "missing"
 	case strings.Contains(message, "design hash changed"):
