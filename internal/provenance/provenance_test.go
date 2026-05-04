@@ -468,6 +468,94 @@ func TestVerifyFailsWhenDraftChangesAfterPublishDecision(t *testing.T) {
 	}
 }
 
+func TestVerifyFailsWhenStoredLatestCheckDidNotPass(t *testing.T) {
+	root := t.TempDir()
+	record := startPublishableTestRecord(t, root)
+	recordDesignAndDraftApprovals(t, root, record.ProvenanceID)
+	if _, err := RecordCheck(root, record.ProvenanceID); err != nil {
+		t.Fatalf("RecordCheck returned error: %v", err)
+	}
+	loaded, err := Load(root, record.ProvenanceID)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if loaded.Record.LatestCheck == nil {
+		t.Fatalf("expected latest check")
+	}
+	checkRel := filepath.ToSlash(filepath.Join(loaded.Dir, loaded.Record.LatestCheck.Path))
+	writeTestFile(t, root, checkRel, `{"result":"fail"}`)
+	checkHash, err := HashFile(root, checkRel)
+	if err != nil {
+		t.Fatalf("HashFile returned error: %v", err)
+	}
+	loaded.Record.Hashes.LatestCheckSHA256 = checkHash
+	loaded.Record.LatestCheck.Result = "pass"
+	recordPath, err := resolvedPathInsideRoot(root, loaded.Path)
+	if err != nil {
+		t.Fatalf("resolve record path: %v", err)
+	}
+	if err := writeRecord(recordPath, loaded.Record); err != nil {
+		t.Fatalf("write tampered record: %v", err)
+	}
+	if _, err := RecordDecision(root, record.ProvenanceID, DecisionInput{
+		Stage:      StagePublish,
+		Decision:   DecisionApproved,
+		DecidedBy:  "chenchi",
+		Role:       "knowledge_owner",
+		Source:     "conversation",
+		Reason:     "Publish approved.",
+		RecordedBy: "codex",
+	}); err != nil {
+		t.Fatalf("record publish decision: %v", err)
+	}
+
+	result, err := Verify(root, record.ProvenanceID)
+	if err != nil {
+		t.Fatalf("Verify returned error: %v", err)
+	}
+	if result.Result != "fail" {
+		t.Fatalf("expected verify fail, got %#v", result)
+	}
+	if !containsFinding(result.Findings, "stored latest check must pass") {
+		t.Fatalf("expected stored check finding, got %#v", result.Findings)
+	}
+}
+
+func TestRecordCheckDoesNotOverwriteExistingCheckNumber(t *testing.T) {
+	root := t.TempDir()
+	record := startPublishableTestRecord(t, root)
+	if _, err := RecordCheck(root, record.ProvenanceID); err != nil {
+		t.Fatalf("RecordCheck returned error: %v", err)
+	}
+	loaded, err := Load(root, record.ProvenanceID)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	checksDir := filepath.ToSlash(filepath.Join(loaded.Dir, "checks"))
+	if err := os.Remove(filepath.Join(root, checksDir, "check-001.json")); err != nil {
+		t.Fatalf("remove first check: %v", err)
+	}
+	writeTestFile(t, root, filepath.ToSlash(filepath.Join(checksDir, "check-002.json")), "existing evidence\n")
+
+	if _, err := RecordCheck(root, record.ProvenanceID); err != nil {
+		t.Fatalf("second RecordCheck returned error: %v", err)
+	}
+	existing, err := os.ReadFile(filepath.Join(root, checksDir, "check-002.json"))
+	if err != nil {
+		t.Fatalf("read existing check: %v", err)
+	}
+	if string(existing) != "existing evidence\n" {
+		t.Fatalf("existing check was overwritten: %s", string(existing))
+	}
+	loaded, err = Load(root, record.ProvenanceID)
+	if err != nil {
+		t.Fatalf("Load after second check returned error: %v", err)
+	}
+	if loaded.Record.LatestCheck == nil || loaded.Record.LatestCheck.Path != "checks/check-003.json" {
+		t.Fatalf("expected latest check-003.json, got %#v", loaded.Record.LatestCheck)
+	}
+}
+
 func startPublishableTestRecord(t *testing.T, root string) Record {
 	t.Helper()
 	writeTestFile(t, root, "knowledge/domains.yaml", "tech_domains: [backend]\nbusiness_domains: [catalog]\n")

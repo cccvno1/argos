@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -319,13 +320,9 @@ func RecordCheck(root string, idOrPath string) (knowledgewrite.CheckResponse, er
 	if err != nil {
 		return knowledgewrite.CheckResponse{}, err
 	}
-	next := nextCheckPath(checksDir)
-	data, err := json.MarshalIndent(check, "", "  ")
+	next, err := writeCheckFile(checksDir, check)
 	if err != nil {
-		return knowledgewrite.CheckResponse{}, fmt.Errorf("marshal check: %w", err)
-	}
-	if err := os.WriteFile(filepath.Join(checksDir, next), append(data, '\n'), 0o644); err != nil {
-		return knowledgewrite.CheckResponse{}, fmt.Errorf("write check: %w", err)
+		return knowledgewrite.CheckResponse{}, err
 	}
 
 	loaded.Record.Hashes.DesignSHA256, err = HashFile(root, loaded.Record.Subject.DesignPath)
@@ -390,13 +387,25 @@ func Verify(root string, idOrPath string) (VerifyResult, error) {
 		if record.LatestCheck.Path == "" {
 			findings = append(findings, "latest check path is required")
 		} else {
-			checkHash, err := HashFile(root, filepath.Join(loaded.Dir, record.LatestCheck.Path))
+			checkRel := filepath.Join(loaded.Dir, record.LatestCheck.Path)
+			checkHash, err := HashFile(root, checkRel)
 			if err != nil {
 				findings = append(findings, err.Error())
 			} else if record.Hashes.LatestCheckSHA256 == "" {
 				findings = append(findings, "latest check hash is required")
 			} else if checkHash != record.Hashes.LatestCheckSHA256 {
 				findings = append(findings, "latest check hash changed")
+			}
+			storedCheck, err := loadCheckResponse(root, checkRel)
+			if err != nil {
+				findings = append(findings, err.Error())
+			} else {
+				if storedCheck.Result != record.LatestCheck.Result {
+					findings = append(findings, "latest check result does not match stored check")
+				}
+				if storedCheck.Result != "pass" {
+					findings = append(findings, "stored latest check must pass")
+				}
 			}
 		}
 	}
@@ -489,12 +498,75 @@ func decisionsPath(root string, provenanceDir string) (string, error) {
 	return filepath.Join(parent, "decisions.jsonl"), nil
 }
 
-func nextCheckPath(checksDir string) string {
+func writeCheckFile(checksDir string, check knowledgewrite.CheckResponse) (string, error) {
+	data, err := json.MarshalIndent(check, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("marshal check: %w", err)
+	}
+	for attempt := 0; attempt < 16; attempt++ {
+		next, err := nextCheckPath(checksDir)
+		if err != nil {
+			return "", err
+		}
+		path := filepath.Join(checksDir, next)
+		file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		if errors.Is(err, os.ErrExist) {
+			continue
+		}
+		if err != nil {
+			return "", fmt.Errorf("write check: %w", err)
+		}
+		if _, err := file.Write(append(data, '\n')); err != nil {
+			file.Close()
+			os.Remove(path)
+			return "", fmt.Errorf("write check: %w", err)
+		}
+		if err := file.Close(); err != nil {
+			os.Remove(path)
+			return "", fmt.Errorf("close check: %w", err)
+		}
+		return next, nil
+	}
+	return "", fmt.Errorf("write check: exhausted unique check path attempts")
+}
+
+func loadCheckResponse(root string, relPath string) (knowledgewrite.CheckResponse, error) {
+	checkPath, err := resolvedPathInsideRoot(root, relPath)
+	if err != nil {
+		return knowledgewrite.CheckResponse{}, err
+	}
+	data, err := os.ReadFile(checkPath)
+	if err != nil {
+		return knowledgewrite.CheckResponse{}, fmt.Errorf("read latest check: %w", err)
+	}
+	var check knowledgewrite.CheckResponse
+	if err := json.Unmarshal(data, &check); err != nil {
+		return knowledgewrite.CheckResponse{}, fmt.Errorf("parse latest check JSON: %w", err)
+	}
+	return check, nil
+}
+
+func nextCheckPath(checksDir string) (string, error) {
 	entries, err := os.ReadDir(checksDir)
 	if err != nil {
-		return "check-001.json"
+		return "", fmt.Errorf("read checks dir: %w", err)
 	}
-	return fmt.Sprintf("check-%03d.json", len(entries)+1)
+	max := 0
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasPrefix(name, "check-") || !strings.HasSuffix(name, ".json") {
+			continue
+		}
+		numberText := strings.TrimSuffix(strings.TrimPrefix(name, "check-"), ".json")
+		number, err := strconv.Atoi(numberText)
+		if err != nil {
+			continue
+		}
+		if number > max {
+			max = number
+		}
+	}
+	return fmt.Sprintf("check-%03d.json", max+1), nil
 }
 
 func requireApprovedDecision(findings *[]string, decisions []Decision, stage string, hashes Hashes) {
