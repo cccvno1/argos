@@ -213,14 +213,15 @@ When the user explicitly asks to create durable knowledge, use the write flow:
 2. Run `argos knowledge design --json --project <project> --intent <intent>`.
 3. Write the returned `knowledge_design_template` to `write_guidance.design_path`.
 4. Start provenance with `argos provenance start --json --design <design.json> --draft <draft-path>`.
-5. Record the human design decision with `argos provenance record-decision --json --stage design`.
-6. Write draft knowledge only after the design and draft-write decisions are recorded.
-7. Run `argos provenance record-check --json --provenance <id>`.
-8. Record the publish decision with `argos provenance record-decision --json --stage publish`.
-9. Run `argos provenance verify --json --provenance <id>`.
-10. Publish with `argos knowledge publish --provenance <id>`.
-11. Run `argos index`.
-12. Confirm the new knowledge is discoverable with `argos knowledge find --json`.
+5. Record the human design decision with `argos provenance record-decision --json --provenance <id> --stage design`.
+6. Record the draft-write decision with `argos provenance record-decision --json --provenance <id> --stage draft_write`.
+7. Write draft knowledge only after the design and draft-write decisions are recorded.
+8. Run `argos provenance record-check --json --provenance <id>`.
+9. Record the publish decision with `argos provenance record-decision --json --provenance <id> --stage publish`.
+10. Run `argos provenance verify --json --provenance <id>`.
+11. Publish with `argos knowledge publish --provenance <id>`.
+12. Run `argos index`.
+13. Confirm the new knowledge is discoverable with `argos knowledge find --json`.
 
 ### Provenance Contract
 
