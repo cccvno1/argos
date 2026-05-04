@@ -1537,6 +1537,10 @@ func TestKnowledgeWritePublishAndFindbackFlow(t *testing.T) {
 	}
 	provenanceID := createPublishableCLIProvenance(t, root, designPath, draftPath)
 	runOK(t, root, []string{"knowledge", "publish", "--provenance", provenanceID})
+	publishedProvenance := filepath.Join(root, "knowledge/provenance/package_mall-api.redis-cache.v1", provenanceID, "provenance.json")
+	if _, err := os.Stat(publishedProvenance); err != nil {
+		t.Fatalf("expected published provenance: %v", err)
+	}
 	runOK(t, root, []string{"index"})
 
 	findOutput := runOK(t, root, []string{
@@ -1558,6 +1562,31 @@ func TestKnowledgeWritePublishAndFindbackFlow(t *testing.T) {
 	}
 	if len(findResult.Items) == 0 || findResult.Items[0].Status != "active" {
 		t.Fatalf("expected published package findback to be active, got: %s", findOutput)
+	}
+}
+
+func TestKnowledgeFindDoesNotLoadProvenanceAsKnowledge(t *testing.T) {
+	root := t.TempDir()
+	initWorkspace(t, root)
+	writeCLIFile(t, root, "knowledge/provenance/package_mall-api.redis-cache.v1/prov-20260504-redis/KNOWLEDGE.md", `---
+id: package:provenance.should-not-index.v1
+title: Should Not Index
+type: package
+tech_domains: [backend]
+business_domains: [catalog]
+projects: [mall-api]
+status: active
+priority: should
+updated_at: 2026-05-04
+---
+This provenance directory must not be indexed as knowledge.
+`)
+	chdir(t, root)
+
+	runOK(t, root, []string{"index"})
+	output := runOK(t, root, []string{"knowledge", "find", "--json", "--project", "mall-api", "--query", "Should Not Index"})
+	if strings.Contains(output, "package:provenance.should-not-index.v1") {
+		t.Fatalf("provenance directory was indexed as knowledge: %s", output)
 	}
 }
 
