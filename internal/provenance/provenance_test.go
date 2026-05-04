@@ -98,6 +98,25 @@ func TestHashTreeRejectsSymlinkOutsideWorkspace(t *testing.T) {
 	}
 }
 
+func TestHashTreeRejectsSymlinkedRootOutsideWorkspace(t *testing.T) {
+	root := t.TempDir()
+	outsideRoot := filepath.Join(t.TempDir(), "outside")
+	if err := os.MkdirAll(filepath.Join(outsideRoot, "empty-subdir"), 0o755); err != nil {
+		t.Fatalf("mkdir outside root: %v", err)
+	}
+	link := filepath.Join(root, "knowledge/link")
+	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+		t.Fatalf("mkdir link parent: %v", err)
+	}
+	if err := os.Symlink(outsideRoot, link); err != nil {
+		t.Fatalf("symlink outside root: %v", err)
+	}
+
+	if _, err := HashTree(root, "knowledge/link/empty-subdir"); err == nil {
+		t.Fatalf("expected symlinked tree root escape error")
+	}
+}
+
 func TestRecordJSONShape(t *testing.T) {
 	record := Record{
 		SchemaVersion: SchemaVersion,

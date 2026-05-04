@@ -45,7 +45,10 @@ func HashTree(root string, relPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	absRoot := filepath.Join(root, clean)
+	absRoot, err := resolvedPathInsideRoot(root, clean)
+	if err != nil {
+		return "", err
+	}
 	info, err := os.Stat(absRoot)
 	if err != nil {
 		return "", fmt.Errorf("stat %s: %w", filepath.ToSlash(clean), err)
