@@ -465,6 +465,10 @@ func Verify(root string, idOrPath string) (VerifyResult, error) {
 	if err != nil {
 		return VerifyResult{}, err
 	}
+	if shouldVerifyPublishedDraft(root, loaded.Record) {
+		publishedDraftHash, hashErr := hashPublishedDraftAsDraft(root, loaded.Record)
+		return verifyLoadedWithDraftHash(root, idOrPath, loaded, publishedDraftHash, hashErr)
+	}
 	return verifyLoaded(root, idOrPath, loaded, loaded.Record.Subject.DraftPath)
 }
 
@@ -559,7 +563,7 @@ func hashPublishedDraftAsDraft(root string, record Record) (string, error) {
 		return "", fmt.Errorf("stat %s: %w", filepath.ToSlash(officialClean), err)
 	}
 	if !info.IsDir() {
-		return hashPublishedFileAsDraft(root, officialClean, draftClean)
+		return hashPublishedFileAsDraft(root, officialClean, true)
 	}
 
 	var files []string
@@ -582,9 +586,10 @@ func hashPublishedDraftAsDraft(root string, record Record) (string, error) {
 	sort.Strings(files)
 
 	sum := sha256.New()
+	packageEntrypoint := filepath.ToSlash(filepath.Join(filepath.ToSlash(officialClean), "KNOWLEDGE.md"))
 	for _, officialRel := range files {
 		draftRel := rebaseProvenancePath(officialRel, filepath.ToSlash(officialClean), filepath.ToSlash(draftClean))
-		fileHash, err := hashPublishedFileAsDraft(root, officialRel, draftRel)
+		fileHash, err := hashPublishedFileAsDraft(root, officialRel, officialRel == packageEntrypoint)
 		if err != nil {
 			return "", err
 		}
@@ -596,7 +601,7 @@ func hashPublishedDraftAsDraft(root string, record Record) (string, error) {
 	return hex.EncodeToString(sum.Sum(nil)), nil
 }
 
-func hashPublishedFileAsDraft(root string, officialRel string, draftRel string) (string, error) {
+func hashPublishedFileAsDraft(root string, officialRel string, normalizeStatus bool) (string, error) {
 	clean, err := cleanRelPath(officialRel)
 	if err != nil {
 		return "", err
@@ -616,7 +621,7 @@ func hashPublishedFileAsDraft(root string, officialRel string, draftRel string) 
 	if err != nil {
 		return "", fmt.Errorf("read %s: %w", filepath.ToSlash(clean), err)
 	}
-	if strings.HasSuffix(filepath.ToSlash(draftRel), ".md") {
+	if normalizeStatus {
 		data = normalizePublishedKnowledgeDraftStatus(data)
 	}
 	sum := sha256.Sum256(data)

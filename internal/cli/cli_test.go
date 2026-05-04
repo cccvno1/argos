@@ -1768,6 +1768,16 @@ func TestRunKnowledgePublishWithProvenanceMovesDraftAndProvenance(t *testing.T) 
 	if _, err := os.Stat(publishedProvenance); err != nil {
 		t.Fatalf("expected published provenance: %v", err)
 	}
+	verifyOutput := runOK(t, root, []string{"provenance", "verify", "--json", "--provenance", provenanceID})
+	var verifyResult struct {
+		Result string `json:"result"`
+	}
+	if err := json.Unmarshal([]byte(verifyOutput), &verifyResult); err != nil {
+		t.Fatalf("parse verify JSON: %v\n%s", err, verifyOutput)
+	}
+	if verifyResult.Result != "pass" {
+		t.Fatalf("expected published provenance verify pass, got: %s", verifyOutput)
+	}
 	if !strings.Contains(stdout.String(), "published knowledge/packages/backend/redis/best-practices") {
 		t.Fatalf("unexpected stdout: %q", stdout.String())
 	}

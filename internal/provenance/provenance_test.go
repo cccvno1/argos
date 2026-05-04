@@ -51,6 +51,41 @@ func TestHashTreeIncludesSupportingFilesInStableOrder(t *testing.T) {
 	}
 }
 
+func TestHashPublishedDraftAsDraftDoesNotNormalizeSupportingMarkdown(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, root, "knowledge/.inbox/packages/mall-api/redis-cache/KNOWLEDGE.md", validProvenanceDraftPackage())
+	writeTestFile(t, root, "knowledge/.inbox/packages/mall-api/redis-cache/references/redis.md", `---
+status: draft
+---
+Reference evidence.
+`)
+	draftHash, err := HashTree(root, "knowledge/.inbox/packages/mall-api/redis-cache")
+	if err != nil {
+		t.Fatalf("HashTree returned error: %v", err)
+	}
+
+	writeTestFile(t, root, "knowledge/packages/mall-api/redis-cache/KNOWLEDGE.md", strings.Replace(validProvenanceDraftPackage(), "status: draft", "status: active", 1))
+	writeTestFile(t, root, "knowledge/packages/mall-api/redis-cache/references/redis.md", `---
+status: active
+---
+Reference evidence.
+`)
+	record := Record{
+		Subject: Subject{
+			DraftPath:    "knowledge/.inbox/packages/mall-api/redis-cache",
+			OfficialPath: "knowledge/packages/mall-api/redis-cache",
+		},
+	}
+
+	publishedHash, err := hashPublishedDraftAsDraft(root, record)
+	if err != nil {
+		t.Fatalf("hashPublishedDraftAsDraft returned error: %v", err)
+	}
+	if publishedHash == draftHash {
+		t.Fatalf("support markdown status change was masked; hash = %s", publishedHash)
+	}
+}
+
 func TestHashRejectsUnsafePaths(t *testing.T) {
 	root := t.TempDir()
 	for _, rel := range []string{"", ".", "../outside", "/tmp/outside"} {
