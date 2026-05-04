@@ -1,6 +1,7 @@
 package provenance
 
 import (
+	"path/filepath"
 	"strings"
 )
 
@@ -34,9 +35,10 @@ func Status(root string, idOrPath string) (StatusResult, error) {
 			OfficialTarget:     officialTargetEvidence(root, loaded.Record),
 		},
 	}
+	latestCheckPath := latestCheckRecordPath(loaded.Dir, loaded.Record)
 	for _, finding := range verify.Findings {
-		applyVerifyFindingEvidence(&result.Evidence, loaded.Record, finding)
-		statusFinding, ok := statusFindingForVerifyFinding(finding)
+		applyVerifyFindingEvidence(&result.Evidence, loaded.Record, latestCheckPath, finding)
+		statusFinding, ok := statusFindingForVerifyFinding(finding, latestCheckPath)
 		if ok {
 			result.Findings = append(result.Findings, statusFinding)
 		}
@@ -68,6 +70,13 @@ func latestCheckEvidence(record Record) string {
 		return "pass"
 	}
 	return "failed"
+}
+
+func latestCheckRecordPath(recordDir string, record Record) string {
+	if record.LatestCheck == nil || strings.TrimSpace(record.LatestCheck.Path) == "" {
+		return ""
+	}
+	return filepath.ToSlash(filepath.Join(recordDir, record.LatestCheck.Path))
 }
 
 func draftTargetEvidence(root string, record Record) string {
@@ -114,7 +123,7 @@ func officialTargetEvidence(root string, record Record) string {
 	return "pass"
 }
 
-func applyVerifyFindingEvidence(evidence *StatusEvidence, record Record, message string) {
+func applyVerifyFindingEvidence(evidence *StatusEvidence, record Record, latestCheckPath string, message string) {
 	switch {
 	case strings.Contains(message, "design decision hashes do not match current record"):
 		evidence.DesignDecision = "changed"
@@ -139,6 +148,8 @@ func applyVerifyFindingEvidence(evidence *StatusEvidence, record Record, message
 	case strings.Contains(message, "latest check is required") ||
 		strings.Contains(message, "latest check path is required"):
 		evidence.LatestCheck = "missing"
+	case isLatestCheckArtifactFinding(message, latestCheckPath):
+		evidence.LatestCheck = "missing"
 	case strings.Contains(message, "latest check"):
 		evidence.LatestCheck = "failed"
 	case containsNonEmpty(message, record.Subject.DesignPath):
@@ -152,7 +163,11 @@ func containsNonEmpty(s string, substr string) bool {
 	return strings.TrimSpace(substr) != "" && strings.Contains(s, substr)
 }
 
-func statusFindingForVerifyFinding(message string) (StatusFinding, bool) {
+func isLatestCheckArtifactFinding(message string, latestCheckPath string) bool {
+	return containsNonEmpty(message, latestCheckPath)
+}
+
+func statusFindingForVerifyFinding(message string, latestCheckPath string) (StatusFinding, bool) {
 	if isMissingApprovalDecisionFinding(message) {
 		return StatusFinding{}, false
 	}
@@ -163,7 +178,7 @@ func statusFindingForVerifyFinding(message string) (StatusFinding, bool) {
 	if strings.Contains(message, "draft tree hash changed") {
 		category = "draft_changed"
 	}
-	if strings.Contains(message, "latest check") {
+	if strings.Contains(message, "latest check") || isLatestCheckArtifactFinding(message, latestCheckPath) {
 		category = "needs_check"
 	}
 	if strings.Contains(message, "decision") {

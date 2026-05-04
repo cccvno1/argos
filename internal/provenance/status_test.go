@@ -114,6 +114,36 @@ func TestStatusEvidenceReportsMissingRequiredHashes(t *testing.T) {
 	}
 }
 
+func TestStatusEvidenceReportsMissingLatestCheckArtifact(t *testing.T) {
+	root, id := createStatusWorkspaceThroughCheck(t)
+	recordStatusPublishApproval(t, root, id)
+	loaded, err := Load(root, id)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if loaded.Record.LatestCheck == nil {
+		t.Fatalf("expected latest check")
+	}
+	checkPath := filepath.Join(root, loaded.Dir, loaded.Record.LatestCheck.Path)
+	if err := os.Remove(checkPath); err != nil {
+		t.Fatalf("remove latest check artifact: %v", err)
+	}
+
+	status, err := Status(root, id)
+	if err != nil {
+		t.Fatalf("Status returned error: %v", err)
+	}
+	if status.Evidence.LatestCheck != "missing" {
+		t.Fatalf("expected missing latest check evidence, got %#v", status)
+	}
+	if !statusHasCategory(status.Findings, "needs_check") && !statusHasActionContaining(status.Actions, "record-check") {
+		t.Fatalf("expected needs_check finding or record-check action, got findings=%#v actions=%#v", status.Findings, status.Actions)
+	}
+	if status.ReadyToPublish {
+		t.Fatalf("expected missing latest check artifact to block ready-to-publish, got %#v", status)
+	}
+}
+
 func TestStatusEvidenceReportsChangedDecisionHashes(t *testing.T) {
 	root, id := createStatusWorkspaceThroughCheck(t)
 	recordStatusPublishApproval(t, root, id)
@@ -338,6 +368,15 @@ func statusCategoryCount(findings []StatusFinding, category string) int {
 		}
 	}
 	return count
+}
+
+func statusHasActionContaining(actions []string, want string) bool {
+	for _, action := range actions {
+		if strings.Contains(action, want) {
+			return true
+		}
+	}
+	return false
 }
 
 func recordStatusPublishApproval(t *testing.T, root string, id string) {
