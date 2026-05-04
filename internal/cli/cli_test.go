@@ -1483,6 +1483,51 @@ func TestRunProvenanceStartRecordCheckAndVerify(t *testing.T) {
 	}
 }
 
+func TestRunProvenanceListReturnsJSONRecords(t *testing.T) {
+	root := t.TempDir()
+	initWorkspace(t, root)
+	writeCLIFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend, database]
+business_domains: [catalog, account]
+`)
+	designPath := writeJSONFixture(t, root, "knowledge/.inbox/designs/mall-api/redis-cache/design.json", validCLIKnowledgeDesign("knowledge/.inbox/packages/mall-api/redis-cache", "package:mall-api.redis-cache.v1"))
+	draftPath := "knowledge/.inbox/packages/mall-api/redis-cache"
+	writeDraftPackageForCLI(t, root, draftPath)
+	provenanceID := createCLIProvenanceThroughCheck(t, root, designPath, draftPath)
+
+	output := runOK(t, root, []string{"provenance", "list", "--json", "--state", "draft", "--project", "mall-api"})
+	if !strings.Contains(output, provenanceID) || !strings.Contains(output, `"latest_check_result": "pass"`) {
+		t.Fatalf("expected provenance list record, got %s", output)
+	}
+}
+
+func TestRunProvenanceStatusShowsMissingPublishDecision(t *testing.T) {
+	root := t.TempDir()
+	initWorkspace(t, root)
+	writeCLIFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend, database]
+business_domains: [catalog, account]
+`)
+	designPath := writeJSONFixture(t, root, "knowledge/.inbox/designs/mall-api/redis-cache/design.json", validCLIKnowledgeDesign("knowledge/.inbox/packages/mall-api/redis-cache", "package:mall-api.redis-cache.v1"))
+	draftPath := "knowledge/.inbox/packages/mall-api/redis-cache"
+	writeDraftPackageForCLI(t, root, draftPath)
+	provenanceID := createCLIProvenanceThroughCheck(t, root, designPath, draftPath)
+
+	output := runOK(t, root, []string{"provenance", "status", "--json", "--provenance", provenanceID})
+	if !strings.Contains(output, `"category": "needs_publish_decision"`) {
+		t.Fatalf("expected missing publish decision status, got %s", output)
+	}
+}
+
+func TestRunProvenanceListRequiresJSON(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"provenance", "list"}, &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d", code)
+	}
+	if !strings.Contains(stderr.String(), "provenance list: --json is required") {
+		t.Fatalf("unexpected stderr: %q", stderr.String())
+	}
+}
+
 func TestRunProvenanceRequiresJSONForMachineReadableCommands(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"provenance", "start", "--design", "design.json", "--draft", "knowledge/.inbox/packages/x"}, &stdout, &stderr)
