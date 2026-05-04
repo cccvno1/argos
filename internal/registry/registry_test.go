@@ -204,6 +204,66 @@ business_domains: [account, catalog]
 	}
 }
 
+func TestAddProjectRejectsLockedProjectsRegistry(t *testing.T) {
+	root := t.TempDir()
+	writeRegistryFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend]
+business_domains: [account]
+`)
+	writeRegistryFile(t, root, "knowledge/projects.yaml", "projects: []\n")
+	writeRegistryFile(t, root, "knowledge/types.yaml", "types: [rule]\n")
+	lockPath := filepath.Join(root, "knowledge", "projects.yaml.lock")
+	if err := os.WriteFile(lockPath, []byte("locked"), 0o644); err != nil {
+		t.Fatalf("write %s: %v", lockPath, err)
+	}
+
+	err := AddProject(root, Project{
+		ID:              "mall-api",
+		Name:            "Mall API",
+		Path:            "services/mall-api",
+		TechDomains:     []string{"backend"},
+		BusinessDomains: []string{"account"},
+	})
+	if err == nil {
+		t.Fatal("expected locked projects registry error")
+	}
+	if !strings.Contains(err.Error(), "projects registry is locked") {
+		t.Fatalf("expected locked registry error, got: %v", err)
+	}
+
+	reg, err := Load(root)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if len(reg.Projects) != 0 {
+		t.Fatalf("expected no appended projects, got %#v", reg.Projects)
+	}
+}
+
+func TestAddProjectRemovesProjectsRegistryLockAfterSuccess(t *testing.T) {
+	root := t.TempDir()
+	writeRegistryFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend]
+business_domains: [account]
+`)
+	writeRegistryFile(t, root, "knowledge/projects.yaml", "projects: []\n")
+	writeRegistryFile(t, root, "knowledge/types.yaml", "types: [rule]\n")
+
+	err := AddProject(root, Project{
+		ID:              "mall-api",
+		Name:            "Mall API",
+		Path:            "services/mall-api",
+		TechDomains:     []string{"backend"},
+		BusinessDomains: []string{"account"},
+	})
+	if err != nil {
+		t.Fatalf("AddProject returned error: %v", err)
+	}
+
+	lockPath := filepath.Join(root, "knowledge", "projects.yaml.lock")
+	if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
+		t.Fatalf("expected projects registry lock to be removed, got stat error: %v", err)
+	}
+}
+
 func TestAddProjectRejectsDuplicateID(t *testing.T) {
 	root := t.TempDir()
 	writeRegistryFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend]

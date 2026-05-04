@@ -2,11 +2,13 @@ package registry
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"gopkg.in/yaml.v3"
 )
@@ -28,6 +30,12 @@ func AddProject(root string, project Project) error {
 	if err := validateProjectRequired(project); err != nil {
 		return err
 	}
+
+	unlock, err := lockProjectsRegistry(root)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 
 	reg, err := Load(root)
 	if err != nil {
@@ -78,6 +86,28 @@ func writeProjectsFile(root string, file projectsFile) error {
 
 func projectsPath(root string) string {
 	return filepath.Join(root, "knowledge", "projects.yaml")
+}
+
+func projectsLockPath(root string) string {
+	return projectsPath(root) + ".lock"
+}
+
+func lockProjectsRegistry(root string) (func(), error) {
+	lockPath := projectsLockPath(root)
+	if err := os.MkdirAll(filepath.Dir(lockPath), 0o755); err != nil {
+		return nil, fmt.Errorf("create projects registry lock parent: %w", err)
+	}
+	lock, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+	if err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return nil, fmt.Errorf("projects registry is locked: %s", lockPath)
+		}
+		return nil, fmt.Errorf("lock projects registry: %w", err)
+	}
+	return func() {
+		_ = lock.Close()
+		_ = os.Remove(lockPath)
+	}, nil
 }
 
 func normalizeProject(project Project) Project {
@@ -207,5 +237,27 @@ func writeFileAtomically(target string, data []byte) error {
 		return fmt.Errorf("rename %s to %s: %w", tempName, target, err)
 	}
 	removeTemp = false
+	if err := syncParentDirectory(target); err != nil {
+		return err
+	}
+	return nil
+}
+
+func syncParentDirectory(target string) error {
+	dirPath := filepath.Dir(target)
+	dir, err := os.Open(dirPath)
+	if err != nil {
+		return fmt.Errorf("open projects registry parent: %w", err)
+	}
+	defer dir.Close()
+
+	if err := dir.Sync(); err != nil {
+		// Some platforms/filesystems do not support fsync on directories and
+		// report EINVAL. Linux supports this path and should sync successfully.
+		if errors.Is(err, syscall.EINVAL) {
+			return nil
+		}
+		return fmt.Errorf("sync projects registry parent: %w", err)
+	}
 	return nil
 }
