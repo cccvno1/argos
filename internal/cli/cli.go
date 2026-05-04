@@ -1488,7 +1488,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  argos knowledge read --json <id>")
 	fmt.Fprintln(w, "  argos knowledge cite --json <id>...")
 	fmt.Fprintln(w, "  argos provenance start --json --design <design.json> --draft <draft>")
-	fmt.Fprintln(w, "  argos provenance record-decision --json --provenance <id>")
+	fmt.Fprintln(w, "  argos provenance record-decision --json --provenance <id> --stage <stage> --decision <decision> --decided-by <actor> --role <role> --source <source> --reason <reason> --recorded-by <agent>")
 	fmt.Fprintln(w, "  argos provenance record-check --json --provenance <id>")
 	fmt.Fprintln(w, "  argos provenance verify --json --provenance <id>")
 }

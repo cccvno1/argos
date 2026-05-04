@@ -1585,7 +1585,7 @@ func TestUsageUsesWriteVocabulary(t *testing.T) {
 		"argos knowledge design --json --project <project> --intent <intent>",
 		"argos knowledge check --json --design <design.json> --draft <draft>",
 		"argos provenance start --json --design <design.json> --draft <draft>",
-		"argos provenance record-decision --json --provenance <id>",
+		"argos provenance record-decision --json --provenance <id> --stage <stage> --decision <decision> --decided-by <actor> --role <role> --source <source> --reason <reason> --recorded-by <agent>",
 		"argos provenance record-check --json --provenance <id>",
 		"argos provenance verify --json --provenance <id>",
 		"argos knowledge publish --provenance <id>",
