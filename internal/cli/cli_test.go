@@ -1397,6 +1397,88 @@ func TestRunKnowledgeCheckReturnsJSONStatus(t *testing.T) {
 	}
 }
 
+func TestRunProvenanceStartRecordCheckAndVerify(t *testing.T) {
+	root := t.TempDir()
+	initWorkspace(t, root)
+	draftPath := "knowledge/.inbox/packages/backend/redis/best-practices"
+	draftID := "package:backend.redis.best-practices.v1"
+	designPath := writeCLIKnowledgeDesign(t, root, "knowledge/.inbox/designs/redis/design.json", validCLIKnowledgeDesign(draftPath, draftID))
+	writeCLIFile(t, root, draftPath+"/KNOWLEDGE.md", validCLICheckDraftPackage(draftID))
+	chdir(t, root)
+
+	startOutput := runOK(t, root, []string{
+		"provenance", "start", "--json",
+		"--design", designPath,
+		"--draft", draftPath,
+		"--created-by", "codex",
+	})
+	var startResult struct {
+		ProvenanceID string `json:"provenance_id"`
+	}
+	if err := json.Unmarshal([]byte(startOutput), &startResult); err != nil {
+		t.Fatalf("parse start JSON: %v\n%s", err, startOutput)
+	}
+	if startResult.ProvenanceID == "" {
+		t.Fatalf("start JSON missing provenance_id: %s", startOutput)
+	}
+
+	for _, stage := range []string{"design", "draft_write"} {
+		runOK(t, root, []string{
+			"provenance", "record-decision", "--json",
+			"--provenance", startResult.ProvenanceID,
+			"--stage", stage,
+			"--decision", "approved",
+			"--decided-by", "chenchi",
+			"--role", "knowledge_owner",
+			"--source", "conversation",
+			"--reason", stage + " approved.",
+			"--recorded-by", "codex",
+		})
+	}
+
+	runOK(t, root, []string{
+		"provenance", "record-check", "--json",
+		"--provenance", startResult.ProvenanceID,
+	})
+
+	runOK(t, root, []string{
+		"provenance", "record-decision", "--json",
+		"--provenance", startResult.ProvenanceID,
+		"--stage", "publish",
+		"--decision", "approved",
+		"--decided-by", "chenchi",
+		"--role", "knowledge_owner",
+		"--source", "conversation",
+		"--reason", "publish approved.",
+		"--recorded-by", "codex",
+	})
+
+	verifyOutput := runOK(t, root, []string{
+		"provenance", "verify", "--json",
+		"--provenance", startResult.ProvenanceID,
+	})
+	var verifyResult struct {
+		Result string `json:"result"`
+	}
+	if err := json.Unmarshal([]byte(verifyOutput), &verifyResult); err != nil {
+		t.Fatalf("parse verify JSON: %v\n%s", err, verifyOutput)
+	}
+	if verifyResult.Result != "pass" {
+		t.Fatalf("expected verify pass, got: %s", verifyOutput)
+	}
+}
+
+func TestRunProvenanceRequiresJSONForMachineReadableCommands(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"provenance", "start", "--design", "design.json", "--draft", "knowledge/.inbox/packages/x"}, &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "provenance start: --json is required") {
+		t.Fatalf("expected missing json error, got %q", stderr.String())
+	}
+}
+
 func TestKnowledgeWritePublishAndFindbackFlow(t *testing.T) {
 	root := t.TempDir()
 	chdir(t, root)
