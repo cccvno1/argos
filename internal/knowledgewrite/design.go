@@ -583,9 +583,6 @@ func overlapTerms(req DesignRequest) []string {
 	for _, tag := range req.Tags {
 		terms = append(terms, strings.ToLower(tag))
 	}
-	for _, domain := range req.Domains {
-		terms = append(terms, strings.ToLower(domain))
-	}
 	return uniqueNonEmpty(terms)
 }
 
@@ -611,6 +608,9 @@ func isKnowledgeWriteOverlapStopword(term string) bool {
 }
 
 func existingReasons(item knowledge.Item, req DesignRequest, terms []string) []string {
+	if !existingKnowledgeProjectApplies(item, req.Project) {
+		return nil
+	}
 	var contextReasons []string
 	var relatedReasons []string
 	project := strings.TrimSpace(req.Project)
@@ -630,11 +630,7 @@ func existingReasons(item knowledge.Item, req DesignRequest, terms []string) []s
 	for _, domain := range req.Domains {
 		domain = strings.TrimSpace(domain)
 		if containsStringValue(item.TechDomains, domain) || containsStringValue(item.BusinessDomains, domain) {
-			if isStrongExistingKnowledgeSignal(domain) {
-				relatedReasons = append(relatedReasons, "domain:"+domain)
-			} else {
-				contextReasons = append(contextReasons, "domain:"+domain)
-			}
+			contextReasons = append(contextReasons, "domain:"+domain)
 		}
 	}
 	searchText := strings.ToLower(strings.Join([]string{
@@ -662,6 +658,14 @@ func existingReasons(item knowledge.Item, req DesignRequest, terms []string) []s
 	return uniqueNonEmpty(reasons)
 }
 
+func existingKnowledgeProjectApplies(item knowledge.Item, project string) bool {
+	project = strings.TrimSpace(project)
+	if project == "" || len(item.Projects) == 0 {
+		return true
+	}
+	return containsStringValue(item.Projects, project)
+}
+
 func isStrongExistingKnowledgeSignal(value string) bool {
 	value = strings.ToLower(strings.TrimSpace(value))
 	if value == "" || isKnowledgeWriteOverlapStopword(value) {
@@ -686,6 +690,16 @@ func isStrongExistingKnowledgeSignal(value string) bool {
 		"best",
 		"practice",
 		"practices",
+		"rule",
+		"rules",
+		"runbook",
+		"runbooks",
+		"checklist",
+		"checklists",
+		"contract",
+		"contracts",
+		"review",
+		"reviews",
 		"guidance",
 		"document",
 		"designed",

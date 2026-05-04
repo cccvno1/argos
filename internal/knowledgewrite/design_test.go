@@ -210,6 +210,108 @@ func TestDesignKnowledgeIgnoresSharedProjectAndBroadDomain(t *testing.T) {
 	}
 }
 
+func TestDesignKnowledgeIgnoresSharedBusinessDomain(t *testing.T) {
+	root := t.TempDir()
+	if err := workspace.Init(root); err != nil {
+		t.Fatalf("init workspace: %v", err)
+	}
+	writeRedisCachePackage(t, root)
+
+	result, err := Design(root, DesignRequest{
+		Project: "mall-api",
+		Intent:  "Preserve the business interface for future consumer agents.",
+		Domains: []string{"catalog"},
+		Tags:    []string{"consumer", "business-interface"},
+	})
+	if err != nil {
+		t.Fatalf("Design returned error: %v", err)
+	}
+	if result.WriteGuidance.State != "ready_to_design" {
+		t.Fatalf("state = %q, want ready_to_design: %#v", result.WriteGuidance.State, result.WriteGuidance)
+	}
+	if len(result.ExistingKnowledge.Official) != 0 {
+		t.Fatalf("shared business domain should not be reported as existing knowledge: %#v", result.ExistingKnowledge.Official)
+	}
+}
+
+func TestDesignKnowledgeIgnoresGenericKnowledgeShapeTerms(t *testing.T) {
+	root := t.TempDir()
+	if err := workspace.Init(root); err != nil {
+		t.Fatalf("init workspace: %v", err)
+	}
+	writeKnowledgewriteTestFile(t, root, "knowledge/packages/mall-api/postgresql-migrations/KNOWLEDGE.md", `---
+id: package:mall-api.postgresql-migrations.v1
+title: PostgreSQL Migration Safety Rules
+type: package
+tech_domains: [database]
+business_domains: [catalog]
+projects: [mall-api]
+status: draft
+priority: should
+tags: [postgresql, migration]
+updated_at: 2026-05-04
+---
+## Purpose
+
+Require backward-compatible migrations, explicit rollback notes, batched data changes, lock-risk review, and deploy ordering before future agents alter PostgreSQL schemas.
+`)
+
+	result, err := Design(root, DesignRequest{
+		Project: "mall-web",
+		Intent:  "Capture frontend design token rules for future UI agents.",
+		Domains: []string{"frontend"},
+		Tags:    []string{"design-token", "frontend"},
+	})
+	if err != nil {
+		t.Fatalf("Design returned error: %v", err)
+	}
+	if result.WriteGuidance.State != "ready_to_design" {
+		t.Fatalf("state = %q, want ready_to_design: %#v", result.WriteGuidance.State, result.WriteGuidance)
+	}
+	if len(result.ExistingKnowledge.Official) != 0 {
+		t.Fatalf("generic shape terms should not be reported as existing knowledge: %#v", result.ExistingKnowledge.Official)
+	}
+}
+
+func TestDesignKnowledgeIgnoresDifferentProjectScopedKnowledge(t *testing.T) {
+	root := t.TempDir()
+	if err := workspace.Init(root); err != nil {
+		t.Fatalf("init workspace: %v", err)
+	}
+	writeKnowledgewriteTestFile(t, root, "knowledge/packages/mall-api/postgresql-migrations/KNOWLEDGE.md", `---
+id: package:mall-api.postgresql-migrations.v1
+title: PostgreSQL Migration Safety Rules
+type: package
+tech_domains: [database]
+business_domains: [catalog]
+projects: [mall-api]
+status: draft
+priority: should
+tags: [postgresql, migration]
+updated_at: 2026-05-04
+---
+## Purpose
+
+Require rollback notes and deploy ordering before future agents alter PostgreSQL schemas.
+`)
+
+	result, err := Design(root, DesignRequest{
+		Project: "platform",
+		Intent:  "Write the release rollback runbook for future deployment agents.",
+		Domains: []string{"devops"},
+		Tags:    []string{"release", "rollback", "deploy"},
+	})
+	if err != nil {
+		t.Fatalf("Design returned error: %v", err)
+	}
+	if result.WriteGuidance.State != "ready_to_design" {
+		t.Fatalf("state = %q, want ready_to_design: %#v", result.WriteGuidance.State, result.WriteGuidance)
+	}
+	if len(result.ExistingKnowledge.Official) != 0 {
+		t.Fatalf("different project-scoped knowledge should not be reported as existing knowledge: %#v", result.ExistingKnowledge.Official)
+	}
+}
+
 func TestDesignKnowledgeRelatedExistingKnowledgeRequiresReviewChoice(t *testing.T) {
 	root := t.TempDir()
 	if err := workspace.Init(root); err != nil {
