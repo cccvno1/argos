@@ -20,20 +20,23 @@ type ReviewDecisions struct {
 }
 
 type Report struct {
-	CaseID          string            `json:"case_id"`
-	State           string            `json:"state"`
-	NextAction      string            `json:"next_action"`
-	DesignPath      string            `json:"design_path"`
-	DraftPath       string            `json:"draft_path"`
-	DraftAllowed    bool              `json:"draft_allowed"`
-	DesignOnly      bool              `json:"design_only"`
-	CheckResult     string            `json:"check_result"`
-	Review          ReviewDecisions   `json:"review"`
-	Guards          map[string]string `json:"guards"`
-	Result          string            `json:"result"`
-	MissingSections []string          `json:"missing_sections"`
-	MissingFields   []string          `json:"missing_fields"`
-	fieldPresence   map[string]bool
+	CaseID              string            `json:"case_id"`
+	State               string            `json:"state"`
+	NextAction          string            `json:"next_action"`
+	DesignPath          string            `json:"design_path"`
+	DraftPath           string            `json:"draft_path"`
+	DraftAllowed        bool              `json:"draft_allowed"`
+	DesignOnly          bool              `json:"design_only"`
+	CheckResult         string            `json:"check_result"`
+	ArtifactDesignPath  string            `json:"artifact_design_path"`
+	ArtifactDraftPath   string            `json:"artifact_draft_path"`
+	ArtifactCheckResult string            `json:"artifact_check_result"`
+	Review              ReviewDecisions   `json:"review"`
+	Guards              map[string]string `json:"guards"`
+	Result              string            `json:"result"`
+	MissingSections     []string          `json:"missing_sections"`
+	MissingFields       []string          `json:"missing_fields"`
+	fieldPresence       map[string]bool
 }
 
 var requiredWriteReportSections = []struct {
@@ -184,13 +187,13 @@ func parseArtifacts(section string, report *Report) {
 		}
 		switch artifactField(label) {
 		case "design path":
-			report.DesignPath = cleanReportPathValue(value)
+			report.ArtifactDesignPath = cleanReportPathValue(value)
 			markReportField(report, "design path", value)
 		case "draft path":
-			report.DraftPath = cleanReportPathValue(value)
+			report.ArtifactDraftPath = cleanReportPathValue(value)
 			markReportField(report, "draft path", value)
 		case "check result":
-			report.CheckResult = cleanReportStatus(value)
+			report.ArtifactCheckResult = cleanReportStatus(value)
 			markReportField(report, "check result", value)
 		}
 	}

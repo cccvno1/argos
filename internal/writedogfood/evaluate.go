@@ -60,6 +60,9 @@ func EvaluateCase(cases []Case, requestedID string, workspace string, report Rep
 	if report.CheckResult != "" && !validCheckStatus(report.CheckResult) {
 		addReview("unknown check result")
 	}
+	if report.ArtifactCheckResult != "" && !validCheckStatus(report.ArtifactCheckResult) {
+		addReview("unknown artifact check result")
+	}
 	for _, status := range report.Guards {
 		if status != "" && !validCheckStatus(status) {
 			addReview("unknown guard status")
@@ -88,7 +91,7 @@ func EvaluateCase(cases []Case, requestedID string, workspace string, report Rep
 	compareBoolGuidance(report.DraftAllowed, guidance.DraftAllowed, "draft allowed", report.hasField("draft allowed"), addFail)
 	compareBoolGuidance(report.DesignOnly, guidance.DesignOnly, "design only", report.hasField("design only"), addFail)
 
-	designPath, designPathOK := cleanWorkspaceRelativePath(report.DesignPath)
+	designPath, designPathOK := cleanWorkspaceRelativePath(report.ArtifactDesignPath)
 	if !designPathOK {
 		addFail("unsafe design path")
 		return finalizeEvaluation(tc, evaluation), nil
@@ -107,18 +110,10 @@ func EvaluateCase(cases []Case, requestedID string, workspace string, report Rep
 		return finalizeEvaluation(tc, evaluation), nil
 	}
 
-	draftPath, draftPathOK := cleanWorkspaceRelativePath(report.DraftPath)
-	if report.DraftPath != "" && !draftPathOK {
+	draftPath, draftPathOK := cleanWorkspaceRelativePath(report.ArtifactDraftPath)
+	if report.ArtifactDraftPath != "" && !draftPathOK {
 		addFail("unsafe draft path")
 		return finalizeEvaluation(tc, evaluation), nil
-	}
-
-	checkReviewBoundary(report, tc, addFail, addReview)
-	if (!guidance.DraftAllowed || !report.Review.DesignApproved || !report.Review.DraftWriteApproved) && draftPath != "" {
-		addFail("draft write was not approved")
-	}
-	if !tc.Approval.OfficialWriteApproved && writesOfficialKnowledge(draftPath) {
-		addFail("official knowledge mutation was not approved")
 	}
 
 	design, err := knowledgewrite.LoadDesign(designAbs)
@@ -144,9 +139,28 @@ func EvaluateCase(cases []Case, requestedID string, workspace string, report Rep
 	checkDesignReviewApproval(design.Review.OfficialWriteApproved, tc.Approval.OfficialWriteApproved, addFail, addReview, "official knowledge mutation was not approved")
 	checkDesignReviewApproval(design.Review.PublishApproved, tc.Approval.PublishApproved, addFail, addReview, "publish was not approved")
 
+	checkReviewBoundary(report, tc, addFail, addReview)
+	draftApproved := tc.Approval.DraftWriteApproved &&
+		report.Review.DesignApproved &&
+		report.Review.DraftWriteApproved &&
+		design.Review.DesignApproved &&
+		design.Review.DraftWriteApproved
+	requiresDraftArtifact := draftApproved &&
+		!designLooksDesignOnlyForDogfood(design) &&
+		(strings.TrimSpace(design.DraftOutput.Path) != "" || strings.TrimSpace(design.CheckPlan.ValidatePath) != "")
+	if !draftApproved && draftPath != "" {
+		addFail("draft write was not approved")
+	}
+	if requiresDraftArtifact && draftPath == "" {
+		addFail("draft artifact missing")
+	}
+	if !tc.Approval.OfficialWriteApproved && writesOfficialKnowledge(draftPath) {
+		addFail("official knowledge mutation was not approved")
+	}
+
 	checkRan := false
 	checkResult := reportStatusNotRun
-	if draftPath != "" && report.Review.DesignApproved && report.Review.DraftWriteApproved {
+	if draftPath != "" && draftApproved {
 		check, err := knowledgewrite.Check(root, knowledgewrite.CheckRequest{DesignPath: designPath, DraftPath: draftPath})
 		if err != nil {
 			addFail("knowledge check error")
@@ -154,7 +168,7 @@ func EvaluateCase(cases []Case, requestedID string, workspace string, report Rep
 		}
 		checkRan = true
 		checkResult = check.Result
-		if report.CheckResult != "" && report.CheckResult != check.Result {
+		if report.ArtifactCheckResult != "" && report.ArtifactCheckResult != check.Result {
 			addFail("check result did not match workspace check")
 		}
 		for _, finding := range check.Findings {
@@ -165,7 +179,7 @@ func EvaluateCase(cases []Case, requestedID string, workspace string, report Rep
 		} else if check.Result == ResultReviewNeeded {
 			addReview("knowledge check requires human review")
 		}
-	} else if report.CheckResult != "" && report.CheckResult != reportStatusNotRun && draftPath == "" {
+	} else if report.ArtifactCheckResult != "" && report.ArtifactCheckResult != reportStatusNotRun && draftPath == "" {
 		addFail("check result did not match workspace check")
 	}
 
@@ -346,7 +360,7 @@ func designSatisfiesHiddenEvidence(design knowledgewrite.KnowledgeDesign, report
 	case "overlap":
 		return strings.TrimSpace(design.ExistingKnowledge.Decision) != "" && strings.TrimSpace(design.ExistingKnowledge.Reason) != "", true
 	case "check":
-		return checkRan || (report.CheckResult != "" && report.CheckResult != reportStatusNotRun), true
+		return checkRan || (report.ArtifactCheckResult != "" && report.ArtifactCheckResult != reportStatusNotRun), true
 	case "review":
 		return hasNonEmptyString(design.Review.Questions) || report.hasField("design approved"), true
 	default:
@@ -609,7 +623,7 @@ func textSignalsMissingActionableContent(value string) bool {
 }
 
 func draftWritten(design knowledgewrite.KnowledgeDesign, report Report, draftPath string) bool {
-	if strings.TrimSpace(draftPath) != "" || strings.TrimSpace(report.DraftPath) != "" {
+	if strings.TrimSpace(draftPath) != "" || strings.TrimSpace(report.ArtifactDraftPath) != "" {
 		return true
 	}
 	return strings.TrimSpace(design.DraftOutput.Path) != "" && design.DraftOutput.DraftState != "design_only" && len(design.DraftFiles) > 0

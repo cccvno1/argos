@@ -123,28 +123,28 @@ packets instead of hand-copying inputs, and do not give runner agents expected
 IDs, expected support, prior transcripts, or design history. Evaluate saved
 reports separately against `testdata/discovery-golden/cases.json`.
 
-Authoring dogfood validates the write side from natural user requests:
+Write dogfood validates the write side from natural user requests:
 
 ```bash
-argos dogfood authoring cases --json
-argos dogfood authoring packet --case <case-handle> --workspace <workspace> --argos-binary <argos>
-argos dogfood authoring evaluate --case <case-handle> --report <report.md> --workspace <workspace> --json
+argos dogfood write cases --json
+argos dogfood write packet --case <case-handle> --workspace <workspace> --argos-binary <argos>
+argos dogfood write evaluate --case <case-handle> --report <report.md> --workspace <workspace> --json
 ```
 
-Use the authoring dogfood checklist and report template for counted runs:
+Use the write dogfood checklist and report template for counted runs:
 
-- `docs/superpowers/checklists/2026-05-03-argos-authoring-dogfood-checklist.md`
-- `docs/superpowers/templates/argos-authoring-dogfood-report.md`
+- `docs/superpowers/checklists/2026-05-03-argos-write-dogfood-checklist.md`
+- `docs/superpowers/templates/argos-write-dogfood-report.md`
 
 For each case, create a unique round root, then generate a packet. The packet
 command seeds the selected public fixture into the temp workspace before it
 prints the runner packet. Start a fresh runner with the packet and template, save the
-runner report, run `dogfood authoring evaluate`, and record the evaluated result in the round report.
+runner report, run `dogfood write evaluate`, and record the evaluated result in the round report.
 The public fixture seed lives at
-`testdata/authoring-golden/fixtures/full`.
+`testdata/write-golden/fixtures/full`.
 
 ```bash
-ROUND_ROOT=$(mktemp -d /tmp/argos-authoring-dogfood.XXXXXX)
+ROUND_ROOT=$(mktemp -d /tmp/argos-write-dogfood.XXXXXX)
 mkdir -p "$ROUND_ROOT/packets" "$ROUND_ROOT/reports"
 ```
 

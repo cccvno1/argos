@@ -144,6 +144,26 @@ func TestParseMarkdownReportExtractsWriteContract(t *testing.T) {
 	}
 }
 
+func TestParseMarkdownReportKeepsGuidanceAndArtifactsSeparate(t *testing.T) {
+	draftPath := "knowledge/.inbox/packages/mall-api/go-service-template"
+	report, err := ParseMarkdownReport([]byte(sampleWriteReportWithApprovedDraft("case-001", draftPath, "pass")))
+	if err != nil {
+		t.Fatalf("ParseMarkdownReport returned error: %v", err)
+	}
+	if report.DraftPath != "" {
+		t.Fatalf("guidance DraftPath = %q, want empty", report.DraftPath)
+	}
+	if report.CheckResult != reportStatusNotRun {
+		t.Fatalf("guidance CheckResult = %q, want not-run", report.CheckResult)
+	}
+	if report.ArtifactDraftPath != draftPath {
+		t.Fatalf("ArtifactDraftPath = %q, want %q", report.ArtifactDraftPath, draftPath)
+	}
+	if report.ArtifactCheckResult != ResultPass {
+		t.Fatalf("ArtifactCheckResult = %q, want pass", report.ArtifactCheckResult)
+	}
+}
+
 func TestEvaluateCaseRequiresWorkspaceBackedDesign(t *testing.T) {
 	cases, err := LoadCases(writeCasesPath)
 	if err != nil {
@@ -167,7 +187,7 @@ func TestEvaluateCaseRequiresWorkspaceBackedDesign(t *testing.T) {
 	}
 }
 
-func TestEvaluateCaseEnforcesGuidanceAndReviewBoundary(t *testing.T) {
+func TestEvaluateCaseAllowsApprovedDraftAfterDesignReview(t *testing.T) {
 	cases, err := LoadCases(writeCasesPath)
 	if err != nil {
 		t.Fatalf("LoadCases returned error: %v", err)
@@ -176,10 +196,9 @@ func TestEvaluateCaseEnforcesGuidanceAndReviewBoundary(t *testing.T) {
 	if err := SeedFixtureWorkspace("../../testdata/write-golden/fixtures", "full", workspace); err != nil {
 		t.Fatalf("seed workspace: %v", err)
 	}
-	writeComputedDesign(t, workspace, cases[0])
-	draftPath := "knowledge/.inbox/packages/mall-api/go-service-template"
-	writeDraftPackage(t, workspace, draftPath)
-	report, err := ParseMarkdownReport([]byte(sampleWriteReportWithDraft("case-001", draftPath)))
+	design := writeApprovedDraftDesign(t, workspace, cases[0])
+	writeDraftPackage(t, workspace, design.DraftOutput.Path)
+	report, err := ParseMarkdownReport([]byte(sampleWriteReportWithApprovedDraft("case-001", design.DraftOutput.Path, "pass")))
 	if err != nil {
 		t.Fatalf("ParseMarkdownReport returned error: %v", err)
 	}
@@ -188,8 +207,38 @@ func TestEvaluateCaseEnforcesGuidanceAndReviewBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EvaluateCase returned error: %v", err)
 	}
-	if !hasEvaluationFinding(evaluation, ResultFail, "draft write was not approved") {
-		t.Fatalf("missing draft boundary finding: %#v", evaluation.Findings)
+	if hasEvaluationFinding(evaluation, ResultFail, "draft write was not approved") {
+		t.Fatalf("approved draft was blocked: %#v", evaluation.Findings)
+	}
+	if evaluation.Result != ResultPass {
+		t.Fatalf("expected pass for approved draft, got %#v", evaluation)
+	}
+}
+
+func TestEvaluateCaseRequiresApprovedDraftArtifact(t *testing.T) {
+	cases, err := LoadCases(writeCasesPath)
+	if err != nil {
+		t.Fatalf("LoadCases returned error: %v", err)
+	}
+	workspace := t.TempDir()
+	if err := SeedFixtureWorkspace("../../testdata/write-golden/fixtures", "full", workspace); err != nil {
+		t.Fatalf("seed workspace: %v", err)
+	}
+	writeApprovedDraftDesign(t, workspace, cases[0])
+	draftPath := "knowledge/.inbox/packages/mall-api/go-service-template"
+	report, err := ParseMarkdownReport([]byte(sampleWriteReportWithApprovedDraft("case-001", draftPath, "pass")))
+	if err != nil {
+		t.Fatalf("ParseMarkdownReport returned error: %v", err)
+	}
+	report.ArtifactDraftPath = ""
+	report.ArtifactCheckResult = reportStatusNotRun
+
+	evaluation, err := EvaluateCase(cases, "case-001", workspace, report)
+	if err != nil {
+		t.Fatalf("EvaluateCase returned error: %v", err)
+	}
+	if !hasEvaluationFinding(evaluation, ResultFail, "draft artifact missing") {
+		t.Fatalf("missing approved draft artifact finding: %#v", evaluation.Findings)
 	}
 }
 
@@ -326,6 +375,15 @@ func sampleWriteReportWithDraft(caseID, draftPath string) string {
 	return strings.Replace(sampleWriteReport(caseID, "pass", "pass"), "- Draft path: `none`", "- Draft path: `"+draftPath+"`", 2)
 }
 
+func sampleWriteReportWithApprovedDraft(caseID, draftPath, checkResult string) string {
+	report := sampleWriteReport(caseID, "pass", "not-run")
+	report = strings.Replace(report, "- Draft write approved: `false`", "- Draft write approved: `true`", 1)
+	report = strings.Replace(report, "- Draft path: `none`\n- Check result: `not-run`\n\n## Review Decisions", "- Draft path: `"+draftPath+"`\n- Check result: `"+checkResult+"`\n\n## Review Decisions", 1)
+	report = strings.Replace(report, "- Draft stayed in approved area: not-applicable", "- Draft stayed in approved area: pass", 1)
+	report = strings.Replace(report, "- Check run: not-run", "- Check run: pass", 1)
+	return report
+}
+
 func sampleDesignPath() string {
 	return "knowledge/.inbox/designs/mall-api/i-designed-a-go-service-template-turn-it-into-reusable-knowledge/design.json"
 }
@@ -354,6 +412,57 @@ func writeComputedDesign(t *testing.T, root string, tc Case) knowledgewrite.Know
 	return design
 }
 
+func writeApprovedDraftDesign(t *testing.T, root string, tc Case) knowledgewrite.KnowledgeDesign {
+	t.Helper()
+	designResponse, err := knowledgewrite.Design(root, designRequest(tc.Input))
+	if err != nil {
+		t.Fatalf("Design returned error: %v", err)
+	}
+	design := designResponse.KnowledgeDesignTemplate
+	draftPath := "knowledge/.inbox/packages/mall-api/go-service-template"
+	design.Sources.Templates = []string{"templates/go-service"}
+	design.ExistingKnowledge.Decision = "create_new"
+	design.ExistingKnowledge.Reason = "Reviewed template knowledge is distinct from existing cache TTL knowledge."
+	design.ExistingKnowledge.ReviewChoiceRequired = false
+	design.DraftOutput.Kind = "package"
+	design.DraftOutput.Type = "package"
+	design.DraftOutput.Title = "Go Service Template"
+	design.DraftOutput.ID = "package:mall-api.go-service-template.v1"
+	design.DraftOutput.Path = draftPath
+	design.DraftOutput.Status = "draft"
+	design.DraftOutput.Priority = "should"
+	design.DraftOutput.EntrypointLoad = "read_before_implementation"
+	design.DraftOutput.DraftState = "draft"
+	design.DraftFiles = []knowledgewrite.DraftFile{{
+		Path:    filepath.ToSlash(filepath.Join(draftPath, "KNOWLEDGE.md")),
+		Purpose: "entrypoint",
+		Load:    "read_before_implementation",
+	}}
+	design.CheckPlan.ValidatePath = draftPath
+	design.CheckPlan.FindabilityChecks = []knowledgewrite.FindabilityCheckScenario{{
+		Project: "mall-api",
+		Phase:   "implementation",
+		Task:    "write Go services in this style",
+		Query:   "go service template",
+		Files:   []string{"templates/go-service"},
+	}}
+	design.Review.DesignApproved = true
+	design.Review.DraftWriteApproved = true
+
+	designPath := filepath.Join(root, filepath.FromSlash(designResponse.WriteGuidance.DesignPath))
+	if err := os.MkdirAll(filepath.Dir(designPath), 0o755); err != nil {
+		t.Fatalf("mkdir design parent: %v", err)
+	}
+	data, err := json.MarshalIndent(design, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal design: %v", err)
+	}
+	if err := os.WriteFile(designPath, append(data, '\n'), 0o644); err != nil {
+		t.Fatalf("write design: %v", err)
+	}
+	return design
+}
+
 func writeDraftPackage(t *testing.T, root string, rel string) {
 	t.Helper()
 	dir := filepath.Join(root, filepath.FromSlash(rel))
@@ -368,6 +477,7 @@ status: draft
 priority: should
 projects: [mall-api]
 tech_domains: [backend]
+business_domains: [catalog]
 tags: [go, service]
 updated_at: 2026-05-03
 applies_to:
@@ -387,6 +497,10 @@ When implementing Go services in Mall API.
 ## Start Here
 
 Read this package before creating a service.
+
+## Load On Demand
+
+Use template examples only when implementing a matching Go service.
 `
 	if err := os.WriteFile(filepath.Join(dir, "KNOWLEDGE.md"), []byte(body), 0o644); err != nil {
 		t.Fatalf("write draft package: %v", err)
