@@ -11,6 +11,7 @@ import (
 
 	"argos/internal/index"
 	"argos/internal/knowledgewrite"
+	"argos/internal/registry"
 )
 
 func TestRunPrintsHelpWithoutCommand(t *testing.T) {
@@ -37,6 +38,107 @@ func TestRunRejectsUnknownCommand(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "unknown command: unknown") {
 		t.Fatalf("expected unknown command error, got %q", out.String())
+	}
+}
+
+func TestRunProjectAddCreatesProject(t *testing.T) {
+	root := t.TempDir()
+	chdir(t, root)
+	runOK(t, root, []string{"init"})
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"project", "add",
+		"--id", "mall-api",
+		"--name", "Mall API",
+		"--path", "services/mall-api",
+		"--tech-domain", "backend",
+		"--tech-domain", "database",
+		"--business-domain", "account",
+	}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stderr=%q stdout=%q", code, stderr.String(), stdout.String())
+	}
+	if strings.TrimSpace(stdout.String()) != "added project mall-api" {
+		t.Fatalf("unexpected stdout: %q", stdout.String())
+	}
+	reg, err := registry.Load(root)
+	if err != nil {
+		t.Fatalf("load registry: %v", err)
+	}
+	if len(reg.Projects) != 1 || reg.Projects[0].ID != "mall-api" {
+		t.Fatalf("unexpected projects: %#v", reg.Projects)
+	}
+}
+
+func TestRunProjectListReturnsJSON(t *testing.T) {
+	root := t.TempDir()
+	chdir(t, root)
+	runOK(t, root, []string{"init"})
+	runOK(t, root, []string{
+		"project", "add",
+		"--id", "mall-api",
+		"--name", "Mall API",
+		"--path", "services/mall-api",
+		"--tech-domain", "backend",
+		"--business-domain", "account",
+	})
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"project", "list", "--json"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stderr=%q stdout=%q", code, stderr.String(), stdout.String())
+	}
+	var result struct {
+		Projects []registry.Project `json:"projects"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, stdout.String())
+	}
+	if len(result.Projects) != 1 || result.Projects[0].ID != "mall-api" {
+		t.Fatalf("unexpected projects JSON: %s", stdout.String())
+	}
+	for _, want := range []string{`"id": "mall-api"`, `"tech_domains": [`, `"business_domains": [`} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("expected JSON field %q, got: %s", want, stdout.String())
+		}
+	}
+	if strings.Contains(stdout.String(), `"ID"`) || strings.Contains(stdout.String(), `"TechDomains"`) {
+		t.Fatalf("project list should use snake_case JSON fields, got: %s", stdout.String())
+	}
+}
+
+func TestRunProjectAddRequiresFields(t *testing.T) {
+	root := t.TempDir()
+	chdir(t, root)
+	runOK(t, root, []string{"init"})
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"project", "add", "--id", "mall-api"}, &stdout, &stderr)
+
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "project add: --name is required") {
+		t.Fatalf("expected missing name error, got %q", stderr.String())
+	}
+}
+
+func TestRunProjectListRequiresJSON(t *testing.T) {
+	root := t.TempDir()
+	chdir(t, root)
+	runOK(t, root, []string{"init"})
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"project", "list"}, &stdout, &stderr)
+
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "project list: --json is required") {
+		t.Fatalf("expected missing json error, got %q", stderr.String())
 	}
 }
 

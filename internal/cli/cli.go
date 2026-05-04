@@ -145,6 +145,8 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			Files:   files,
 		})
 		return printJSON(stdout, stderr, result)
+	case "project":
+		return runProject(args[1:], stdout, stderr)
 	case "knowledge":
 		return runKnowledge(args[1:], stdout, stderr)
 	case "dogfood":
@@ -431,6 +433,95 @@ func runDogfoodEvaluate(args []string, stdout io.Writer, stderr io.Writer) int {
 	}
 	fmt.Fprintf(stdout, "%s: %s\n", evaluation.CaseID, evaluation.Result)
 	return 0
+}
+
+func runProject(args []string, stdout io.Writer, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "project: subcommand is required")
+		printUsage(stderr)
+		return 2
+	}
+	switch args[0] {
+	case "add":
+		return runProjectAdd(args[1:], stdout, stderr)
+	case "list":
+		return runProjectList(args[1:], stdout, stderr)
+	default:
+		fmt.Fprintf(stderr, "project: unknown subcommand %q\n", args[0])
+		printUsage(stderr)
+		return 2
+	}
+}
+
+func runProjectAdd(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("project add", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	id := flags.String("id", "", "project id")
+	name := flags.String("name", "", "project name")
+	projectPath := flags.String("path", "", "project source path")
+	var techDomains multiValueFlag
+	var businessDomains multiValueFlag
+	flags.Var(&techDomains, "tech-domain", "tech domain; may be repeated")
+	flags.Var(&businessDomains, "business-domain", "business domain; may be repeated")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if strings.TrimSpace(*id) == "" {
+		fmt.Fprintln(stderr, "project add: --id is required")
+		return 2
+	}
+	if strings.TrimSpace(*name) == "" {
+		fmt.Fprintln(stderr, "project add: --name is required")
+		return 2
+	}
+	if strings.TrimSpace(*projectPath) == "" {
+		fmt.Fprintln(stderr, "project add: --path is required")
+		return 2
+	}
+	root, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(stderr, "project add: get current directory: %v\n", err)
+		return 1
+	}
+	project := registry.Project{
+		ID:              *id,
+		Name:            *name,
+		Path:            *projectPath,
+		TechDomains:     techDomains,
+		BusinessDomains: businessDomains,
+	}
+	if err := registry.AddProject(root, project); err != nil {
+		fmt.Fprintf(stderr, "project add: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "added project %s\n", strings.TrimSpace(*id))
+	return 0
+}
+
+func runProjectList(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("project list", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	jsonOut := flags.Bool("json", false, "print JSON output")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if !*jsonOut {
+		fmt.Fprintln(stderr, "project list: --json is required")
+		return 2
+	}
+	root, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(stderr, "project list: get current directory: %v\n", err)
+		return 1
+	}
+	projects, err := registry.ListProjects(root)
+	if err != nil {
+		fmt.Fprintf(stderr, "project list: %v\n", err)
+		return 1
+	}
+	return printJSON(stdout, stderr, struct {
+		Projects []registry.Project `json:"projects"`
+	}{Projects: projects})
 }
 
 func runKnowledge(args []string, stdout io.Writer, stderr io.Writer) int {
@@ -1121,11 +1212,14 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  index")
 	fmt.Fprintln(w, "  install-adapters")
 	fmt.Fprintln(w, "  context")
+	fmt.Fprintln(w, "  project")
 	fmt.Fprintln(w, "  knowledge")
 	fmt.Fprintln(w, "  dogfood")
 	fmt.Fprintln(w, "  mcp")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Examples:")
+	fmt.Fprintln(w, "  argos project add --id <project> --name <name> --path <path>")
+	fmt.Fprintln(w, "  argos project list --json")
 	fmt.Fprintln(w, "  argos knowledge design --json --project <project> --intent <intent>")
 	fmt.Fprintln(w, "  argos knowledge check --json --design <design.json> --draft <draft>")
 	fmt.Fprintln(w, "  argos knowledge publish --design <design.json> --path <draft>")
