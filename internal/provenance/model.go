@@ -82,6 +82,34 @@ type VerifyResult struct {
 	Findings []string `json:"findings,omitempty"`
 }
 
+type StatusResult struct {
+	Result         string          `json:"result"`
+	ProvenanceID   string          `json:"provenance_id"`
+	State          string          `json:"state"`
+	Path           string          `json:"path"`
+	Subject        Subject         `json:"subject"`
+	Evidence       StatusEvidence  `json:"evidence"`
+	ReadyToPublish bool            `json:"ready_to_publish"`
+	Actions        []string        `json:"actions,omitempty"`
+	Findings       []StatusFinding `json:"findings,omitempty"`
+}
+
+type StatusEvidence struct {
+	DesignBound        string `json:"design_bound"`
+	DraftBound         string `json:"draft_bound"`
+	LatestCheck        string `json:"latest_check"`
+	DesignDecision     string `json:"design_decision"`
+	DraftWriteDecision string `json:"draft_write_decision"`
+	PublishDecision    string `json:"publish_decision"`
+	OfficialTarget     string `json:"official_target"`
+}
+
+type StatusFinding struct {
+	Severity string `json:"severity"`
+	Category string `json:"category"`
+	Message  string `json:"message"`
+}
+
 type ListFilter struct {
 	State       string
 	Project     string
