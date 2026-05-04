@@ -80,6 +80,39 @@ func TestStatusEvidenceReportsChangedDesignBound(t *testing.T) {
 	}
 }
 
+func TestStatusEvidenceReportsMissingRequiredHashes(t *testing.T) {
+	root, id := createStatusWorkspaceThroughCheck(t)
+	recordStatusPublishApproval(t, root, id)
+	loaded, err := Load(root, id)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	loaded.Record.Hashes.DesignSHA256 = ""
+	loaded.Record.Hashes.DraftTreeSHA256 = ""
+	loaded.Record.Hashes.LatestCheckSHA256 = ""
+	recordPath, err := resolvedPathInsideRoot(root, loaded.Path)
+	if err != nil {
+		t.Fatalf("resolve record path: %v", err)
+	}
+	if err := writeRecord(recordPath, loaded.Record); err != nil {
+		t.Fatalf("write record: %v", err)
+	}
+
+	status, err := Status(root, id)
+	if err != nil {
+		t.Fatalf("Status returned error: %v", err)
+	}
+	if status.Evidence.DesignBound == "pass" {
+		t.Fatalf("expected non-pass design evidence with missing design hash, got %#v", status)
+	}
+	if status.Evidence.DraftBound == "pass" {
+		t.Fatalf("expected non-pass draft evidence with missing draft tree hash, got %#v", status)
+	}
+	if status.Evidence.LatestCheck == "pass" {
+		t.Fatalf("expected non-pass latest check evidence with missing check hash, got %#v", status)
+	}
+}
+
 func TestStatusDoesNotDuplicateMissingPublishDecisionFinding(t *testing.T) {
 	root, id := createStatusWorkspaceThroughCheck(t)
 

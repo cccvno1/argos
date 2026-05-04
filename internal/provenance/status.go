@@ -116,10 +116,16 @@ func officialTargetEvidence(root string, record Record) string {
 
 func applyVerifyFindingEvidence(evidence *StatusEvidence, record Record, message string) {
 	switch {
+	case strings.Contains(message, "design hash is required"):
+		evidence.DesignBound = "missing"
 	case strings.Contains(message, "design hash changed"):
 		evidence.DesignBound = "changed"
+	case strings.Contains(message, "draft tree hash is required"):
+		evidence.DraftBound = "missing"
 	case strings.Contains(message, "draft tree hash changed"):
 		evidence.DraftBound = "changed"
+	case strings.Contains(message, "latest check hash is required"):
+		evidence.LatestCheck = "missing"
 	case strings.Contains(message, "latest check hash changed") ||
 		strings.Contains(message, "latest check result does not match stored check"):
 		evidence.LatestCheck = "changed"
