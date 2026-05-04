@@ -12,8 +12,10 @@ func Init(root string) error {
 		"knowledge/.inbox/items",
 		"knowledge/.inbox/packages",
 		"knowledge/.inbox/designs",
+		"knowledge/.inbox/provenance",
 		"knowledge/items",
 		"knowledge/packages",
+		"knowledge/provenance",
 		"argos/generated",
 	}
 	for _, dir := range dirs {

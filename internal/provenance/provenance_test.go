@@ -155,6 +155,47 @@ func TestRecordOmitEmptyLatestCheck(t *testing.T) {
 	}
 }
 
+func TestStartCreatesInboxProvenanceRecord(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, root, "knowledge/.inbox/designs/mall-api/redis-cache/design.json", `{
+  "schema_version": "knowledge.design.v1",
+  "project": "mall-api",
+  "draft_output": {
+    "kind": "package",
+    "id": "package:mall-api.redis-cache.v1",
+    "path": "knowledge/.inbox/packages/mall-api/redis-cache"
+  }
+}`)
+
+	record, err := Start(root, StartRequest{
+		DesignPath: "knowledge/.inbox/designs/mall-api/redis-cache/design.json",
+		DraftPath:  "knowledge/.inbox/packages/mall-api/redis-cache",
+		CreatedBy:  "codex",
+	})
+	if err != nil {
+		t.Fatalf("Start returned error: %v", err)
+	}
+	if record.State != StateDraft {
+		t.Fatalf("expected draft state, got %#v", record)
+	}
+	if record.Subject.KnowledgeID != "package:mall-api.redis-cache.v1" {
+		t.Fatalf("unexpected subject: %#v", record.Subject)
+	}
+	if record.Subject.OfficialPath != "knowledge/packages/mall-api/redis-cache" {
+		t.Fatalf("unexpected official path: %#v", record.Subject)
+	}
+	if record.Hashes.DesignSHA256 == "" {
+		t.Fatalf("expected design hash: %#v", record.Hashes)
+	}
+	loaded, err := Load(root, record.ProvenanceID)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if loaded.Record.ProvenanceID != record.ProvenanceID {
+		t.Fatalf("loaded wrong record: %#v", loaded.Record)
+	}
+}
+
 func writeTestFile(t *testing.T, root string, rel string, body string) {
 	t.Helper()
 	abs := filepath.Join(root, filepath.FromSlash(rel))
