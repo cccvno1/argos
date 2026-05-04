@@ -112,6 +112,13 @@ func removedAuthoringTermsForTests() []string {
 		removedWriteVocabularyTerm("authoring", "-", "golden"),
 		removedWriteVocabularyTerm("argos", "-", "authoring", "-", "dogfood"),
 		removedWriteVocabularyTerm("pro", "mote"),
+		removedWriteVocabularyTerm("Source", " ", "Profile"),
+		removedWriteVocabularyTerm("Proposed", " ", "Shape"),
+		removedWriteVocabularyTerm("Candidate", " ", "Files"),
+		removedWriteVocabularyTerm("Verification", " ", "Plan"),
+		removedWriteVocabularyTerm("Human", " ", "Review", " ", "Decisions"),
+		removedWriteVocabularyTerm("proposal", " ", "artifact"),
+		removedWriteVocabularyTerm("canonical", " ", "JSON", " ", "proposal"),
 	}
 }
 

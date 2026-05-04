@@ -10,9 +10,9 @@ description: Use when the user asks to remember, capture, save, document, preser
 Use this skill to turn natural user intent into deliberate Argos engineering
 knowledge for future agents. This is not a memo workflow. The user should not
 need to know Argos paths or commands. Your job is to help design the knowledge,
-inspect existing Argos facts, produce a Knowledge Design Proposal, ask for the
-user's decisions, write inbox candidates only after approval, verify the
-candidate, and present a review packet.
+inspect existing Argos facts, produce a knowledge design, ask for the user's
+decisions, write inbox drafts only after approval, check the draft, and present
+review questions.
 
 Argos is an agent-operated knowledge layer. Humans express knowledge intent in
 natural language and review knowledge design; the agent operates Argos in the
@@ -37,16 +37,16 @@ gates.
 
 Do not silently mutate official trusted knowledge.
 
-Before writing candidate knowledge files, you must:
+Before writing draft knowledge files, you must:
 
 1. Check existing Argos knowledge.
-2. Present a concrete proposal.
+2. Present a concrete knowledge design.
 3. Ask the user to choose create, update, or stop when overlap exists.
-4. Ask the user to choose a delivery path.
-5. Get explicit approval for the proposal and delivery path.
+4. Ask the user to choose a write boundary.
+5. Get explicit approval for the design and write boundary.
 
 Never run publish automatically. Never execute scripts from a knowledge
-package unless the verification plan names them and the user confirms execution.
+package unless the check plan names them and the user confirms execution.
 Never set `priority: must` unless the user explicitly authorizes it.
 Never claim authored knowledge is official while it is still in inbox.
 
@@ -55,7 +55,7 @@ when it combines user-confirmed standards, observed files, imported references,
 templates, examples, synthesized recommendations, assumptions, and open
 questions.
 
-Before presenting the proposal, run or emulate:
+Before presenting the design, run or emulate:
 
 ```bash
 argos knowledge design --json --project mall-api --intent "create product-list cache engineering knowledge"
@@ -64,16 +64,17 @@ argos knowledge design --json --project mall-api --intent "create product-list c
 Read `write_guidance` before writing files. Treat it as the operational
 control guidance for this write attempt:
 
-- follow `recommended_action` for the next safe step;
-- use `proposal_path` for the proposal artifact;
-- use `candidate_path` only as a proposed path, not as write approval;
+- follow `next_action` for the next safe step;
+- use `design_path` for the design JSON;
+- use `draft_path` only as a planned path, not as write approval;
 - obey every `stop_conditions` entry;
-- ask the `review.questions` before candidate writing when correctness or
+- use `design_focus` and `source_work` to shape the design summary;
+- ask the `review_questions` before draft writing when correctness or
   authorization depends on the answer;
-- run `commands.verify_candidate` only after candidate writing is approved and
-  candidate files exist.
+- run `commands.check_draft` only after draft writing is approved and draft
+  files exist.
 
-After approved candidate files are written, run:
+After approved draft files are written, run:
 
 ```bash
 argos knowledge check --json \
@@ -86,7 +87,7 @@ Do not use `knowledge design` output as permission to write. Do not use
 
 ## Language
 
-Match the user's language for human-facing writing: proposals, questions,
+Match the user's language for human-facing writing: designs, questions,
 status updates, package explanations, references, checklists, and example
 commentary should use the same language the user is using.
 
@@ -117,7 +118,7 @@ If the user declines, stop the authoring workflow.
 
 ### 2. Gather Context
 
-Gather only the context needed to make a proposal:
+Gather only the context needed to make a design:
 
 - user-provided facts and intent from the conversation
 - relevant repository files, docs, tests, or examples
@@ -160,7 +161,7 @@ Classify the result as one of:
 
 - no related knowledge found
 - related official knowledge found
-- related inbox candidates found
+- related inbox drafts found
 - related index results found
 - check could not be completed, with the reason
 
@@ -225,30 +226,30 @@ For examples, assign a trust level:
 If the knowledge is not ready to write, stop with a concise list of open
 questions or missing evidence instead of creating weak knowledge.
 
-### 6. Present The Knowledge Design Proposal
+### 6. Present The Knowledge Design
 
-Present a Knowledge Design Proposal with these sections:
+Present a knowledge design summary with these sections:
 
 ```text
 User Request
 Knowledge Goal
 Future Agent Audience
 Scope
-Source Profile
-Proposed Shape
+Sources
+Draft Output
 Future Use
 Applicability Boundaries
-Overlap Decision
-Delivery
-Candidate Files
-Verification Plan
-Human Review Decisions
+Existing Knowledge
+Write Boundary
+Draft Files
+Check Plan
+Review Decisions
 ```
 
-The review text is not the persisted proposal artifact. When the user approves
-the proposal shape, write a canonical JSON proposal to
-`knowledge/.inbox/proposals/.../proposal.json` or the chosen proposal path
-before writing candidate knowledge. The JSON must use
+The review text is not the persisted design. When the user approves the design,
+write a knowledge design JSON to
+`knowledge/.inbox/designs/.../design.json` or the chosen design path before
+writing draft knowledge. The JSON must use
 `schema_version: knowledge.design.v1` and the snake_case fields that
 `argos knowledge check` validates:
 
@@ -269,17 +270,16 @@ review
 ```
 
 Set `write_boundary.write_requires_review_approval` and
-`write_boundary.review_packet_required` to true. Keep the JSON proposal and the
-human-facing proposal summary synchronized; do not write a Markdown-only
-proposal.
+`write_boundary.review_packet_required` to true. Keep the JSON design and the
+human-facing design summary synchronized; do not write a Markdown-only design.
 
-The `Source Profile` section must group claim sources and trust levels as:
+The `Sources` section must group claim sources and trust levels as:
 
 ```text
-User-Confirmed
+User Input
 Observed
 Imported
-Synthesized
+AI Suggested
 Templates
 Examples
 Assumptions
@@ -287,26 +287,25 @@ Open Questions
 Claim-Level Trust
 ```
 
-Do not collapse the source profile into one mode. A Redis best-practice draft
-may combine synthesized recommendations, assumptions, and open questions. A Go
-template package may combine user-confirmed intent, observed files, and
-template evidence.
+Do not collapse sources into one mode. A Redis best-practice draft may combine
+AI-suggested recommendations, assumptions, and open questions. A Go template
+package may combine user input, observed files, and template evidence.
 
-The `Proposed Shape` section must include:
+The `Draft Output` section must include:
 
 ```text
 kind
 type
 title
-proposed ID
-proposed path
+draft ID
+draft path
 status
 priority
 rationale
 entrypoint load
 ```
 
-Default new candidate metadata:
+Default new draft metadata:
 
 ```yaml
 status: draft
@@ -327,49 +326,50 @@ citation policy
 The `Applicability Boundaries` section must explain when the knowledge should be
 used, when it should not be used, and the trade-offs.
 
-The `Overlap Decision` section must name related official or inbox knowledge and
-say whether to create new, update existing, merge, stop, or ask for human choice.
+The `Existing Knowledge` section must name related official or inbox knowledge
+and say whether to create new, update existing, merge, stop, or ask for review
+choice.
 
-The `Delivery` section must state whether the candidate stays in inbox or needs
-an explicit review path for official mutation. `priority: must`, official
-mutation, and promotion require explicit authorization.
+The `Write Boundary` section must state whether the draft stays in inbox or
+needs an explicit review path for official writing. `priority: must`, official
+writing, and publishing require explicit authorization.
 
-The `Candidate Files` section must list each planned file, purpose, and load
+The `Draft Files` section must list each planned file, purpose, and load
 behavior. For packages, `KNOWLEDGE.md` is the indexed entrypoint; optional
 directories are created only when useful.
 
-The `Human Review Decisions` section must list proposal approval, candidate
-write approval, priority escalation, official mutation, promotion, requested
-edits, and unresolved blockers.
+The `Review Decisions` section must list design approval, draft write approval,
+priority escalation, official writing, publishing, requested edits, and
+unresolved blockers.
 
-### 7. Require A Delivery Path
+### 7. Require A Write Boundary
 
-Present the user with the two supported delivery paths and wait for a choice.
+Present the user with the supported write boundaries and wait for a choice.
 
-Inbox candidate:
+Inbox draft:
 
 ```text
 Write under knowledge/.inbox/items/ or knowledge/.inbox/packages/, verify the
-candidate, and leave it for later review or promotion.
+draft, and leave it for later review or publishing.
 ```
 
 PR-style change:
 
 ```text
 Write under knowledge/items/ or knowledge/packages/ on a review branch or the
-user's chosen current branch, verify the changed path, and commit only if the
+user's chosen current branch, check the changed path, and commit only if the
 user confirms.
 ```
 
-Do not infer the delivery path from context. The user owns that choice.
+Do not infer the write boundary from context. The user owns that choice.
 
 ### 8. Write Only After Approval
 
-After proposal approval and delivery-path selection, write files only inside the
+After design approval and write-boundary selection, write files only inside the
 chosen boundary:
 
 ```text
-knowledge/.inbox/proposals/
+knowledge/.inbox/designs/
 knowledge/.inbox/items/
 knowledge/.inbox/packages/
 knowledge/items/
@@ -395,7 +395,7 @@ scripts/
 assets/
 ```
 
-Every file under `examples/` must have a declared trust level in the proposal
+Every file under `examples/` must have a declared trust level in the design
 and in the package's `Load On Demand` guidance:
 
 - `illustrative`: explains the idea and should not be copied into production as
@@ -403,9 +403,9 @@ and in the package's `Load On Demand` guidance:
 - `tested`: has been compiled, linted, run, or otherwise verified as described.
 - `template`: intended to be copied or adapted by future work.
 
-### 9. Verify
+### 9. Check
 
-After writing candidate files, run:
+After writing draft files, run:
 
 ```bash
 argos knowledge check --json --design DESIGN_PATH --draft TARGET_PATH
@@ -417,19 +417,19 @@ If the local binary is not installed but the repo can run it, use:
 go run ./cmd/argos knowledge check --json --design DESIGN_PATH --draft TARGET_PATH
 ```
 
-If verification fails because of protocol issues, fix the written files and run
-verification again. If verification fails because of an unresolved product or
+If the check fails because of protocol issues, fix the written files and run
+the check again. If the check fails because of an unresolved product or
 knowledge decision, stop and ask the user.
 
 ### 10. Publish Only After Review
 
-If the user asks to publish or submit a candidate to official knowledge, first
+If the user asks to publish or submit a draft to official knowledge, first
 summarize:
 
-- candidate path
+- draft path
 - proposed official target path
 - source context
-- verification result
+- check result
 - unresolved assumptions
 - affected projects and domains
 - whether `argos index` and `argos install-adapters` should run afterward
@@ -448,8 +448,8 @@ After publishing, run `argos index` unless the user asks not to. Run
 End with:
 
 - changed files
-- verification commands and outcomes
-- whether the package is inbox candidate or PR-style official change
+- check commands and outcomes
+- whether the package is an inbox draft or PR-style official change
 - loaded or cited Argos knowledge IDs, when relevant
 - any remaining decisions
 

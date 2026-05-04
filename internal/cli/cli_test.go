@@ -1187,17 +1187,47 @@ func TestKnowledgeWritePublishAndFindbackFlow(t *testing.T) {
 	root := t.TempDir()
 	initWorkspace(t, root)
 
-	runOK(t, root, []string{
+	designOutput := runOK(t, root, []string{
 		"knowledge", "design", "--json",
 		"--project", "mall-api",
 		"--intent", "Create Redis cache best practices for future backend agents.",
 	})
+	var designResult struct {
+		WriteGuidance struct {
+			DesignPath string `json:"design_path"`
+		} `json:"write_guidance"`
+		KnowledgeDesignTemplate struct {
+			SchemaVersion string `json:"schema_version"`
+		} `json:"knowledge_design_template"`
+	}
+	if err := json.Unmarshal([]byte(designOutput), &designResult); err != nil {
+		t.Fatalf("parse design JSON: %v\n%s", err, designOutput)
+	}
+	if designResult.KnowledgeDesignTemplate.SchemaVersion != knowledgewrite.KnowledgeDesignSchemaVersion {
+		t.Fatalf("unexpected design template schema: %s", designOutput)
+	}
+	if designResult.WriteGuidance.DesignPath == "" {
+		t.Fatalf("design output missing write_guidance.design_path: %s", designOutput)
+	}
+	if !strings.HasPrefix(designResult.WriteGuidance.DesignPath, "knowledge/.inbox/designs/mall-api/") ||
+		!strings.HasSuffix(designResult.WriteGuidance.DesignPath, "/design.json") {
+		t.Fatalf("unexpected design path: %q", designResult.WriteGuidance.DesignPath)
+	}
 	designPath := writeJSONFixture(t, root, "knowledge/.inbox/designs/mall-api/redis-cache/design.json", validKnowledgeDesignForCLI(t))
 	draftPath := "knowledge/.inbox/packages/mall-api/redis-cache"
 	writeDraftPackageForCLI(t, root, draftPath)
+	if _, err := os.Stat(filepath.Join(root, draftPath, "references/redis-cache.md")); err != nil {
+		t.Fatalf("expected referenced draft file: %v", err)
+	}
 
 	checkOutput := runOK(t, root, []string{"knowledge", "check", "--json", "--design", designPath, "--draft", draftPath})
-	if !strings.Contains(checkOutput, `"result": "pass"`) && !strings.Contains(checkOutput, `"result": "review-needed"`) {
+	var checkResult struct {
+		Result string `json:"result"`
+	}
+	if err := json.Unmarshal([]byte(checkOutput), &checkResult); err != nil {
+		t.Fatalf("parse check JSON: %v\n%s", err, checkOutput)
+	}
+	if checkResult.Result != "pass" && checkResult.Result != "review-needed" {
 		t.Fatalf("expected check pass or review-needed, got: %s", checkOutput)
 	}
 	runOK(t, root, []string{"knowledge", "publish", "--path", draftPath})
@@ -1896,6 +1926,10 @@ Read this package before changing cache keys, TTLs, invalidation, or fallback be
 - references/redis-cache.md when deeper Redis cache tradeoffs are needed.
 
 Redis cache best practices: choose stable key namespaces, set explicit TTLs, keep invalidation close to writes, and preserve safe fallback behavior when Redis is unavailable.
+`)
+	writeCLIFile(t, root, rel+"/references/redis-cache.md", `# Redis Cache Reference
+
+Use stable key namespaces, explicit TTLs, bounded payloads, and safe fallback behavior when Redis is unavailable.
 `)
 }
 
