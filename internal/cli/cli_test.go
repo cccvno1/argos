@@ -1244,6 +1244,18 @@ func TestKnowledgeWritePublishAndFindbackFlow(t *testing.T) {
 	if !strings.Contains(findOutput, "package:mall-api.redis-cache.v1") {
 		t.Fatalf("expected published package findback, got: %s", findOutput)
 	}
+	var findResult struct {
+		Items []struct {
+			ID     string `json:"id"`
+			Status string `json:"status"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal([]byte(findOutput), &findResult); err != nil {
+		t.Fatalf("parse find JSON: %v\n%s", err, findOutput)
+	}
+	if len(findResult.Items) == 0 || findResult.Items[0].Status != "active" {
+		t.Fatalf("expected published package findback to be active, got: %s", findOutput)
+	}
 }
 
 func TestRunAuthorCommandIsRemovedFromPublicCLI(t *testing.T) {
@@ -1406,6 +1418,16 @@ func TestRunKnowledgePublishMovesInboxPackageToOfficialPackages(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, targetPath, "KNOWLEDGE.md")); err != nil {
 		t.Fatalf("expected published package: %v", err)
+	}
+	published, err := os.ReadFile(filepath.Join(root, targetPath, "KNOWLEDGE.md"))
+	if err != nil {
+		t.Fatalf("read published package: %v", err)
+	}
+	if !strings.Contains(string(published), "status: active") {
+		t.Fatalf("expected published package to be active, got:\n%s", string(published))
+	}
+	if strings.Contains(string(published), "status: draft") {
+		t.Fatalf("expected published package to not remain draft, got:\n%s", string(published))
 	}
 	if _, err := os.Stat(filepath.Join(root, draftPath)); !os.IsNotExist(err) {
 		t.Fatalf("expected inbox package removed, stat err=%v", err)

@@ -914,13 +914,137 @@ func publishDraft(root string, relPath string, stderr io.Writer) (string, error)
 	if err := validateOfficialKnowledgeWithDraft(root, clean, target, draftItems, stderr); err != nil {
 		return "", fmt.Errorf("official validation failed before publish: %w", err)
 	}
+	snapshots, err := snapshotKnowledgeFiles(root, draftItems)
+	if err != nil {
+		return "", err
+	}
 	if err := os.MkdirAll(filepath.Dir(targetAbs), 0o755); err != nil {
 		return "", fmt.Errorf("create target parent: %w", err)
 	}
 	if err := os.Rename(filepath.Join(root, clean), targetAbs); err != nil {
 		return "", fmt.Errorf("move draft: %w", err)
 	}
+	if err := activatePublishedKnowledge(root, target); err != nil {
+		if rollbackErr := rollbackPublishedKnowledge(root, target, clean, snapshots); rollbackErr != nil {
+			return "", fmt.Errorf("activate published knowledge: %w; %v", err, rollbackErr)
+		}
+		return "", fmt.Errorf("activate published knowledge: %w", err)
+	}
+	if _, err := loadAndValidateKnowledge(root, stderr, validationScope{Path: target}); err != nil {
+		if rollbackErr := rollbackPublishedKnowledge(root, target, clean, snapshots); rollbackErr != nil {
+			return "", fmt.Errorf("official validation failed after publish: %w; %v", err, rollbackErr)
+		}
+		return "", fmt.Errorf("official validation failed after publish: %w", err)
+	}
 	return target, nil
+}
+
+type knowledgeFileSnapshot struct {
+	Path string
+	Data []byte
+	Mode os.FileMode
+}
+
+func snapshotKnowledgeFiles(root string, items []knowledge.Item) ([]knowledgeFileSnapshot, error) {
+	snapshots := make([]knowledgeFileSnapshot, 0, len(items))
+	for _, item := range items {
+		absPath := filepath.Join(root, item.Path)
+		info, err := os.Stat(absPath)
+		if err != nil {
+			return nil, fmt.Errorf("stat %s: %w", item.Path, err)
+		}
+		data, err := os.ReadFile(absPath)
+		if err != nil {
+			return nil, fmt.Errorf("read %s: %w", item.Path, err)
+		}
+		snapshots = append(snapshots, knowledgeFileSnapshot{
+			Path: item.Path,
+			Data: data,
+			Mode: info.Mode().Perm(),
+		})
+	}
+	return snapshots, nil
+}
+
+func rollbackPublishedKnowledge(root string, target string, draft string, snapshots []knowledgeFileSnapshot) error {
+	var failures []string
+	targetAbs := filepath.Join(root, target)
+	draftAbs := filepath.Join(root, draft)
+	if err := os.MkdirAll(filepath.Dir(draftAbs), 0o755); err != nil {
+		failures = append(failures, fmt.Sprintf("create draft parent: %v", err))
+	} else if err := os.Rename(targetAbs, draftAbs); err != nil {
+		failures = append(failures, fmt.Sprintf("move published draft back: %v", err))
+	}
+	for _, snapshot := range snapshots {
+		absPath := filepath.Join(root, snapshot.Path)
+		if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
+			failures = append(failures, fmt.Sprintf("restore %s parent: %v", snapshot.Path, err))
+			continue
+		}
+		if err := os.WriteFile(absPath, snapshot.Data, snapshot.Mode); err != nil {
+			failures = append(failures, fmt.Sprintf("restore %s: %v", snapshot.Path, err))
+		}
+	}
+	if len(failures) > 0 {
+		return fmt.Errorf("rollback publish failed: %s", strings.Join(failures, "; "))
+	}
+	return nil
+}
+
+func activatePublishedKnowledge(root string, relPath string) error {
+	items, err := knowledge.LoadPath(root, relPath)
+	if err != nil {
+		return err
+	}
+	for _, item := range items {
+		if err := activateKnowledgeFile(filepath.Join(root, item.Path), item.Path); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func activateKnowledgeFile(absPath string, relPath string) error {
+	info, err := os.Stat(absPath)
+	if err != nil {
+		return fmt.Errorf("stat %s: %w", relPath, err)
+	}
+	data, err := os.ReadFile(absPath)
+	if err != nil {
+		return fmt.Errorf("read %s: %w", relPath, err)
+	}
+	const opening = "---\n"
+	const closing = "\n---\n"
+	text := strings.ReplaceAll(string(data), "\r\n", "\n")
+	if !strings.HasPrefix(text, opening) {
+		return fmt.Errorf("%s: missing frontmatter opening delimiter", relPath)
+	}
+	end := strings.Index(text[len(opening):], closing)
+	if end < 0 {
+		return fmt.Errorf("%s: missing frontmatter closing delimiter", relPath)
+	}
+
+	frontmatterEnd := len(opening) + end
+	frontmatter := text[len(opening):frontmatterEnd]
+	body := text[frontmatterEnd+len(closing):]
+	lines := strings.Split(frontmatter, "\n")
+	statusFound := false
+	for i, line := range lines {
+		if strings.HasPrefix(line, "status:") {
+			lines[i] = "status: active"
+			statusFound = true
+			break
+		}
+	}
+	if !statusFound {
+		return fmt.Errorf("%s: missing status field", relPath)
+	}
+
+	next := opening + strings.Join(lines, "\n") + closing + body
+	if err := os.WriteFile(absPath, []byte(next), info.Mode().Perm()); err != nil {
+		return fmt.Errorf("write %s: %w", relPath, err)
+	}
+	return nil
 }
 
 func validateOfficialKnowledgeWithDraft(root string, draftPath string, target string, draftItems []knowledge.Item, stderr io.Writer) error {

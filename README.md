@@ -194,7 +194,7 @@ When the user explicitly asks to create durable knowledge, use the write flow:
 3. Ask the human to review the design and set `review.draft_write_approved`.
 4. Write draft knowledge only after review approves draft writing.
 5. Run `argos knowledge check --json --design <design.json> --draft <draft-path>`.
-6. Publish only after explicit authorization with `argos knowledge publish --design <design.json> --path <draft-path>`.
+6. Publish only after explicit authorization with `argos knowledge publish --design <design.json> --path <draft-path>`. Publish moves the draft to the official path and sets published knowledge to `status: active`.
 7. Run `argos index`.
 8. Confirm the new knowledge is discoverable with `argos knowledge find --json`.
 

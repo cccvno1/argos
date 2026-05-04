@@ -46,6 +46,7 @@ issues are release-quality gaps rather than proof that the core model is wrong.
 | Removed write vocabulary scan | pass | No live-surface matches outside historical docs/reports/plans. |
 | README registry guidance | fixed | Added `knowledge/projects.yaml` setup guidance. |
 | README MCP tool list | fixed | Added `argos_design_knowledge` and `argos_check_knowledge`. |
+| Publish status semantics | fixed | Inbox drafts must stay `draft`; `knowledge publish` now writes official knowledge as `active`. |
 | `dogfood write cases --json` from repo root | pass | Works when run in the repository. |
 | `dogfood write cases --json` from a normal workspace | should-fix | Fails because the harness reads `testdata/write-golden/cases.json` relative to cwd. |
 
@@ -65,6 +66,9 @@ issues are release-quality gaps rather than proof that the core model is wrong.
 - Added a regression assertion that root usage does not list `new`.
 - Documented project registry setup before publishing project-scoped knowledge.
 - Documented write-side MCP tools in README.
+- Made `knowledge publish` convert published official knowledge to `status: active`, then revalidate the official path.
+- Added a regression test for published package activation.
+- Documented draft-to-active publish semantics in README and the capture skill.
 
 ## Release Blockers
 
@@ -72,7 +76,6 @@ None for the core agent-operated flow after project registry setup.
 
 ## Should Fix Before First Formal Release
 
-- Published official knowledge can still carry `status: draft`; query can still work, but JSON says `status: draft` while support wording says active project knowledge. Decide whether publish should rewrite status to `active`, require official draft status, or adjust support wording.
 - `argos dogfood write cases --json` depends on repo-root `testdata` paths. If dogfood commands are part of the released binary contract, make fixture lookup independent of cwd or clearly mark dogfood as source-tree-only.
 - Fresh workspace setup requires manual `knowledge/projects.yaml` editing. README now documents this, but a future `argos project add` or stronger `init` guidance would reduce agent mistakes.
 
@@ -93,7 +96,9 @@ None for the core agent-operated flow after project registry setup.
 - MCP find call: `/tmp/argos-global-readiness/mcp-find.json`
 - MCP design call: `/tmp/argos-global-readiness/mcp-design.json`
 - Adapter generation output: `/tmp/argos-global-readiness/install-adapters.out`
+- Publish activation regression: `go test ./internal/cli -run TestRunKnowledgePublishMovesInboxPackageToOfficialPackages -count=1`
+- Full regression: `go test ./... -count=1`
 
 ## Next Action
 
-Fix the `status: draft` publish/query inconsistency before opening a new product module.
+Decide whether write dogfood is source-tree-only or install-safe; then this branch can be merged before opening a new product module.

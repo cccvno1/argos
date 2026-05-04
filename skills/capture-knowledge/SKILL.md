@@ -442,6 +442,8 @@ argos knowledge publish --design DESIGN_PATH --path TARGET_PATH
 
 After publishing, run `argos index` unless the user asks not to. Run
 `argos install-adapters` when project adapter instructions should be refreshed.
+Inbox drafts must use `status: draft`; `argos knowledge publish` converts
+published official knowledge to `status: active`.
 
 ### 11. Report The Result
 
