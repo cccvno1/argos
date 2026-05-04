@@ -492,10 +492,29 @@ func runProjectAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 	}
 	if err := registry.AddProject(root, project); err != nil {
 		fmt.Fprintf(stderr, "project add: %v\n", err)
-		return 1
+		return projectAddErrorCode(err)
 	}
 	fmt.Fprintf(stdout, "added project %s\n", strings.TrimSpace(*id))
 	return 0
+}
+
+func projectAddErrorCode(err error) int {
+	message := err.Error()
+	for _, validationError := range []string{
+		"project already exists:",
+		"project id is required",
+		"project name is required",
+		"project path is required",
+		"project path must be relative",
+		"project path must stay inside workspace",
+		"unknown tech domain:",
+		"unknown business domain:",
+	} {
+		if strings.Contains(message, validationError) {
+			return 2
+		}
+	}
+	return 1
 }
 
 func runProjectList(args []string, stdout io.Writer, stderr io.Writer) int {

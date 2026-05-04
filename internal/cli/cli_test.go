@@ -63,12 +63,28 @@ func TestRunProjectAddCreatesProject(t *testing.T) {
 	if strings.TrimSpace(stdout.String()) != "added project mall-api" {
 		t.Fatalf("unexpected stdout: %q", stdout.String())
 	}
+	if stderr.String() != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
 	reg, err := registry.Load(root)
 	if err != nil {
 		t.Fatalf("load registry: %v", err)
 	}
 	if len(reg.Projects) != 1 || reg.Projects[0].ID != "mall-api" {
 		t.Fatalf("unexpected projects: %#v", reg.Projects)
+	}
+	project := reg.Projects[0]
+	if project.Name != "Mall API" {
+		t.Fatalf("unexpected project name: %#v", project)
+	}
+	if project.Path != "services/mall-api" {
+		t.Fatalf("unexpected project path: %#v", project)
+	}
+	if strings.Join(project.TechDomains, ",") != "backend,database" {
+		t.Fatalf("unexpected tech domains: %#v", project.TechDomains)
+	}
+	if strings.Join(project.BusinessDomains, ",") != "account" {
+		t.Fatalf("unexpected business domains: %#v", project.BusinessDomains)
 	}
 }
 
@@ -91,6 +107,9 @@ func TestRunProjectListReturnsJSON(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d stderr=%q stdout=%q", code, stderr.String(), stdout.String())
 	}
+	if stderr.String() != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
 	var result struct {
 		Projects []registry.Project `json:"projects"`
 	}
@@ -100,10 +119,21 @@ func TestRunProjectListReturnsJSON(t *testing.T) {
 	if len(result.Projects) != 1 || result.Projects[0].ID != "mall-api" {
 		t.Fatalf("unexpected projects JSON: %s", stdout.String())
 	}
-	for _, want := range []string{`"id": "mall-api"`, `"tech_domains": [`, `"business_domains": [`} {
-		if !strings.Contains(stdout.String(), want) {
-			t.Fatalf("expected JSON field %q, got: %s", want, stdout.String())
-		}
+	project := result.Projects[0]
+	if project.Name != "Mall API" {
+		t.Fatalf("unexpected decoded project name: %#v", project)
+	}
+	if project.Path != "services/mall-api" {
+		t.Fatalf("unexpected decoded project path: %#v", project)
+	}
+	if strings.Join(project.TechDomains, ",") != "backend" {
+		t.Fatalf("unexpected decoded tech domains: %#v", project.TechDomains)
+	}
+	if strings.Join(project.BusinessDomains, ",") != "account" {
+		t.Fatalf("unexpected decoded business domains: %#v", project.BusinessDomains)
+	}
+	if !strings.Contains(stdout.String(), `"tech_domains"`) || !strings.Contains(stdout.String(), `"business_domains"`) {
+		t.Fatalf("project list should use snake_case JSON fields, got: %s", stdout.String())
 	}
 	if strings.Contains(stdout.String(), `"ID"`) || strings.Contains(stdout.String(), `"TechDomains"`) {
 		t.Fatalf("project list should use snake_case JSON fields, got: %s", stdout.String())
@@ -139,6 +169,85 @@ func TestRunProjectListRequiresJSON(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "project list: --json is required") {
 		t.Fatalf("expected missing json error, got %q", stderr.String())
+	}
+}
+
+func TestRunProjectAddRejectsDuplicateID(t *testing.T) {
+	root := t.TempDir()
+	chdir(t, root)
+	runOK(t, root, []string{"init"})
+	runOK(t, root, []string{
+		"project", "add",
+		"--id", "mall-api",
+		"--name", "Mall API",
+		"--path", "services/mall-api",
+	})
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"project", "add",
+		"--id", "mall-api",
+		"--name", "Mall API 2",
+		"--path", "services/mall-api-2",
+	}, &stdout, &stderr)
+
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if stdout.String() != "" {
+		t.Fatalf("expected empty stdout, got %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "project already exists: mall-api") {
+		t.Fatalf("expected duplicate project error, got %q", stderr.String())
+	}
+}
+
+func TestRunProjectAddRejectsUnknownDomain(t *testing.T) {
+	root := t.TempDir()
+	chdir(t, root)
+	runOK(t, root, []string{"init"})
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"project", "add",
+		"--id", "mall-api",
+		"--name", "Mall API",
+		"--path", "services/mall-api",
+		"--tech-domain", "mobile",
+	}, &stdout, &stderr)
+
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if stdout.String() != "" {
+		t.Fatalf("expected empty stdout, got %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "unknown tech domain: mobile") {
+		t.Fatalf("expected unknown domain error, got %q", stderr.String())
+	}
+}
+
+func TestRunProjectAddRejectsUnsafePath(t *testing.T) {
+	root := t.TempDir()
+	chdir(t, root)
+	runOK(t, root, []string{"init"})
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"project", "add",
+		"--id", "mall-api",
+		"--name", "Mall API",
+		"--path", "../mall-api",
+	}, &stdout, &stderr)
+
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if stdout.String() != "" {
+		t.Fatalf("expected empty stdout, got %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "project path must stay inside workspace") {
+		t.Fatalf("expected unsafe path error, got %q", stderr.String())
 	}
 }
 
