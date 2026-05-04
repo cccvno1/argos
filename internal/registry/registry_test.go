@@ -216,6 +216,21 @@ func TestAddProjectRejectsUnsafeProjectPaths(t *testing.T) {
 			path:    "../mall-api",
 			wantErr: "project path must stay inside workspace",
 		},
+		{
+			name:    "nested parent traversal",
+			path:    "services/../mall-api",
+			wantErr: "project path must stay inside workspace",
+		},
+		{
+			name:    "nested repeated parent traversal",
+			path:    "services/../../mall-api",
+			wantErr: "project path must stay inside workspace",
+		},
+		{
+			name:    "nested backslash parent traversal",
+			path:    `services\..\mall-api`,
+			wantErr: "project path must stay inside workspace",
+		},
 	}
 
 	for _, tt := range tests {

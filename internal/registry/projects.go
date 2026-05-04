@@ -33,6 +33,7 @@ func AddProject(root string, project Project) error {
 	if err := validateProjectPath(project.Path); err != nil {
 		return err
 	}
+	project.Path = cleanProjectPath(project.Path)
 
 	unlock, err := lockProjectsRegistry(root)
 	if err != nil {
@@ -116,20 +117,25 @@ func lockProjectsRegistry(root string) (func(), error) {
 func normalizeProject(project Project) Project {
 	project.ID = strings.TrimSpace(project.ID)
 	project.Name = strings.TrimSpace(project.Name)
-	project.Path = cleanProjectPath(project.Path)
+	project.Path = normalizeProjectPath(project.Path)
 	project.TechDomains = uniqueRegistryValues(project.TechDomains)
 	project.BusinessDomains = uniqueRegistryValues(project.BusinessDomains)
 	return project
 }
 
-func cleanProjectPath(projectPath string) string {
+func normalizeProjectPath(projectPath string) string {
 	projectPath = strings.TrimSpace(projectPath)
 	if projectPath == "" {
 		return ""
 	}
-	projectPath = strings.ReplaceAll(projectPath, `\`, "/")
-	projectPath = path.Clean(projectPath)
-	return projectPath
+	return strings.ReplaceAll(projectPath, `\`, "/")
+}
+
+func cleanProjectPath(projectPath string) string {
+	if projectPath == "" {
+		return ""
+	}
+	return path.Clean(projectPath)
 }
 
 func validateProjectRequired(project Project) error {
@@ -153,10 +159,19 @@ func validateProjectPath(projectPath string) error {
 	if path.IsAbs(projectPath) || hasWindowsVolumeName(projectPath) {
 		return fmt.Errorf("project path must be relative")
 	}
-	if projectPath == ".." || strings.HasPrefix(projectPath, "../") {
+	if hasParentPathSegment(projectPath) {
 		return fmt.Errorf("project path must stay inside workspace")
 	}
 	return nil
+}
+
+func hasParentPathSegment(value string) bool {
+	for _, part := range strings.Split(value, "/") {
+		if part == ".." {
+			return true
+		}
+	}
+	return false
 }
 
 func hasWindowsVolumeName(projectPath string) bool {
