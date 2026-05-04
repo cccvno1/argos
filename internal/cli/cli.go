@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"argos/internal/adapters"
+	"argos/internal/audit"
 	"argos/internal/dogfood"
 	"argos/internal/index"
 	"argos/internal/knowledge"
@@ -567,11 +568,48 @@ func runKnowledge(args []string, stdout io.Writer, stderr io.Writer) int {
 		return runKnowledgeRead(args[1:], stdout, stderr)
 	case "cite":
 		return runKnowledgeCite(args[1:], stdout, stderr)
+	case "audit":
+		return runKnowledgeAudit(args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "knowledge: unknown subcommand %q\n", args[0])
 		printUsage(stderr)
 		return 2
 	}
+}
+
+func runKnowledgeAudit(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("knowledge audit", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	jsonOut := flags.Bool("json", false, "print JSON output")
+	project := flags.String("project", "", "project id filter")
+	includePublished := flags.Bool("include-published", false, "include healthy published provenance items")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if !*jsonOut {
+		fmt.Fprintln(stderr, "knowledge audit: --json is required")
+		return 2
+	}
+	root, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(stderr, "knowledge audit: get current directory: %v\n", err)
+		return 1
+	}
+	result, err := audit.Knowledge(root, audit.Request{
+		Project:          *project,
+		IncludePublished: *includePublished,
+	})
+	if err != nil {
+		fmt.Fprintf(stderr, "knowledge audit: %v\n", err)
+		return 1
+	}
+	if code := printJSON(stdout, stderr, result); code != 0 {
+		return code
+	}
+	if result.Result == "problem" {
+		return 1
+	}
+	return 0
 }
 
 func runProvenance(args []string, stdout io.Writer, stderr io.Writer) int {
@@ -1557,6 +1595,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  argos knowledge find --json --project <project> --task <task>")
 	fmt.Fprintln(w, "  argos knowledge read --json <id>")
 	fmt.Fprintln(w, "  argos knowledge cite --json <id>...")
+	fmt.Fprintln(w, "  argos knowledge audit --json")
 	fmt.Fprintln(w, "  argos provenance start --json --design <design.json> --draft <draft>")
 	fmt.Fprintln(w, "  argos provenance record-decision --json --provenance <id> --stage <stage> --decision <decision> --decided-by <actor> --role <role> --source <source> --reason <reason> --recorded-by <agent>")
 	fmt.Fprintln(w, "  argos provenance record-check --json --provenance <id>")

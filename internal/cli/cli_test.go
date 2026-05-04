@@ -1517,6 +1517,34 @@ business_domains: [catalog, account]
 	}
 }
 
+func TestRunKnowledgeAuditReturnsReviewQueue(t *testing.T) {
+	root := t.TempDir()
+	initWorkspace(t, root)
+	writeCLIFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend, database]
+business_domains: [catalog, account]
+`)
+	designPath := writeJSONFixture(t, root, "knowledge/.inbox/designs/mall-api/redis-cache/design.json", validCLIKnowledgeDesign("knowledge/.inbox/packages/mall-api/redis-cache", "package:mall-api.redis-cache.v1"))
+	draftPath := "knowledge/.inbox/packages/mall-api/redis-cache"
+	writeDraftPackageForCLI(t, root, draftPath)
+	provenanceID := createCLIProvenanceThroughCheck(t, root, designPath, draftPath)
+
+	output := runOK(t, root, []string{"knowledge", "audit", "--json", "--project", "mall-api"})
+	if !strings.Contains(output, provenanceID) || !strings.Contains(output, `"category": "needs_publish_decision"`) {
+		t.Fatalf("expected audit review queue item, got %s", output)
+	}
+}
+
+func TestRunKnowledgeAuditRequiresJSON(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"knowledge", "audit"}, &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d", code)
+	}
+	if !strings.Contains(stderr.String(), "knowledge audit: --json is required") {
+		t.Fatalf("unexpected stderr: %q", stderr.String())
+	}
+}
+
 func TestRunProvenanceListRequiresJSON(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"provenance", "list"}, &stdout, &stderr)
