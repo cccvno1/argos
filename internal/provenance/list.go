@@ -53,12 +53,15 @@ func List(root string, filter ListFilter) (ListResponse, error) {
 
 func listRecordsUnder(root string, relRoot string) ([]Loaded, error) {
 	absRoot := filepath.Join(root, relRoot)
-	info, err := os.Stat(absRoot)
+	info, err := os.Lstat(absRoot)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("stat %s: %w", filepath.ToSlash(relRoot), err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return nil, fmt.Errorf("%s: path must not contain symlinks", filepath.ToSlash(relRoot))
 	}
 	if !info.IsDir() {
 		return nil, fmt.Errorf("%s exists but is not a directory", filepath.ToSlash(relRoot))
@@ -69,12 +72,23 @@ func listRecordsUnder(root string, relRoot string) ([]Loaded, error) {
 		if err != nil {
 			return err
 		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			rel, _, err := lexicalPathInsideRoot(root, path)
+			if err != nil {
+				return err
+			}
+			return fmt.Errorf("%s: path must not contain symlinks", filepath.ToSlash(rel))
+		}
 		if entry.IsDir() || entry.Name() != "provenance.json" {
 			return nil
 		}
 		loaded, err := readRecord(root, path)
 		if err != nil {
-			return err
+			rel, _, relErr := lexicalPathInsideRoot(root, path)
+			if relErr != nil {
+				return err
+			}
+			return fmt.Errorf("%s: %w", filepath.ToSlash(rel), err)
 		}
 		records = append(records, loaded)
 		return nil
