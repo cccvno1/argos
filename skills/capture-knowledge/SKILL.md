@@ -481,6 +481,11 @@ argos provenance record-decision --json --provenance PROVENANCE_ID --stage publi
 argos provenance verify --json --provenance PROVENANCE_ID
 ```
 
+Before publishing, run `argos provenance status --json --provenance PROVENANCE_ID`.
+If the user asks for a broader review queue, run `argos knowledge audit --json`
+and summarize categories, findings, and actions. Treat audit/status as evidence
+organization only; the user or PR reviewer decides whether to publish or merge.
+
 Publish only after provenance contains the required decision records and verify
 passes:
 
