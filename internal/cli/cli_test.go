@@ -297,7 +297,7 @@ Use short-lived access tokens.
 func TestRunValidatePathValidatesSingleInboxPackage(t *testing.T) {
 	root := t.TempDir()
 	writeCLIRegistry(t, root)
-	writeCLIFile(t, root, "knowledge/.inbox/packages/backend/redis/best-practices/KNOWLEDGE.md", validCLIPackage("package:backend.redis.best-practices.v1"))
+	writeCLIFile(t, root, "knowledge/.inbox/packages/backend/redis/best-practices/KNOWLEDGE.md", validCLIDraftPackage("package:backend.redis.best-practices.v1"))
 	chdir(t, root)
 
 	var stdout bytes.Buffer
@@ -318,7 +318,7 @@ func TestRunValidatePathValidatesSingleInboxPackage(t *testing.T) {
 func TestRunValidateInboxValidatesInboxOnly(t *testing.T) {
 	root := t.TempDir()
 	writeCLIRegistry(t, root)
-	writeCLIFile(t, root, "knowledge/.inbox/packages/backend/redis/best-practices/KNOWLEDGE.md", validCLIPackage("package:backend.redis.best-practices.v1"))
+	writeCLIFile(t, root, "knowledge/.inbox/packages/backend/redis/best-practices/KNOWLEDGE.md", validCLIDraftPackage("package:backend.redis.best-practices.v1"))
 	writeCLIFile(t, root, "knowledge/packages/backend/broken/KNOWLEDGE.md", `---
 id: package:backend.broken.v1
 title: Broken
@@ -2083,7 +2083,7 @@ Inbox roots must carry draft status.
 	if code != 1 {
 		t.Fatalf("expected exit code 1, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "inbox knowledge must use status: draft") {
+	if !strings.Contains(stderr.String(), "inbox knowledge must use status: draft; set the draft back to status: draft before check or publish") {
 		t.Fatalf("expected inbox status error, got %q", stderr.String())
 	}
 }
@@ -2121,7 +2121,7 @@ Official roots must not carry draft status.
 
 	var inboxStdout, inboxStderr bytes.Buffer
 	inboxCode := Run([]string{"validate", "--path", "knowledge/.inbox/items/backend/active.md"}, &inboxStdout, &inboxStderr)
-	if inboxCode != 1 || !strings.Contains(inboxStderr.String(), "inbox knowledge must use status: draft") {
+	if inboxCode != 1 || !strings.Contains(inboxStderr.String(), "inbox knowledge must use status: draft; set the draft back to status: draft before check or publish") {
 		t.Fatalf("expected inbox path status error, code=%d stderr=%q", inboxCode, inboxStderr.String())
 	}
 
@@ -2462,6 +2462,14 @@ Full body implementation detail: refresh token endpoints must rotate tokens and 
 }
 
 func validCLIPackage(id string) string {
+	return validCLIPackageWithStatus(id, "active")
+}
+
+func validCLIDraftPackage(id string) string {
+	return validCLIPackageWithStatus(id, "draft")
+}
+
+func validCLIPackageWithStatus(id string, status string) string {
 	return `---
 id: ` + id + `
 title: Redis Best Practices
@@ -2469,7 +2477,7 @@ type: package
 tech_domains: [backend]
 business_domains: []
 projects: []
-status: draft
+status: ` + status + `
 priority: should
 tags: [redis]
 updated_at: 2026-04-29

@@ -1048,7 +1048,7 @@ func validateKnowledgeStorageScope(items []knowledge.Item, scope knowledgeStorag
 		switch scope {
 		case knowledgeStorageInbox:
 			if status != "draft" {
-				errs = append(errs, fmt.Errorf("%s: inbox knowledge must use status: draft; publish active knowledge through argos knowledge publish", item.Path))
+				errs = append(errs, fmt.Errorf("%s: inbox knowledge must use status: draft; set the draft back to status: draft before check or publish", item.Path))
 			}
 		case knowledgeStorageOfficial:
 			if status == "draft" {
