@@ -2,6 +2,8 @@ package provenance
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"argos/internal/knowledgewrite"
@@ -46,13 +48,7 @@ func TestStatusReportsReadyToPublish(t *testing.T) {
 
 func TestStatusBlocksWhenDraftChangesAfterPublishDecision(t *testing.T) {
 	root, id := createStatusWorkspaceThroughCheck(t)
-	if _, err := RecordDecision(root, id, DecisionInput{
-		Stage: StagePublish, Decision: DecisionApproved, DecidedBy: "chenchi",
-		Role: "knowledge_owner", Source: "conversation", Reason: "publish approved",
-		RecordedBy: "codex",
-	}); err != nil {
-		t.Fatalf("record publish decision: %v", err)
-	}
+	recordStatusPublishApproval(t, root, id)
 	writeTestFile(t, root, "knowledge/.inbox/packages/mall-api/redis-cache/references/redis.md", "changed\n")
 
 	status, err := Status(root, id)
@@ -64,6 +60,95 @@ func TestStatusBlocksWhenDraftChangesAfterPublishDecision(t *testing.T) {
 	}
 	if !statusHasCategory(status.Findings, "draft_changed") {
 		t.Fatalf("expected draft_changed finding, got %#v", status.Findings)
+	}
+}
+
+func TestStatusEvidenceReportsChangedDesignBound(t *testing.T) {
+	root, id := createStatusWorkspaceThroughCheck(t)
+	recordStatusPublishApproval(t, root, id)
+	writeStatusDesign(t, root, "knowledge/.inbox/designs/mall-api/redis-cache/design.json", "knowledge/.inbox/packages/mall-api/redis-cache-updated")
+
+	status, err := Status(root, id)
+	if err != nil {
+		t.Fatalf("Status returned error: %v", err)
+	}
+	if status.Evidence.DesignBound == "pass" {
+		t.Fatalf("expected non-pass design evidence after design change, got %#v", status)
+	}
+	if !statusHasCategory(status.Findings, "design_changed") {
+		t.Fatalf("expected design_changed finding, got %#v", status.Findings)
+	}
+}
+
+func TestStatusDoesNotDuplicateMissingPublishDecisionFinding(t *testing.T) {
+	root, id := createStatusWorkspaceThroughCheck(t)
+
+	status, err := Status(root, id)
+	if err != nil {
+		t.Fatalf("Status returned error: %v", err)
+	}
+	if got := statusCategoryCount(status.Findings, "needs_publish_decision"); got != 1 {
+		t.Fatalf("expected one needs_publish_decision finding, got %d: %#v", got, status.Findings)
+	}
+	if statusHasCategory(status.Findings, "decision_mismatch") {
+		t.Fatalf("expected no generic decision_mismatch for missing publish decision, got %#v", status.Findings)
+	}
+}
+
+func TestStatusBlocksDraftReadyWhenDraftPathMissing(t *testing.T) {
+	root, id := createStatusWorkspaceThroughCheck(t)
+	recordStatusPublishApproval(t, root, id)
+	draftPath := filepath.Join(root, "knowledge/.inbox/packages/mall-api/redis-cache")
+	officialPath := filepath.Join(root, "knowledge/packages/mall-api/redis-cache")
+	if err := os.MkdirAll(filepath.Dir(officialPath), 0o755); err != nil {
+		t.Fatalf("create official parent: %v", err)
+	}
+	if err := os.Rename(draftPath, officialPath); err != nil {
+		t.Fatalf("move draft to official path: %v", err)
+	}
+
+	status, err := Status(root, id)
+	if err != nil {
+		t.Fatalf("Status returned error: %v", err)
+	}
+	if status.ReadyToPublish {
+		t.Fatalf("expected missing draft to block ready-to-publish, got %#v", status)
+	}
+	if status.Result != "blocked" {
+		t.Fatalf("expected blocked missing draft status, got %#v", status)
+	}
+	if !statusHasCategory(status.Findings, "draft_missing") {
+		t.Fatalf("expected draft_missing finding, got %#v", status.Findings)
+	}
+}
+
+func TestStatusDoesNotPassUnsafeOfficialTarget(t *testing.T) {
+	root, id := createStatusWorkspaceThroughCheck(t)
+	recordStatusPublishApproval(t, root, id)
+	outside := filepath.Join(root, "..", "unsafe-official-target")
+	if err := os.MkdirAll(outside, 0o755); err != nil {
+		t.Fatalf("create outside target: %v", err)
+	}
+	loaded, err := Load(root, id)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	loaded.Record.State = StatePublished
+	loaded.Record.Subject.OfficialPath = "../unsafe-official-target"
+	recordPath, err := resolvedPathInsideRoot(root, loaded.Path)
+	if err != nil {
+		t.Fatalf("resolve record path: %v", err)
+	}
+	if err := writeRecord(recordPath, loaded.Record); err != nil {
+		t.Fatalf("write record: %v", err)
+	}
+
+	status, err := Status(root, id)
+	if err != nil {
+		t.Fatalf("Status returned error: %v", err)
+	}
+	if status.Evidence.OfficialTarget == "pass" {
+		t.Fatalf("expected unsafe official target not to pass, got %#v", status)
 	}
 }
 
@@ -173,4 +258,25 @@ func statusHasCategory(findings []StatusFinding, category string) bool {
 		}
 	}
 	return false
+}
+
+func statusCategoryCount(findings []StatusFinding, category string) int {
+	count := 0
+	for _, finding := range findings {
+		if finding.Category == category {
+			count++
+		}
+	}
+	return count
+}
+
+func recordStatusPublishApproval(t *testing.T, root string, id string) {
+	t.Helper()
+	if _, err := RecordDecision(root, id, DecisionInput{
+		Stage: StagePublish, Decision: DecisionApproved, DecidedBy: "chenchi",
+		Role: "knowledge_owner", Source: "conversation", Reason: "publish approved",
+		RecordedBy: "codex",
+	}); err != nil {
+		t.Fatalf("record publish decision: %v", err)
+	}
 }

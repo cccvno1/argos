@@ -1,8 +1,6 @@
 package provenance
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -28,7 +26,7 @@ func Status(root string, idOrPath string) (StatusResult, error) {
 		Subject:      loaded.Record.Subject,
 		Evidence: StatusEvidence{
 			DesignBound:        "pass",
-			DraftBound:         "pass",
+			DraftBound:         draftTargetEvidence(root, loaded.Record),
 			LatestCheck:        latestCheckEvidence(loaded.Record),
 			DesignDecision:     decisionEvidence(decisions, StageDesign),
 			DraftWriteDecision: decisionEvidence(decisions, StageDraftWrite),
@@ -37,8 +35,13 @@ func Status(root string, idOrPath string) (StatusResult, error) {
 		},
 	}
 	for _, finding := range verify.Findings {
-		result.Findings = append(result.Findings, statusFindingForVerifyFinding(finding))
+		applyVerifyFindingEvidence(&result.Evidence, loaded.Record, finding)
+		statusFinding, ok := statusFindingForVerifyFinding(finding)
+		if ok {
+			result.Findings = append(result.Findings, statusFinding)
+		}
 	}
+	addMissingDraftFinding(&result, loaded.Record)
 	addMissingDecisionFinding(&result, result.Evidence.DesignDecision, "needs_design_decision", "design decision is missing")
 	addMissingDecisionFinding(&result, result.Evidence.DraftWriteDecision, "needs_draft_write_decision", "draft-write decision is missing")
 	addMissingDecisionFinding(&result, result.Evidence.PublishDecision, "needs_publish_decision", "publish decision is missing")
@@ -67,6 +70,20 @@ func latestCheckEvidence(record Record) string {
 	return "failed"
 }
 
+func draftTargetEvidence(root string, record Record) string {
+	if record.State != StateDraft {
+		return "pass"
+	}
+	if strings.TrimSpace(record.Subject.DraftPath) == "" {
+		return "missing"
+	}
+	_, ok, err := existingPathInsideRoot(root, record.Subject.DraftPath)
+	if err != nil || !ok {
+		return "missing"
+	}
+	return "pass"
+}
+
 func decisionEvidence(decisions []Decision, stage string) string {
 	for i := len(decisions) - 1; i >= 0; i-- {
 		if decisions[i].Stage != stage {
@@ -87,13 +104,45 @@ func officialTargetEvidence(root string, record Record) string {
 	if strings.TrimSpace(record.Subject.OfficialPath) == "" {
 		return "missing"
 	}
-	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(record.Subject.OfficialPath))); err != nil {
+	_, ok, err := existingPathInsideRoot(root, record.Subject.OfficialPath)
+	if err != nil {
+		return "unsafe"
+	}
+	if !ok {
 		return "missing"
 	}
 	return "pass"
 }
 
-func statusFindingForVerifyFinding(message string) StatusFinding {
+func applyVerifyFindingEvidence(evidence *StatusEvidence, record Record, message string) {
+	switch {
+	case strings.Contains(message, "design hash changed"):
+		evidence.DesignBound = "changed"
+	case strings.Contains(message, "draft tree hash changed"):
+		evidence.DraftBound = "changed"
+	case strings.Contains(message, "latest check hash changed") ||
+		strings.Contains(message, "latest check result does not match stored check"):
+		evidence.LatestCheck = "changed"
+	case strings.Contains(message, "latest check is required") ||
+		strings.Contains(message, "latest check path is required"):
+		evidence.LatestCheck = "missing"
+	case strings.Contains(message, "latest check"):
+		evidence.LatestCheck = "failed"
+	case containsNonEmpty(message, record.Subject.DesignPath):
+		evidence.DesignBound = "missing"
+	case containsNonEmpty(message, record.Subject.DraftPath):
+		evidence.DraftBound = "missing"
+	}
+}
+
+func containsNonEmpty(s string, substr string) bool {
+	return strings.TrimSpace(substr) != "" && strings.Contains(s, substr)
+}
+
+func statusFindingForVerifyFinding(message string) (StatusFinding, bool) {
+	if isMissingApprovalDecisionFinding(message) {
+		return StatusFinding{}, false
+	}
 	category := "evidence_mismatch"
 	if strings.Contains(message, "design hash changed") {
 		category = "design_changed"
@@ -107,7 +156,22 @@ func statusFindingForVerifyFinding(message string) StatusFinding {
 	if strings.Contains(message, "decision") {
 		category = "decision_mismatch"
 	}
-	return StatusFinding{Severity: "blocked", Category: category, Message: message}
+	return StatusFinding{Severity: "blocked", Category: category, Message: message}, true
+}
+
+func isMissingApprovalDecisionFinding(message string) bool {
+	return strings.HasSuffix(message, " approval decision is required")
+}
+
+func addMissingDraftFinding(result *StatusResult, record Record) {
+	if record.State != StateDraft || result.Evidence.DraftBound != "missing" {
+		return
+	}
+	result.Findings = append(result.Findings, StatusFinding{
+		Severity: "blocked",
+		Category: "draft_missing",
+		Message:  "draft target is missing",
+	})
 }
 
 func addMissingDecisionFinding(result *StatusResult, evidence string, category string, message string) {
