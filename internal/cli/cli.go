@@ -162,30 +162,6 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			return 1
 		}
 		return 0
-	case "promote":
-		flags := flag.NewFlagSet("promote", flag.ContinueOnError)
-		flags.SetOutput(stderr)
-		path := flags.String("path", "", "draft item or package path")
-		if err := flags.Parse(args[1:]); err != nil {
-			return 2
-		}
-		if strings.TrimSpace(*path) == "" {
-			fmt.Fprintln(stderr, "promote: --path is required")
-			return 2
-		}
-		root, err := os.Getwd()
-		if err != nil {
-			fmt.Fprintf(stderr, "get current directory: %v\n", err)
-			return 1
-		}
-		target, err := publishDraft(root, *path, stderr)
-		if err != nil {
-			fmt.Fprintf(stderr, "promote: %v\n", err)
-			return 1
-		}
-		fmt.Fprintf(stdout, "promoted %s\n", target)
-		fmt.Fprintln(stdout, "run argos index to refresh query results")
-		return 0
 	case "new":
 		fmt.Fprintf(stderr, "command %q is not implemented yet\n", args[0])
 		return 1

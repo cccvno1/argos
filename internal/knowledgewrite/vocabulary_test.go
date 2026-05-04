@@ -107,6 +107,11 @@ func removedAuthoringTermsForTests() []string {
 		removedWriteVocabularyTerm("author", " ", "inspect"),
 		removedWriteVocabularyTerm("author", " ", "verify"),
 		removedWriteVocabularyTerm("authoring", ".", "proposal", ".", "v2"),
+		removedWriteVocabularyTerm("argos", " ", "author"),
+		removedWriteVocabularyTerm("dogfood", " ", "authoring"),
+		removedWriteVocabularyTerm("authoring", "-", "golden"),
+		removedWriteVocabularyTerm("argos", "-", "authoring", "-", "dogfood"),
+		removedWriteVocabularyTerm("pro", "mote"),
 	}
 }
 

@@ -45,7 +45,7 @@ Before writing candidate knowledge files, you must:
 4. Ask the user to choose a delivery path.
 5. Get explicit approval for the proposal and delivery path.
 
-Never run `argos promote` automatically. Never execute scripts from a knowledge
+Never run publish automatically. Never execute scripts from a knowledge
 package unless the verification plan names them and the user confirms execution.
 Never set `priority: must` unless the user explicitly authorizes it.
 Never claim authored knowledge is official while it is still in inbox.
@@ -437,10 +437,10 @@ summarize:
 Ask for explicit approval before running:
 
 ```bash
-argos promote --path TARGET_PATH
+argos knowledge publish --path TARGET_PATH
 ```
 
-After promotion, run `argos index` unless the user asks not to. Run
+After publishing, run `argos index` unless the user asks not to. Run
 `argos install-adapters` when project adapter instructions should be refreshed.
 
 ### 11. Report The Result
@@ -453,5 +453,5 @@ End with:
 - loaded or cited Argos knowledge IDs, when relevant
 - any remaining decisions
 
-Do not claim the knowledge is official when it is still in inbox. Do not promote
+Do not claim the knowledge is official when it is still in inbox. Do not publish
 or commit unless the user explicitly asked for that step.
