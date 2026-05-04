@@ -1535,7 +1535,8 @@ func TestKnowledgeWritePublishAndFindbackFlow(t *testing.T) {
 	if checkResult.Result != "pass" && checkResult.Result != "review-needed" {
 		t.Fatalf("expected check pass or review-needed, got: %s", checkOutput)
 	}
-	runOK(t, root, []string{"knowledge", "publish", "--design", designPath, "--path", draftPath})
+	provenanceID := createPublishableCLIProvenance(t, root, designPath, draftPath)
+	runOK(t, root, []string{"knowledge", "publish", "--provenance", provenanceID})
 	runOK(t, root, []string{"index"})
 
 	findOutput := runOK(t, root, []string{
@@ -1583,7 +1584,7 @@ func TestUsageUsesWriteVocabulary(t *testing.T) {
 		"argos project list --json",
 		"argos knowledge design --json --project <project> --intent <intent>",
 		"argos knowledge check --json --design <design.json> --draft <draft>",
-		"argos knowledge publish --design <design.json> --path <draft>",
+		"argos knowledge publish --provenance <id>",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("usage missing %q:\n%s", want, body)
@@ -1714,9 +1715,10 @@ func TestRunKnowledgePublishMovesInboxPackageToOfficialPackages(t *testing.T) {
 	targetPath := "knowledge/packages/backend/redis/best-practices"
 	writeCLIFile(t, root, draftPath+"/KNOWLEDGE.md", validCLICheckDraftPackage(draftID))
 	chdir(t, root)
+	provenanceID := createPublishableCLIProvenance(t, root, designPath, draftPath)
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"knowledge", "publish", "--design", designPath, "--path", draftPath}, &stdout, &stderr)
+	code := Run([]string{"knowledge", "publish", "--provenance", provenanceID}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d stderr=%q", code, stderr.String())
 	}
@@ -1741,6 +1743,60 @@ func TestRunKnowledgePublishMovesInboxPackageToOfficialPackages(t *testing.T) {
 	}
 }
 
+func TestRunKnowledgePublishWithProvenanceMovesDraftAndProvenance(t *testing.T) {
+	root := t.TempDir()
+	initWorkspace(t, root)
+	draftPath := "knowledge/.inbox/packages/backend/redis/best-practices"
+	draftID := "package:backend.redis.best-practices.v1"
+	designPath := writeCLIKnowledgeDesign(t, root, "knowledge/.inbox/designs/redis/design.json", validCLIKnowledgeDesign(draftPath, draftID))
+	writeCLIFile(t, root, draftPath+"/KNOWLEDGE.md", validCLICheckDraftPackage(draftID))
+	chdir(t, root)
+	provenanceID := createPublishableCLIProvenance(t, root, designPath, draftPath)
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"knowledge", "publish", "--provenance", provenanceID}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if _, err := os.Stat(filepath.Join(root, "knowledge/packages/backend/redis/best-practices/KNOWLEDGE.md")); err != nil {
+		t.Fatalf("expected official package: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "knowledge/.inbox/provenance", provenanceID)); !os.IsNotExist(err) {
+		t.Fatalf("expected inbox provenance removed, stat err=%v", err)
+	}
+	publishedProvenance := filepath.Join(root, "knowledge/provenance", strings.ReplaceAll(draftID, ":", "_"), provenanceID, "provenance.json")
+	if _, err := os.Stat(publishedProvenance); err != nil {
+		t.Fatalf("expected published provenance: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "published knowledge/packages/backend/redis/best-practices") {
+		t.Fatalf("unexpected stdout: %q", stdout.String())
+	}
+}
+
+func TestRunKnowledgePublishWithProvenanceRejectsChangedDraft(t *testing.T) {
+	root := t.TempDir()
+	initWorkspace(t, root)
+	draftPath := "knowledge/.inbox/packages/backend/redis/best-practices"
+	draftID := "package:backend.redis.best-practices.v1"
+	designPath := writeCLIKnowledgeDesign(t, root, "knowledge/.inbox/designs/redis/design.json", validCLIKnowledgeDesign(draftPath, draftID))
+	writeCLIFile(t, root, draftPath+"/KNOWLEDGE.md", validCLICheckDraftPackage(draftID))
+	chdir(t, root)
+	provenanceID := createPublishableCLIProvenance(t, root, designPath, draftPath)
+	writeCLIFile(t, root, draftPath+"/references/changed.md", "Changed after approval.\n")
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"knowledge", "publish", "--provenance", provenanceID}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("expected exit code 1, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "draft tree hash changed") {
+		t.Fatalf("expected changed draft error, got %q", stderr.String())
+	}
+	if _, err := os.Stat(filepath.Join(root, draftPath, "KNOWLEDGE.md")); err != nil {
+		t.Fatalf("expected draft to remain in inbox: %v", err)
+	}
+}
+
 func TestRunKnowledgePublishRejectsPackageEntrypointPath(t *testing.T) {
 	root := t.TempDir()
 	initWorkspace(t, root)
@@ -1758,9 +1814,10 @@ func TestRunKnowledgePublishRejectsPackageEntrypointPath(t *testing.T) {
 	writeCLIFile(t, root, draftFile, validCLICheckDraftPackage(draftID))
 	writeCLIFile(t, root, draftPath+"/references/redis-cache.md", "Redis cache reference must move with the package.\n")
 	chdir(t, root)
+	provenanceID := createPublishableCLIProvenance(t, root, designPath, draftFile)
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"knowledge", "publish", "--design", designPath, "--path", draftFile}, &stdout, &stderr)
+	code := Run([]string{"knowledge", "publish", "--provenance", provenanceID}, &stdout, &stderr)
 
 	if code != 1 {
 		t.Fatalf("expected exit code 1, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
@@ -1794,9 +1851,10 @@ func TestRunKnowledgePublishRejectsNonInboxPath(t *testing.T) {
 	designPath := writeCLIKnowledgeDesign(t, root, "knowledge/.inbox/designs/redis/design.json", design)
 	writeCLIFile(t, root, draftPath+"/KNOWLEDGE.md", strings.Replace(validCLICheckDraftPackage(draftID), "status: draft", "status: active", 1))
 	chdir(t, root)
+	provenanceID := createPublishableCLIProvenance(t, root, designPath, draftPath)
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"knowledge", "publish", "--design", designPath, "--path", draftPath}, &stdout, &stderr)
+	code := Run([]string{"knowledge", "publish", "--provenance", provenanceID}, &stdout, &stderr)
 
 	if code != 1 {
 		t.Fatalf("expected exit code 1, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
@@ -1806,7 +1864,7 @@ func TestRunKnowledgePublishRejectsNonInboxPath(t *testing.T) {
 	}
 }
 
-func TestRunKnowledgePublishRequiresDesign(t *testing.T) {
+func TestRunKnowledgePublishRequiresProvenance(t *testing.T) {
 	root := t.TempDir()
 	initWorkspace(t, root)
 	draftPath := "knowledge/.inbox/packages/backend/redis/best-practices"
@@ -1814,12 +1872,12 @@ func TestRunKnowledgePublishRequiresDesign(t *testing.T) {
 	chdir(t, root)
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"knowledge", "publish", "--path", draftPath}, &stdout, &stderr)
+	code := Run([]string{"knowledge", "publish"}, &stdout, &stderr)
 	if code != 2 {
 		t.Fatalf("expected exit code 2, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "knowledge publish: --design is required") {
-		t.Fatalf("expected missing design error, got %q", stderr.String())
+	if !strings.Contains(stderr.String(), "knowledge publish: --provenance is required") {
+		t.Fatalf("expected missing provenance error, got %q", stderr.String())
 	}
 }
 
@@ -1833,16 +1891,17 @@ func TestRunKnowledgePublishRequiresPublishApproval(t *testing.T) {
 	designPath := writeCLIKnowledgeDesign(t, root, "knowledge/.inbox/designs/redis/design.json", design)
 	writeCLIFile(t, root, draftPath+"/KNOWLEDGE.md", validCLICheckDraftPackage(draftID))
 	chdir(t, root)
+	provenanceID := createCLIProvenanceThroughCheck(t, root, designPath, draftPath)
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"knowledge", "publish", "--design", designPath, "--path", draftPath}, &stdout, &stderr)
+	code := Run([]string{"knowledge", "publish", "--provenance", provenanceID}, &stdout, &stderr)
 	if code != 1 {
 		t.Fatalf("expected exit code 1, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
 	if _, err := os.Stat(filepath.Join(root, draftPath, "KNOWLEDGE.md")); err != nil {
 		t.Fatalf("expected draft to remain in inbox: %v", err)
 	}
-	if !strings.Contains(stderr.String(), "review.publish_approved") {
+	if !strings.Contains(stderr.String(), "publish approval decision is required") {
 		t.Fatalf("expected publish approval error, got %q", stderr.String())
 	}
 }
@@ -1857,9 +1916,10 @@ func TestRunKnowledgePublishLeavesDraftInInboxWhenOfficialValidationFails(t *tes
 	writeCLIFile(t, root, "knowledge/packages/backend/redis/existing/KNOWLEDGE.md", validCLIPackage(duplicateID))
 	writeCLIFile(t, root, draftPath+"/KNOWLEDGE.md", validCLICheckDraftPackage(duplicateID))
 	chdir(t, root)
+	provenanceID := createPublishableCLIProvenance(t, root, designPath, draftPath)
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"knowledge", "publish", "--design", designPath, "--path", draftPath}, &stdout, &stderr)
+	code := Run([]string{"knowledge", "publish", "--provenance", provenanceID}, &stdout, &stderr)
 	if code != 1 {
 		t.Fatalf("expected exit code 1, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -1871,6 +1931,9 @@ func TestRunKnowledgePublishLeavesDraftInInboxWhenOfficialValidationFails(t *tes
 	}
 	if _, err := os.Stat(filepath.Join(root, targetPath)); !os.IsNotExist(err) {
 		t.Fatalf("expected official target not to remain, stat err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "knowledge/.inbox/provenance", provenanceID, "provenance.json")); err != nil {
+		t.Fatalf("expected provenance to roll back to inbox: %v", err)
 	}
 	if !strings.Contains(stderr.String(), "duplicate id "+duplicateID) {
 		t.Fatalf("expected duplicate id validation error, got %q", stderr.String())
@@ -1898,9 +1961,10 @@ Official roots must not carry draft status.
 `)
 	writeCLIFile(t, root, draftPath+"/KNOWLEDGE.md", validCLICheckDraftPackage(draftID))
 	chdir(t, root)
+	provenanceID := createPublishableCLIProvenance(t, root, designPath, draftPath)
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"knowledge", "publish", "--design", designPath, "--path", draftPath}, &stdout, &stderr)
+	code := Run([]string{"knowledge", "publish", "--provenance", provenanceID}, &stdout, &stderr)
 
 	if code != 1 {
 		t.Fatalf("expected exit code 1, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
@@ -2523,6 +2587,61 @@ func runOK(t *testing.T, root string, args []string) string {
 		t.Fatalf("Run(%v) stderr = %q", args, stderr.String())
 	}
 	return stdout.String()
+}
+
+func createPublishableCLIProvenance(t *testing.T, root string, designPath string, draftPath string) string {
+	t.Helper()
+	provenanceID := createCLIProvenanceThroughCheck(t, root, designPath, draftPath)
+	runOK(t, root, []string{
+		"provenance", "record-decision", "--json",
+		"--provenance", provenanceID,
+		"--stage", "publish",
+		"--decision", "approved",
+		"--decided-by", "chenchi",
+		"--role", "knowledge_owner",
+		"--source", "conversation",
+		"--reason", "publish approved.",
+		"--recorded-by", "codex",
+	})
+	return provenanceID
+}
+
+func createCLIProvenanceThroughCheck(t *testing.T, root string, designPath string, draftPath string) string {
+	t.Helper()
+	startOutput := runOK(t, root, []string{
+		"provenance", "start", "--json",
+		"--design", designPath,
+		"--draft", draftPath,
+		"--created-by", "codex",
+	})
+	var startResult struct {
+		ProvenanceID string `json:"provenance_id"`
+	}
+	if err := json.Unmarshal([]byte(startOutput), &startResult); err != nil {
+		t.Fatalf("parse provenance start JSON: %v\n%s", err, startOutput)
+	}
+	if startResult.ProvenanceID == "" {
+		t.Fatalf("provenance start JSON missing provenance_id: %s", startOutput)
+	}
+
+	for _, stage := range []string{"design", "draft_write"} {
+		runOK(t, root, []string{
+			"provenance", "record-decision", "--json",
+			"--provenance", startResult.ProvenanceID,
+			"--stage", stage,
+			"--decision", "approved",
+			"--decided-by", "chenchi",
+			"--role", "knowledge_owner",
+			"--source", "conversation",
+			"--reason", stage + " approved.",
+			"--recorded-by", "codex",
+		})
+	}
+	runOK(t, root, []string{
+		"provenance", "record-check", "--json",
+		"--provenance", startResult.ProvenanceID,
+	})
+	return startResult.ProvenanceID
 }
 
 func writeJSONFixture(t *testing.T, root string, rel string, value any) string {

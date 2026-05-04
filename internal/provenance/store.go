@@ -2,12 +2,14 @@ package provenance
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -25,6 +27,12 @@ type Loaded struct {
 	Record Record
 	Path   string
 	Dir    string
+}
+
+type PublishMove struct {
+	Record  Record
+	FromDir string
+	ToDir   string
 }
 
 func Start(root string, req StartRequest) (Record, error) {
@@ -352,11 +360,120 @@ func RecordCheck(root string, idOrPath string) (knowledgewrite.CheckResponse, er
 	return check, nil
 }
 
+func PreparePublishMove(root string, idOrPath string, publishedBy string) (PublishMove, func() error, error) {
+	loaded, err := Load(root, idOrPath)
+	if err != nil {
+		return PublishMove{}, nil, err
+	}
+	verify, err := Verify(root, idOrPath)
+	if err != nil {
+		return PublishMove{}, nil, err
+	}
+	if verify.Result != "pass" && shouldVerifyPublishedDraft(root, loaded.Record) {
+		publishedDraftHash, hashErr := hashPublishedDraftAsDraft(root, loaded.Record)
+		verify, err = verifyLoadedWithDraftHash(root, idOrPath, loaded, publishedDraftHash, hashErr)
+		if err != nil {
+			return PublishMove{}, nil, err
+		}
+	}
+	if verify.Result != "pass" {
+		return PublishMove{}, nil, fmt.Errorf("provenance verify failed: %s", strings.Join(verify.Findings, "; "))
+	}
+
+	original := loaded.Record
+	fromDir := loaded.Dir
+	fromAbs, ok, err := existingPathInsideRoot(root, fromDir)
+	if err != nil {
+		return PublishMove{}, nil, err
+	}
+	if !ok {
+		return PublishMove{}, nil, fmt.Errorf("%s: provenance record not found", fromDir)
+	}
+
+	knowledgeID := safeKnowledgeID(loaded.Record.Subject.KnowledgeID)
+	toRel := filepath.Join("knowledge", "provenance", knowledgeID, loaded.Record.ProvenanceID)
+	toClean, err := cleanRelPath(toRel)
+	if err != nil {
+		return PublishMove{}, nil, err
+	}
+	if filepath.ToSlash(toClean) != "knowledge/provenance/"+knowledgeID+"/"+loaded.Record.ProvenanceID {
+		return PublishMove{}, nil, fmt.Errorf("%s: invalid published provenance path", filepath.ToSlash(toRel))
+	}
+	if _, ok, err := existingPathInsideRoot(root, toClean); err != nil {
+		return PublishMove{}, nil, err
+	} else if ok {
+		return PublishMove{}, nil, fmt.Errorf("published provenance target already exists: %s", filepath.ToSlash(toClean))
+	}
+
+	loaded.Record.State = StatePublished
+	loaded.Record.PublishedAt = time.Now().UTC().Format(time.RFC3339)
+	loaded.Record.PublishedBy = strings.TrimSpace(publishedBy)
+	if loaded.Record.PublishedBy == "" {
+		loaded.Record.PublishedBy = "unknown"
+	}
+	loaded.Record.PublishedFrom = loaded.Record.Subject.DraftPath
+	loaded.Record.PublishedTo = loaded.Record.Subject.OfficialPath
+
+	recordPath, err := resolvedPathInsideRoot(root, loaded.Path)
+	if err != nil {
+		return PublishMove{}, nil, err
+	}
+	if err := writeRecord(recordPath, loaded.Record); err != nil {
+		return PublishMove{}, nil, err
+	}
+
+	toParent, err := safeMkdirAllInsideRoot(root, filepath.Dir(toClean))
+	if err != nil {
+		_ = writeRecord(recordPath, original)
+		return PublishMove{}, nil, err
+	}
+	toAbs := filepath.Join(toParent, filepath.Base(toClean))
+	if err := os.Rename(fromAbs, toAbs); err != nil {
+		_ = writeRecord(recordPath, original)
+		return PublishMove{}, nil, fmt.Errorf("move provenance: %w", err)
+	}
+
+	rollback := func() error {
+		var failures []string
+		fromParent, err := safeMkdirAllInsideRoot(root, filepath.Dir(fromDir))
+		if err != nil {
+			failures = append(failures, fmt.Sprintf("create provenance rollback parent: %v", err))
+		} else if err := os.Rename(toAbs, filepath.Join(fromParent, filepath.Base(fromDir))); err != nil {
+			failures = append(failures, fmt.Sprintf("move provenance back: %v", err))
+		}
+		restoredPath, err := resolvedPathInsideRoot(root, loaded.Path)
+		if err != nil {
+			failures = append(failures, fmt.Sprintf("resolve restored provenance: %v", err))
+		} else if err := writeRecord(restoredPath, original); err != nil {
+			failures = append(failures, fmt.Sprintf("restore provenance record: %v", err))
+		}
+		if len(failures) > 0 {
+			return fmt.Errorf("rollback provenance publish failed: %s", strings.Join(failures, "; "))
+		}
+		return nil
+	}
+
+	return PublishMove{
+		Record:  loaded.Record,
+		FromDir: filepath.ToSlash(fromDir),
+		ToDir:   filepath.ToSlash(toClean),
+	}, rollback, nil
+}
+
 func Verify(root string, idOrPath string) (VerifyResult, error) {
 	loaded, err := Load(root, idOrPath)
 	if err != nil {
 		return VerifyResult{}, err
 	}
+	return verifyLoaded(root, idOrPath, loaded, loaded.Record.Subject.DraftPath)
+}
+
+func verifyLoaded(root string, idOrPath string, loaded Loaded, draftHashPath string) (VerifyResult, error) {
+	draftHash, draftHashErr := HashTree(root, draftHashPath)
+	return verifyLoadedWithDraftHash(root, idOrPath, loaded, draftHash, draftHashErr)
+}
+
+func verifyLoadedWithDraftHash(root string, idOrPath string, loaded Loaded, draftHash string, draftHashErr error) (VerifyResult, error) {
 	var findings []string
 	record := loaded.Record
 	if record.SchemaVersion != SchemaVersion {
@@ -370,9 +487,8 @@ func Verify(root string, idOrPath string) (VerifyResult, error) {
 	} else if designHash != record.Hashes.DesignSHA256 {
 		findings = append(findings, "design hash changed")
 	}
-	draftHash, err := HashTree(root, record.Subject.DraftPath)
-	if err != nil {
-		findings = append(findings, err.Error())
+	if draftHashErr != nil {
+		findings = append(findings, draftHashErr.Error())
 	} else if record.Hashes.DraftTreeSHA256 == "" {
 		findings = append(findings, "draft tree hash is required")
 	} else if draftHash != record.Hashes.DraftTreeSHA256 {
@@ -423,6 +539,135 @@ func Verify(root string, idOrPath string) (VerifyResult, error) {
 		result = "fail"
 	}
 	return VerifyResult{Result: result, ID: record.ProvenanceID, Path: loaded.Dir, Findings: findings}, nil
+}
+
+func hashPublishedDraftAsDraft(root string, record Record) (string, error) {
+	officialClean, err := cleanRelPath(record.Subject.OfficialPath)
+	if err != nil {
+		return "", err
+	}
+	draftClean, err := cleanRelPath(record.Subject.DraftPath)
+	if err != nil {
+		return "", err
+	}
+	officialAbs, err := resolvedPathInsideRoot(root, officialClean)
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Stat(officialAbs)
+	if err != nil {
+		return "", fmt.Errorf("stat %s: %w", filepath.ToSlash(officialClean), err)
+	}
+	if !info.IsDir() {
+		return hashPublishedFileAsDraft(root, officialClean, draftClean)
+	}
+
+	var files []string
+	if err := filepath.WalkDir(officialAbs, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		files = append(files, filepath.ToSlash(rel))
+		return nil
+	}); err != nil {
+		return "", fmt.Errorf("walk %s: %w", filepath.ToSlash(officialClean), err)
+	}
+	sort.Strings(files)
+
+	sum := sha256.New()
+	for _, officialRel := range files {
+		draftRel := rebaseProvenancePath(officialRel, filepath.ToSlash(officialClean), filepath.ToSlash(draftClean))
+		fileHash, err := hashPublishedFileAsDraft(root, officialRel, draftRel)
+		if err != nil {
+			return "", err
+		}
+		sum.Write([]byte(draftRel))
+		sum.Write([]byte{0})
+		sum.Write([]byte(fileHash))
+		sum.Write([]byte{'\n'})
+	}
+	return hex.EncodeToString(sum.Sum(nil)), nil
+}
+
+func hashPublishedFileAsDraft(root string, officialRel string, draftRel string) (string, error) {
+	clean, err := cleanRelPath(officialRel)
+	if err != nil {
+		return "", err
+	}
+	absPath, err := resolvedPathInsideRoot(root, clean)
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Stat(absPath)
+	if err != nil {
+		return "", fmt.Errorf("stat %s: %w", filepath.ToSlash(clean), err)
+	}
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("%s: expected regular file", filepath.ToSlash(clean))
+	}
+	data, err := os.ReadFile(absPath)
+	if err != nil {
+		return "", fmt.Errorf("read %s: %w", filepath.ToSlash(clean), err)
+	}
+	if strings.HasSuffix(filepath.ToSlash(draftRel), ".md") {
+		data = normalizePublishedKnowledgeDraftStatus(data)
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+func normalizePublishedKnowledgeDraftStatus(data []byte) []byte {
+	const opening = "---\n"
+	const closing = "\n---\n"
+	text := strings.ReplaceAll(string(data), "\r\n", "\n")
+	if !strings.HasPrefix(text, opening) {
+		return data
+	}
+	end := strings.Index(text[len(opening):], closing)
+	if end < 0 {
+		return data
+	}
+	frontmatterEnd := len(opening) + end
+	frontmatter := text[len(opening):frontmatterEnd]
+	body := text[frontmatterEnd+len(closing):]
+	lines := strings.Split(frontmatter, "\n")
+	for i, line := range lines {
+		if strings.HasPrefix(line, "status:") {
+			lines[i] = "status: draft"
+			break
+		}
+	}
+	return []byte(opening + strings.Join(lines, "\n") + closing + body)
+}
+
+func rebaseProvenancePath(path string, from string, to string) string {
+	path = filepath.ToSlash(path)
+	if path == from {
+		return to
+	}
+	if strings.HasPrefix(path, from+"/") {
+		return to + strings.TrimPrefix(path, from)
+	}
+	return path
+}
+
+func shouldVerifyPublishedDraft(root string, record Record) bool {
+	if strings.TrimSpace(record.Subject.OfficialPath) == "" {
+		return false
+	}
+	_, draftExists, err := existingPathInsideRoot(root, record.Subject.DraftPath)
+	if err != nil || draftExists {
+		return false
+	}
+	_, officialExists, err := existingPathInsideRoot(root, record.Subject.OfficialPath)
+	return err == nil && officialExists
 }
 
 func validateDecisionInput(input DecisionInput) error {
@@ -646,6 +891,10 @@ func officialPathForDraft(draftPath string) string {
 	default:
 		return slash
 	}
+}
+
+func safeKnowledgeID(id string) string {
+	return strings.NewReplacer(":", "_", "/", "_", "\\", "_").Replace(strings.TrimSpace(id))
 }
 
 func safeMkdirAllInsideRoot(root string, relDir string) (string, error) {
