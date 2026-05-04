@@ -119,6 +119,7 @@ func removedAuthoringTermsForTests() []string {
 		removedWriteVocabularyTerm("Human", " ", "Review", " ", "Decisions"),
 		removedWriteVocabularyTerm("proposal", " ", "artifact"),
 		removedWriteVocabularyTerm("canonical", " ", "JSON", " ", "proposal"),
+		removedWriteVocabularyTerm("knowledge", "/", ".inbox", "/", "proposals"),
 	}
 }
 

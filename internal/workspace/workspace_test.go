@@ -40,7 +40,7 @@ func TestInitCreatesWorkspaceFiles(t *testing.T) {
 	}
 }
 
-func TestInitCreatesAuthoringInboxDirectories(t *testing.T) {
+func TestInitCreatesWriteInboxDirectories(t *testing.T) {
 	root := t.TempDir()
 
 	if err := Init(root); err != nil {
@@ -50,7 +50,7 @@ func TestInitCreatesAuthoringInboxDirectories(t *testing.T) {
 	required := []string{
 		"knowledge/.inbox/items",
 		"knowledge/.inbox/packages",
-		"knowledge/.inbox/proposals",
+		"knowledge/.inbox/designs",
 	}
 	for _, rel := range required {
 		info, err := os.Stat(filepath.Join(root, rel))
@@ -60,6 +60,10 @@ func TestInitCreatesAuthoringInboxDirectories(t *testing.T) {
 		if !info.IsDir() {
 			t.Fatalf("expected %s to be a directory", rel)
 		}
+	}
+	obsoleteDesignPath := filepath.Join(root, "knowledge", ".inbox", "proposals")
+	if _, err := os.Stat(obsoleteDesignPath); !os.IsNotExist(err) {
+		t.Fatalf("expected obsolete proposals inbox to be absent, stat err=%v", err)
 	}
 }
 

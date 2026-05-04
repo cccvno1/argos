@@ -349,7 +349,7 @@ Present the user with the supported write boundaries and wait for a choice.
 Inbox draft:
 
 ```text
-Write under knowledge/.inbox/items/ or knowledge/.inbox/packages/, verify the
+Write under knowledge/.inbox/items/ or knowledge/.inbox/packages/, check the
 draft, and leave it for later review or publishing.
 ```
 

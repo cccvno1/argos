@@ -11,7 +11,7 @@ func Init(root string) error {
 	dirs := []string{
 		"knowledge/.inbox/items",
 		"knowledge/.inbox/packages",
-		"knowledge/.inbox/proposals",
+		"knowledge/.inbox/designs",
 		"knowledge/items",
 		"knowledge/packages",
 		"argos/generated",
