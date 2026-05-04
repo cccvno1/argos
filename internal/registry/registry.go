@@ -17,11 +17,11 @@ type Registry struct {
 }
 
 type Project struct {
-	ID              string   `yaml:"id"`
-	Name            string   `yaml:"name"`
-	Path            string   `yaml:"path"`
-	TechDomains     []string `yaml:"tech_domains"`
-	BusinessDomains []string `yaml:"business_domains"`
+	ID              string   `yaml:"id" json:"id"`
+	Name            string   `yaml:"name" json:"name"`
+	Path            string   `yaml:"path" json:"path"`
+	TechDomains     []string `yaml:"tech_domains" json:"tech_domains"`
+	BusinessDomains []string `yaml:"business_domains" json:"business_domains"`
 }
 
 func Load(root string) (Registry, error) {
