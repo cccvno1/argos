@@ -2,10 +2,13 @@ package knowledgewrite
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"argos/internal/index"
+	"argos/internal/knowledge"
 	"argos/internal/workspace"
 )
 
@@ -132,6 +135,105 @@ func TestDesignKnowledgeRejectsUnsafeDraftPath(t *testing.T) {
 	}
 }
 
+func TestDesignKnowledgeIgnoresIndexOnlyGenericExistingText(t *testing.T) {
+	root := t.TempDir()
+	if err := workspace.Init(root); err != nil {
+		t.Fatalf("init workspace: %v", err)
+	}
+	writeKnowledgewriteTestFile(t, root, "knowledge/packages/mall-api/redis-cache/KNOWLEDGE.md", `---
+id: package:mall-api.redis-cache.v1
+title: Redis Cache Best Practices
+type: package
+tech_domains: [backend]
+business_domains: [catalog]
+projects: [mall-api]
+status: draft
+priority: should
+tags: [redis, cache]
+updated_at: 2026-05-04
+---
+## Purpose
+
+Use stable Redis key namespaces, explicit TTLs, bounded payloads, write-adjacent invalidation, and safe fallbacks when Redis is unavailable.
+
+## When To Use
+
+Use when future agent work matches this scenario.
+`)
+	items, err := knowledge.LoadOfficial(root)
+	if err != nil {
+		t.Fatalf("load official knowledge: %v", err)
+	}
+	if err := index.Rebuild(filepath.Join(root, "argos", "index.db"), items); err != nil {
+		t.Fatalf("rebuild index: %v", err)
+	}
+
+	result, err := Design(root, DesignRequest{
+		Project: "mall-api",
+		Intent:  "I designed a Go service template. Turn it into reusable knowledge so future agents write Go services in this style.",
+	})
+	if err != nil {
+		t.Fatalf("Design returned error: %v", err)
+	}
+	if result.WriteGuidance.State != "ready_to_design" {
+		t.Fatalf("state = %q, want ready_to_design: %#v", result.WriteGuidance.State, result.WriteGuidance)
+	}
+	if result.WriteGuidance.DraftPath == "" {
+		t.Fatalf("draft path should be available for unrelated new knowledge: %#v", result.WriteGuidance)
+	}
+	if len(result.ExistingKnowledge.Index) != 0 {
+		t.Fatalf("generic indexed text should not be reported as existing knowledge: %#v", result.ExistingKnowledge.Index)
+	}
+}
+
+func TestDesignKnowledgeIgnoresSharedProjectAndBroadDomain(t *testing.T) {
+	root := t.TempDir()
+	if err := workspace.Init(root); err != nil {
+		t.Fatalf("init workspace: %v", err)
+	}
+	writeRedisCachePackage(t, root)
+
+	result, err := Design(root, DesignRequest{
+		Project: "mall-api",
+		Intent:  "Capture Go service template conventions for future agents.",
+		Domains: []string{"backend"},
+		Tags:    []string{"go", "template"},
+	})
+	if err != nil {
+		t.Fatalf("Design returned error: %v", err)
+	}
+	if result.WriteGuidance.State != "ready_to_design" {
+		t.Fatalf("state = %q, want ready_to_design: %#v", result.WriteGuidance.State, result.WriteGuidance)
+	}
+	if len(result.ExistingKnowledge.Official) != 0 {
+		t.Fatalf("shared project and broad domain should not be reported as existing knowledge: %#v", result.ExistingKnowledge.Official)
+	}
+}
+
+func TestDesignKnowledgeRelatedExistingKnowledgeRequiresReviewChoice(t *testing.T) {
+	root := t.TempDir()
+	if err := workspace.Init(root); err != nil {
+		t.Fatalf("init workspace: %v", err)
+	}
+	writeRedisCachePackage(t, root)
+
+	result, err := Design(root, DesignRequest{
+		Project: "mall-api",
+		Intent:  "Document Redis cache TTL best practices for future backend agents.",
+		Domains: []string{"backend"},
+		Tags:    []string{"redis", "cache"},
+	})
+	if err != nil {
+		t.Fatalf("Design returned error: %v", err)
+	}
+	if result.WriteGuidance.State != "design_only" {
+		t.Fatalf("state = %q, want design_only: %#v", result.WriteGuidance.State, result.WriteGuidance)
+	}
+	if len(result.ExistingKnowledge.Official) == 0 {
+		t.Fatalf("related Redis package should be reported as existing knowledge")
+	}
+}
+
 func TestDesignKnowledgeDoesNotScopeToAllRegistryDomainsByDefault(t *testing.T) {
 	root := t.TempDir()
 	if err := workspace.Init(root); err != nil {
@@ -186,4 +288,39 @@ func containsText(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func writeRedisCachePackage(t *testing.T, root string) {
+	t.Helper()
+	writeKnowledgewriteTestFile(t, root, "knowledge/packages/mall-api/redis-cache/KNOWLEDGE.md", `---
+id: package:mall-api.redis-cache.v1
+title: Redis Cache Best Practices
+type: package
+tech_domains: [backend]
+business_domains: [catalog]
+projects: [mall-api]
+status: draft
+priority: should
+tags: [redis, cache]
+updated_at: 2026-05-04
+---
+## Purpose
+
+Document Redis cache best practices for backend agents.
+
+## When To Use
+
+Use when implementing Redis cache behavior for Mall API.
+`)
+}
+
+func writeKnowledgewriteTestFile(t *testing.T, root string, rel string, body string) {
+	t.Helper()
+	path := filepath.Join(root, filepath.FromSlash(rel))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", filepath.Dir(path), err)
+	}
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
 }

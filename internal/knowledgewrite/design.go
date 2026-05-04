@@ -611,22 +611,30 @@ func isKnowledgeWriteOverlapStopword(term string) bool {
 }
 
 func existingReasons(item knowledge.Item, req DesignRequest, terms []string) []string {
-	var reasons []string
+	var contextReasons []string
+	var relatedReasons []string
 	project := strings.TrimSpace(req.Project)
-	projectReason := ""
 	if containsStringValue(item.Projects, project) {
-		projectReason = "project:" + project
+		contextReasons = append(contextReasons, "project:"+project)
 	}
 	for _, tag := range req.Tags {
 		tag = strings.TrimSpace(tag)
 		if containsStringValue(item.Tags, tag) {
-			reasons = append(reasons, "tag:"+tag)
+			if isStrongExistingKnowledgeSignal(tag) {
+				relatedReasons = append(relatedReasons, "tag:"+tag)
+			} else {
+				contextReasons = append(contextReasons, "tag:"+tag)
+			}
 		}
 	}
 	for _, domain := range req.Domains {
 		domain = strings.TrimSpace(domain)
 		if containsStringValue(item.TechDomains, domain) || containsStringValue(item.BusinessDomains, domain) {
-			reasons = append(reasons, "domain:"+domain)
+			if isStrongExistingKnowledgeSignal(domain) {
+				relatedReasons = append(relatedReasons, "domain:"+domain)
+			} else {
+				contextReasons = append(contextReasons, "domain:"+domain)
+			}
 		}
 	}
 	searchText := strings.ToLower(strings.Join([]string{
@@ -640,13 +648,57 @@ func existingReasons(item knowledge.Item, req DesignRequest, terms []string) []s
 	}, " "))
 	for _, term := range terms {
 		if strings.Contains(searchText, strings.ToLower(term)) {
-			reasons = append(reasons, "term:"+term)
+			if isStrongExistingKnowledgeSignal(term) {
+				relatedReasons = append(relatedReasons, "term:"+term)
+			} else {
+				contextReasons = append(contextReasons, "term:"+term)
+			}
 		}
 	}
-	if len(reasons) > 0 && projectReason != "" {
-		reasons = append([]string{projectReason}, reasons...)
+	if len(relatedReasons) == 0 {
+		return nil
 	}
+	reasons := append(contextReasons, relatedReasons...)
 	return uniqueNonEmpty(reasons)
+}
+
+func isStrongExistingKnowledgeSignal(value string) bool {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" || isKnowledgeWriteOverlapStopword(value) {
+		return false
+	}
+	switch value {
+	case "backend",
+		"frontend",
+		"database",
+		"databases",
+		"service",
+		"services",
+		"implementation",
+		"implementing",
+		"implement",
+		"development",
+		"work",
+		"style",
+		"styles",
+		"standard",
+		"standards",
+		"best",
+		"practice",
+		"practices",
+		"guidance",
+		"document",
+		"designed",
+		"design",
+		"capture",
+		"write",
+		"usage",
+		"scenario",
+		"topic":
+		return false
+	default:
+		return true
+	}
 }
 
 func indexExistingKnowledge(root string, req DesignRequest) []ExistingMatch {
@@ -663,6 +715,7 @@ func indexExistingKnowledge(root string, req DesignRequest) []ExistingMatch {
 		return nil
 	}
 	seen := map[string]bool{}
+	terms := overlapTerms(req)
 	var out []ExistingMatch
 	for _, match := range matches {
 		if seen[match.ItemID] {
@@ -673,12 +726,16 @@ func indexExistingKnowledge(root string, req DesignRequest) []ExistingMatch {
 		if err != nil {
 			continue
 		}
+		reasons := existingReasons(item, req, terms)
+		if len(reasons) == 0 {
+			continue
+		}
 		out = append(out, ExistingMatch{
 			Kind:    "index",
 			ID:      item.ID,
 			Title:   item.Title,
 			Path:    item.Path,
-			Reasons: []string{"index_text_match"},
+			Reasons: uniqueNonEmpty(append(reasons, "index_text_match")),
 		})
 	}
 	sortExisting(out)
