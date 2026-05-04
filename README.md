@@ -213,11 +213,11 @@ When the user explicitly asks to create durable knowledge, use the write flow:
 2. Run `argos knowledge design --json --project <project> --intent <intent>`.
 3. Write the returned `knowledge_design_template` to `write_guidance.design_path`.
 4. Start provenance with `argos provenance start --json --design <design.json> --draft <draft-path>`.
-5. Record the human design decision with `argos provenance record-decision --json --provenance <id> --stage design`.
-6. Record the draft-write decision with `argos provenance record-decision --json --provenance <id> --stage draft_write`.
+5. Record the human design decision with `argos provenance record-decision --json --provenance <id> --stage design --decision approved --decided-by <actor> --role knowledge_owner --source conversation --reason "<reason>" --recorded-by <agent>`.
+6. Record the draft-write decision with `argos provenance record-decision --json --provenance <id> --stage draft_write --decision approved --decided-by <actor> --role knowledge_owner --source conversation --reason "<reason>" --recorded-by <agent>`.
 7. Write draft knowledge only after the design and draft-write decisions are recorded.
 8. Run `argos provenance record-check --json --provenance <id>`.
-9. Record the publish decision with `argos provenance record-decision --json --provenance <id> --stage publish`.
+9. Record the publish decision with `argos provenance record-decision --json --provenance <id> --stage publish --decision approved --decided-by <actor> --role knowledge_owner --source conversation --reason "<reason>" --recorded-by <agent>`.
 10. Run `argos provenance verify --json --provenance <id>`.
 11. Publish with `argos knowledge publish --provenance <id>`.
 12. Run `argos index`.
@@ -283,7 +283,7 @@ argos project list --json
 argos knowledge design --json --project <project> --intent <intent>
 argos knowledge check --json --design <design.json> --draft <draft>
 argos provenance start --json --design <design.json> --draft <draft>
-argos provenance record-decision --json --provenance <id>
+argos provenance record-decision --json --provenance <id> --stage <stage> --decision <approved|changes_requested|rejected> --decided-by <actor> --role <role> --source <source> --reason <reason> --recorded-by <agent>
 argos provenance record-check --json --provenance <id>
 argos provenance verify --json --provenance <id>
 argos knowledge publish --provenance <id>

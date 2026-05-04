@@ -392,8 +392,16 @@ Do not infer the write boundary from context. The user owns that choice.
 
 ### 8. Write Only After Approval
 
-After the design and draft-write decisions are recorded in provenance, write
-files only inside the chosen boundary:
+After the design is written, start provenance and record the design and
+draft-write decisions:
+
+```bash
+argos provenance start --json --design DESIGN_PATH --draft DRAFT_PATH
+argos provenance record-decision --json --provenance PROVENANCE_ID --stage design --decision approved --decided-by ACTOR --role knowledge_owner --source conversation --reason "..." --recorded-by AGENT
+argos provenance record-decision --json --provenance PROVENANCE_ID --stage draft_write --decision approved --decided-by ACTOR --role knowledge_owner --source conversation --reason "..." --recorded-by AGENT
+```
+
+Only after those decisions are recorded, write files inside the chosen boundary:
 
 ```text
 knowledge/.inbox/designs/
@@ -461,12 +469,9 @@ summarize:
 - affected projects and domains
 - whether `argos index` and `argos install-adapters` should run afterward
 
-Use this provenance sequence before publishing:
+After checking the draft, use this provenance sequence before publishing:
 
 ```bash
-argos provenance start --json --design DESIGN_PATH --draft DRAFT_PATH
-argos provenance record-decision --json --provenance PROVENANCE_ID --stage design --decision approved --decided-by ACTOR --role knowledge_owner --source conversation --reason "..." --recorded-by AGENT
-argos provenance record-decision --json --provenance PROVENANCE_ID --stage draft_write --decision approved --decided-by ACTOR --role knowledge_owner --source conversation --reason "..." --recorded-by AGENT
 argos provenance record-check --json --provenance PROVENANCE_ID
 argos provenance record-decision --json --provenance PROVENANCE_ID --stage publish --decision approved --decided-by ACTOR --role knowledge_owner --source conversation --reason "..." --recorded-by AGENT
 argos provenance verify --json --provenance PROVENANCE_ID
