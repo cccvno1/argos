@@ -359,6 +359,74 @@ func TestLoadAmbiguousPublishedProvenanceID(t *testing.T) {
 	}
 }
 
+func TestRecordDecisionAppendsDecisionWithStageHashes(t *testing.T) {
+	root := t.TempDir()
+	record := startTestRecord(t, root)
+
+	decision, err := RecordDecision(root, record.ProvenanceID, DecisionInput{
+		Stage:      StageDesign,
+		Decision:   DecisionApproved,
+		DecidedBy:  "chenchi",
+		Role:       "knowledge_owner",
+		Source:     "conversation",
+		Reason:     "Design scope is correct.",
+		RecordedBy: "codex",
+	})
+	if err != nil {
+		t.Fatalf("RecordDecision returned error: %v", err)
+	}
+	if decision.Hashes.DesignSHA256 == "" {
+		t.Fatalf("expected design hash on decision: %#v", decision)
+	}
+	decisions, err := LoadDecisions(root, record.ProvenanceID)
+	if err != nil {
+		t.Fatalf("LoadDecisions returned error: %v", err)
+	}
+	if len(decisions) != 1 || decisions[0].Stage != StageDesign {
+		t.Fatalf("unexpected decisions: %#v", decisions)
+	}
+}
+
+func TestRecordDecisionRejectsInvalidDecisionInput(t *testing.T) {
+	root := t.TempDir()
+	record := startTestRecord(t, root)
+	input := DecisionInput{
+		Stage:      "unknown",
+		Decision:   DecisionApproved,
+		DecidedBy:  "chenchi",
+		Role:       "knowledge_owner",
+		Source:     "conversation",
+		Reason:     "Bad stage should fail.",
+		RecordedBy: "codex",
+	}
+	if _, err := RecordDecision(root, record.ProvenanceID, input); err == nil {
+		t.Fatalf("expected invalid stage error")
+	}
+}
+
+func startTestRecord(t *testing.T, root string) Record {
+	t.Helper()
+	writeTestFile(t, root, "knowledge/.inbox/designs/mall-api/redis-cache/design.json", `{
+  "schema_version": "knowledge.design.v1",
+  "project": "mall-api",
+  "draft_output": {
+    "kind": "package",
+    "id": "package:mall-api.redis-cache.v1",
+    "title": "Redis Cache",
+    "path": "knowledge/.inbox/packages/mall-api/redis-cache"
+  }
+}`)
+	record, err := Start(root, StartRequest{
+		DesignPath: "knowledge/.inbox/designs/mall-api/redis-cache/design.json",
+		DraftPath:  "knowledge/.inbox/packages/mall-api/redis-cache",
+		CreatedBy:  "codex",
+	})
+	if err != nil {
+		t.Fatalf("Start returned error: %v", err)
+	}
+	return record
+}
+
 func writeTestFile(t *testing.T, root string, rel string, body string) {
 	t.Helper()
 	abs := filepath.Join(root, filepath.FromSlash(rel))

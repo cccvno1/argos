@@ -225,6 +225,157 @@ func marshalRecord(record Record) ([]byte, error) {
 	return append(data, '\n'), nil
 }
 
+func RecordDecision(root string, idOrPath string, input DecisionInput) (Decision, error) {
+	if err := validateDecisionInput(input); err != nil {
+		return Decision{}, err
+	}
+	loaded, err := Load(root, idOrPath)
+	if err != nil {
+		return Decision{}, err
+	}
+	hashes, err := hashesForStage(root, loaded.Record, input.Stage)
+	if err != nil {
+		return Decision{}, err
+	}
+	decisions, err := LoadDecisions(root, idOrPath)
+	if err != nil {
+		return Decision{}, err
+	}
+	decision := Decision{
+		SchemaVersion: DecisionSchemaVersion,
+		DecisionID:    fmt.Sprintf("dec-%03d", len(decisions)+1),
+		Stage:         input.Stage,
+		Decision:      input.Decision,
+		DecidedBy:     strings.TrimSpace(input.DecidedBy),
+		DeciderRole:   strings.TrimSpace(input.Role),
+		RecordedBy:    strings.TrimSpace(input.RecordedBy),
+		Source:        strings.TrimSpace(input.Source),
+		Reason:        strings.TrimSpace(input.Reason),
+		Hashes:        hashes,
+		CreatedAt:     time.Now().UTC().Format(time.RFC3339),
+	}
+	path, err := decisionsPath(root, loaded.Dir)
+	if err != nil {
+		return Decision{}, err
+	}
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return Decision{}, fmt.Errorf("open decisions: %w", err)
+	}
+	defer file.Close()
+	data, err := json.Marshal(decision)
+	if err != nil {
+		return Decision{}, fmt.Errorf("marshal decision: %w", err)
+	}
+	if _, err := file.Write(append(data, '\n')); err != nil {
+		return Decision{}, fmt.Errorf("write decision: %w", err)
+	}
+	return decision, nil
+}
+
+func LoadDecisions(root string, idOrPath string) ([]Decision, error) {
+	loaded, err := Load(root, idOrPath)
+	if err != nil {
+		return nil, err
+	}
+	path, err := decisionsPath(root, loaded.Dir)
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []Decision{}, nil
+		}
+		return nil, fmt.Errorf("read decisions: %w", err)
+	}
+	var decisions []Decision
+	for i, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var decision Decision
+		if err := json.Unmarshal([]byte(line), &decision); err != nil {
+			return nil, fmt.Errorf("parse decisions line %d: %w", i+1, err)
+		}
+		decisions = append(decisions, decision)
+	}
+	return decisions, nil
+}
+
+func validateDecisionInput(input DecisionInput) error {
+	if !validStage(input.Stage) {
+		return fmt.Errorf("stage must be design, draft_write, or publish")
+	}
+	if !validDecision(input.Decision) {
+		return fmt.Errorf("decision must be approved, changes_requested, or rejected")
+	}
+	if strings.TrimSpace(input.DecidedBy) == "" {
+		return fmt.Errorf("decided_by is required")
+	}
+	if strings.TrimSpace(input.Role) == "" {
+		return fmt.Errorf("role is required")
+	}
+	if strings.TrimSpace(input.Source) == "" {
+		return fmt.Errorf("source is required")
+	}
+	if strings.TrimSpace(input.RecordedBy) == "" {
+		return fmt.Errorf("recorded_by is required")
+	}
+	if strings.TrimSpace(input.Reason) == "" {
+		return fmt.Errorf("reason is required")
+	}
+	return nil
+}
+
+func hashesForStage(root string, record Record, stage string) (Hashes, error) {
+	designHash, err := HashFile(root, record.Subject.DesignPath)
+	if err != nil {
+		return Hashes{}, err
+	}
+	hashes := Hashes{DesignSHA256: designHash}
+	if stage == StagePublish {
+		draftHash, err := HashTree(root, record.Subject.DraftPath)
+		if err != nil {
+			return Hashes{}, err
+		}
+		hashes.DraftTreeSHA256 = draftHash
+		hashes.LatestCheckSHA256 = record.Hashes.LatestCheckSHA256
+	}
+	return hashes, nil
+}
+
+func validStage(stage string) bool {
+	return stage == StageDesign || stage == StageDraftWrite || stage == StagePublish
+}
+
+func validDecision(decision string) bool {
+	return decision == DecisionApproved || decision == DecisionChangesRequested || decision == DecisionRejected
+}
+
+func decisionsPath(root string, provenanceDir string) (string, error) {
+	clean, err := cleanRelPath(filepath.Join(provenanceDir, "decisions.jsonl"))
+	if err != nil {
+		return "", err
+	}
+	raw := filepath.Join(root, clean)
+	info, err := os.Lstat(raw)
+	if err == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			return "", fmt.Errorf("%s: path must not be a symlink", filepath.ToSlash(clean))
+		}
+		return resolvedPathInsideRoot(root, clean)
+	}
+	if !os.IsNotExist(err) {
+		return "", fmt.Errorf("stat %s: %w", filepath.ToSlash(clean), err)
+	}
+	parent, err := resolvedPathInsideRoot(root, filepath.Dir(clean))
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(parent, "decisions.jsonl"), nil
+}
+
 func newProvenanceID(project string, title string) (string, error) {
 	suffix, err := randomHex(4)
 	if err != nil {
