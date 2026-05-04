@@ -1657,6 +1657,30 @@ func TestRunKnowledgePublishMovesInboxPackageToOfficialPackages(t *testing.T) {
 	}
 }
 
+func TestRunKnowledgePublishRejectsNonInboxPath(t *testing.T) {
+	root := t.TempDir()
+	initWorkspace(t, root)
+	draftPath := "knowledge/packages/backend/redis/best-practices"
+	draftID := "package:backend.redis.best-practices.v1"
+	design := validCLIKnowledgeDesign(draftPath, draftID)
+	design.WriteBoundary.Path = "official_review"
+	design.Review.OfficialWriteApproved = true
+	design.DraftOutput.Status = "active"
+	designPath := writeCLIKnowledgeDesign(t, root, "knowledge/.inbox/designs/redis/design.json", design)
+	writeCLIFile(t, root, draftPath+"/KNOWLEDGE.md", strings.Replace(validCLICheckDraftPackage(draftID), "status: draft", "status: active", 1))
+	chdir(t, root)
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"knowledge", "publish", "--design", designPath, "--path", draftPath}, &stdout, &stderr)
+
+	if code != 1 {
+		t.Fatalf("expected exit code 1, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "draft must be under knowledge/.inbox/items or knowledge/.inbox/packages") {
+		t.Fatalf("expected non-inbox publish error, got %q", stderr.String())
+	}
+}
+
 func TestRunKnowledgePublishRequiresDesign(t *testing.T) {
 	root := t.TempDir()
 	initWorkspace(t, root)
