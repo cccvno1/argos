@@ -1497,6 +1497,8 @@ func TestUsageUsesWriteVocabulary(t *testing.T) {
 	}
 	body := stderr.String()
 	for _, want := range []string{
+		"argos project add --id <project> --name <name> --path <path>",
+		"argos project list --json",
 		"argos knowledge design --json --project <project> --intent <intent>",
 		"argos knowledge check --json --design <design.json> --draft <draft>",
 		"argos knowledge publish --design <design.json> --path <draft>",

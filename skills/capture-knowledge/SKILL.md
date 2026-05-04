@@ -61,6 +61,21 @@ Before presenting the design, run or emulate:
 argos knowledge design --json --project mall-api --intent "create product-list cache engineering knowledge"
 ```
 
+Before designing project-scoped knowledge, run:
+
+```bash
+argos project list --json
+```
+
+If the target project is missing and the user has provided the needed project
+ID, name, path, and domains, register it with:
+
+```bash
+argos project add --id <project> --name <name> --path <path> --tech-domain <domain> --business-domain <domain>
+```
+
+Do not hand-edit `knowledge/projects.yaml` unless the CLI is unavailable.
+
 Read `write_guidance` before writing files. Treat it as the operational
 control guidance for this write attempt:
 
@@ -311,6 +326,15 @@ Default new draft metadata:
 status: draft
 priority: should
 ```
+
+Storage contract:
+
+- inbox drafts under `knowledge/.inbox/items/` and
+  `knowledge/.inbox/packages/` must use `status: draft`;
+- official knowledge under `knowledge/items/` and `knowledge/packages/` must
+  not use `status: draft`;
+- use `argos knowledge publish` for the standard transition from inbox draft to
+  official knowledge.
 
 The `Future Use` section must name:
 
