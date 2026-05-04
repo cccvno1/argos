@@ -173,8 +173,8 @@ Validation errors should state the fix in terms an agent can act on:
 
 `argos knowledge publish` remains the standard official transition. It must:
 
-- Require a design path.
-- Require `review.publish_approved`.
+- Require a provenance id.
+- Require verified provenance decisions for design, draft writing, and publish.
 - Re-run `knowledge check` and require `result: pass`.
 - Accept only inbox draft paths under `knowledge/.inbox/items/` or
   `knowledge/.inbox/packages/`.
@@ -184,8 +184,8 @@ Validation errors should state the fix in terms an agent can act on:
 - Validate the official target after activation.
 - Roll back the moved draft if activation or final official validation fails.
 
-This round does not add a separate persisted audit record for publication. The
-design JSON plus check/publish gates are the write contract for first release.
+Provenance is the persisted audit record for publication. Design JSON describes
+intent, scope, sources, draft output, and check plan; it does not prove approval.
 
 ## Documentation And Skill Contract
 
@@ -230,8 +230,8 @@ Implementation must add focused tests for:
 - `validate --inbox` rejects inbox `status: active`.
 - `validate --path` applies inbox rules for inbox paths and official rules for
   official paths.
-- `knowledge publish` still rejects missing design, missing publish approval,
-  failed check, existing target, and non-inbox paths.
+- `knowledge publish --provenance` rejects missing provenance, missing publish
+  decision, failed check, existing target, and non-inbox paths.
 - Published knowledge remains findable with `status: active`.
 - README and the capture skill do not reintroduce removed write vocabulary.
 

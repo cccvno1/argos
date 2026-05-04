@@ -86,15 +86,19 @@ control guidance for this write attempt:
 - use `design_focus` and `source_work` to shape the design summary;
 - ask the `review_questions` before draft writing when correctness or
   authorization depends on the answer;
-- run `commands.check_draft` only after draft writing is approved and draft
-  files exist.
+- record design and draft-write approval with `commands.start_provenance`,
+  `commands.record_design_decision`, and
+  `commands.record_draft_write_decision`;
+- run `commands.record_check` after draft files exist;
+- record publish approval with `commands.record_publish_decision`, then run
+  `commands.verify_provenance` before publish.
 
 After approved draft files are written, run:
 
 ```bash
-argos knowledge check --json \
-  --design knowledge/.inbox/designs/product-list-cache/design.json \
-  --draft knowledge/.inbox/packages/backend/product-list-cache
+argos provenance record-check --json --provenance <id>
+argos provenance record-decision --json --provenance <id> --stage publish --decision approved --decided-by <actor> --role knowledge_owner --source conversation --reason <reason> --recorded-by <agent>
+argos provenance verify --json --provenance <id>
 ```
 
 Design JSON describes intent, scope, sources, draft output, and check plan. It

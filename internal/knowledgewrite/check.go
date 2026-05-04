@@ -278,7 +278,6 @@ func validateDraftFilesAndPlan(design KnowledgeDesign, addFail func(string), add
 	designOnly := design.DraftOutput.DraftState == "design_only" ||
 		design.DraftOutput.Kind == "review" ||
 		design.ExistingKnowledge.Decision == "unresolved" &&
-			!design.Review.DraftWriteApproved &&
 			len(design.DraftFiles) == 0 &&
 			strings.TrimSpace(design.CheckPlan.ValidatePath) == ""
 	draftPath, draftPathOK := cleanKnowledgeWritePath("draft_output.path", design.DraftOutput.Path, addFail)
@@ -299,7 +298,7 @@ func validateDraftFilesAndPlan(design KnowledgeDesign, addFail func(string), add
 		if strings.TrimSpace(design.CheckPlan.ValidatePath) != "" {
 			addReview("design-only review should not set check_plan.validate_path before draft approval")
 		}
-		addReview("design is design-only until review decisions unblock draft writing")
+		addReview("design is design-only until unresolved choices are resolved before draft writing")
 		return
 	}
 	if len(design.DraftFiles) == 0 {
@@ -355,17 +354,8 @@ func checkPolicy(design KnowledgeDesign, draftPath string, draftItems []knowledg
 		if !design.Review.OfficialWriteApproved {
 			addFail("official draft path requires review.official_write_approved")
 		}
-		if isOfficialDraftPath(draftSlash) && !design.Review.PublishApproved {
-			addReview("official draft path requires review.publish_approved before publish")
-		}
 	default:
 		addFail("approved write boundary cannot be determined")
-	}
-	if !design.Review.DesignApproved {
-		addFail("draft writing requires review.design_approved")
-	}
-	if !design.Review.DraftWriteApproved {
-		addFail("draft writing requires review.draft_write_approved")
 	}
 	if len(nonEmpty(design.Review.UnresolvedBlockers)) > 0 {
 		addFail("draft writing requires resolved review.unresolved_blockers")

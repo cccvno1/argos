@@ -67,7 +67,7 @@ func TestCheckKnowledgeRejectsDraftOutsideWriteBoundary(t *testing.T) {
 	}
 }
 
-func TestCheckKnowledgeOfficialDraftWithoutPublishApprovalNeedsReview(t *testing.T) {
+func TestCheckKnowledgeOfficialDraftDoesNotUsePublishBooleanAsApproval(t *testing.T) {
 	root := t.TempDir()
 	if err := workspace.Init(root); err != nil {
 		t.Fatalf("init workspace: %v", err)
@@ -91,14 +91,11 @@ func TestCheckKnowledgeOfficialDraftWithoutPublishApprovalNeedsReview(t *testing
 	if err != nil {
 		t.Fatalf("Check returned error: %v", err)
 	}
-	if result.Result != "review-needed" {
-		t.Fatalf("expected review-needed for official draft without publish approval, got %#v", result)
+	if result.Result == "fail" {
+		t.Fatalf("expected check not to fail on publish approval stored outside provenance, got %#v", result)
 	}
-	if result.Policy.Result != "review-needed" {
-		t.Fatalf("expected policy review-needed for official draft without publish approval, got %#v", result.Policy)
-	}
-	if !hasFinding(result.Findings, "review.publish_approved") {
-		t.Fatalf("missing publish approval finding: %#v", result.Findings)
+	if hasFinding(result.Findings, "review.publish_approved") {
+		t.Fatalf("check should not read publish approval from design review booleans: %#v", result.Findings)
 	}
 }
 
@@ -134,14 +131,14 @@ func TestCheckKnowledgeRejectsDraftStatusUnderOfficialRoot(t *testing.T) {
 	}
 }
 
-func TestCheckKnowledgeRequiresDesignApprovalBeforeDraft(t *testing.T) {
+func TestCheckKnowledgeDoesNotUseDesignReviewBooleansAsApproval(t *testing.T) {
 	root := t.TempDir()
 	if err := workspace.Init(root); err != nil {
 		t.Fatalf("init workspace: %v", err)
 	}
 	design := validKnowledgeDesign()
 	design.Review.DesignApproved = false
-	design.Review.DraftWriteApproved = true
+	design.Review.DraftWriteApproved = false
 	designPath := writeDesignFile(t, root, design)
 	draftPath := "knowledge/.inbox/packages/mall-api/redis-cache"
 	writeDraftPackage(t, root, draftPath)
@@ -150,11 +147,33 @@ func TestCheckKnowledgeRequiresDesignApprovalBeforeDraft(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Check returned error: %v", err)
 	}
-	if result.Result != "fail" {
-		t.Fatalf("expected fail when design is not approved, got %#v", result)
+	if result.Result == "fail" {
+		t.Fatalf("expected design review booleans not to fail check; approvals live in provenance, got %#v", result)
 	}
-	if !hasFinding(result.Findings, "draft writing requires review.design_approved") {
-		t.Fatalf("missing design approval finding: %#v", result.Findings)
+	if hasFinding(result.Findings, "review.design_approved") || hasFinding(result.Findings, "review.draft_write_approved") {
+		t.Fatalf("check should not read design/draft approval from design review booleans: %#v", result.Findings)
+	}
+}
+
+func TestValidateDesignUnresolvedDesignOnlyDoesNotUseDraftWriteBoolean(t *testing.T) {
+	design := validKnowledgeDesign()
+	design.ExistingKnowledge.Decision = "unresolved"
+	design.Review.DraftWriteApproved = true
+	design.DraftOutput.Kind = "package"
+	design.DraftOutput.DraftState = "draft"
+	design.DraftOutput.Path = "knowledge/.inbox/packages/mall-api/redis-cache"
+	design.CheckPlan.ValidatePath = ""
+	design.DraftFiles = nil
+
+	findings := ValidateDesign(design)
+
+	if hasFindingWithSeverity(findings, "fail", "draft_output.path") ||
+		hasFindingWithSeverity(findings, "fail", "draft_files") ||
+		hasFindingWithSeverity(findings, "fail", "check_plan.validate_path") {
+		t.Fatalf("unresolved design-only shape must not depend on review.draft_write_approved: %#v", findings)
+	}
+	if !hasFinding(findings, "design is design-only until unresolved choices are resolved") {
+		t.Fatalf("expected design-only finding for unresolved empty draft, got %#v", findings)
 	}
 }
 

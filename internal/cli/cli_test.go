@@ -1333,9 +1333,11 @@ func TestRunKnowledgeDesignReturnsWriteGuidance(t *testing.T) {
 	}
 	var result struct {
 		WriteGuidance struct {
-			State        string `json:"state"`
-			NextAction   string `json:"next_action"`
-			DraftAllowed bool   `json:"draft_allowed"`
+			State          string            `json:"state"`
+			NextAction     string            `json:"next_action"`
+			DraftAllowed   bool              `json:"draft_allowed"`
+			StopConditions []string          `json:"stop_conditions"`
+			Commands       map[string]string `json:"commands"`
 		} `json:"write_guidance"`
 		KnowledgeDesignTemplate struct {
 			SchemaVersion string `json:"schema_version"`
@@ -1353,6 +1355,19 @@ func TestRunKnowledgeDesignReturnsWriteGuidance(t *testing.T) {
 	}
 	if result.KnowledgeDesignTemplate.SchemaVersion != "knowledge.design.v1" {
 		t.Fatalf("unexpected schema: %s", stdout.String())
+	}
+	for _, command := range []string{"start_provenance", "record_design_decision", "record_draft_write_decision", "record_check", "record_publish_decision", "verify_provenance", "publish"} {
+		if result.WriteGuidance.Commands[command] == "" {
+			t.Fatalf("write guidance missing command %q: %s", command, stdout.String())
+		}
+	}
+	for _, oldApproval := range []string{"review.design_approved", "review.draft_write_approved", "review.publish_approved"} {
+		if strings.Contains(stdout.String(), oldApproval) {
+			t.Fatalf("write guidance should point approvals to provenance, found %q: %s", oldApproval, stdout.String())
+		}
+	}
+	if !strings.Contains(result.WriteGuidance.Commands["record_publish_decision"], "--stage publish") {
+		t.Fatalf("write guidance should point approvals to provenance, got: %s", stdout.String())
 	}
 	assertNoRemovedWriteTerms(t, stdout.String())
 }
@@ -1563,6 +1578,92 @@ func TestKnowledgeWritePublishAndFindbackFlow(t *testing.T) {
 	if len(findResult.Items) == 0 || findResult.Items[0].Status != "active" {
 		t.Fatalf("expected published package findback to be active, got: %s", findOutput)
 	}
+}
+
+func TestGeneratedDesignTemplatePublishesWithProvenanceDecisions(t *testing.T) {
+	root := t.TempDir()
+	chdir(t, root)
+	runOK(t, root, []string{"init"})
+	runOK(t, root, []string{
+		"project", "add",
+		"--id", "mall-api",
+		"--name", "Mall API",
+		"--path", "services/mall-api",
+		"--tech-domain", "backend",
+		"--business-domain", "account",
+	})
+
+	designOutput := runOK(t, root, []string{
+		"knowledge", "design", "--json",
+		"--project", "mall-api",
+		"--intent", "Create Redis cache best practices for future backend agents.",
+		"--phase", "implementation",
+		"--query", "redis cache best practices",
+	})
+	var designResult struct {
+		WriteGuidance struct {
+			DesignPath string `json:"design_path"`
+			DraftPath  string `json:"draft_path"`
+		} `json:"write_guidance"`
+		KnowledgeDesignTemplate knowledgewrite.KnowledgeDesign `json:"knowledge_design_template"`
+	}
+	if err := json.Unmarshal([]byte(designOutput), &designResult); err != nil {
+		t.Fatalf("parse design JSON: %v\n%s", err, designOutput)
+	}
+	if designResult.KnowledgeDesignTemplate.Review.DesignApproved ||
+		designResult.KnowledgeDesignTemplate.Review.DraftWriteApproved ||
+		designResult.KnowledgeDesignTemplate.Review.PublishApproved {
+		t.Fatalf("generated design template must not carry approval facts: %#v", designResult.KnowledgeDesignTemplate.Review)
+	}
+	designPath := writeJSONFixture(t, root, designResult.WriteGuidance.DesignPath, designResult.KnowledgeDesignTemplate)
+	draftPath := designResult.WriteGuidance.DraftPath
+	startOutput := runOK(t, root, []string{
+		"provenance", "start", "--json",
+		"--design", designPath,
+		"--draft", draftPath,
+		"--created-by", "codex",
+	})
+	var startResult struct {
+		ProvenanceID string `json:"provenance_id"`
+	}
+	if err := json.Unmarshal([]byte(startOutput), &startResult); err != nil {
+		t.Fatalf("parse provenance start JSON: %v\n%s", err, startOutput)
+	}
+	if startResult.ProvenanceID == "" {
+		t.Fatalf("provenance start JSON missing provenance_id: %s", startOutput)
+	}
+	provenanceID := startResult.ProvenanceID
+	for _, stage := range []string{"design", "draft_write"} {
+		runOK(t, root, []string{
+			"provenance", "record-decision", "--json",
+			"--provenance", provenanceID,
+			"--stage", stage,
+			"--decision", "approved",
+			"--decided-by", "chenchi",
+			"--role", "knowledge_owner",
+			"--source", "conversation",
+			"--reason", stage + " approved.",
+			"--recorded-by", "codex",
+		})
+	}
+	writeDraftPackageWithIDForCLI(t, root, draftPath, designResult.KnowledgeDesignTemplate.DraftOutput.ID)
+	runOK(t, root, []string{"provenance", "record-check", "--json", "--provenance", provenanceID})
+	runOK(t, root, []string{
+		"provenance", "record-decision", "--json",
+		"--provenance", provenanceID,
+		"--stage", "publish",
+		"--decision", "approved",
+		"--decided-by", "chenchi",
+		"--role", "knowledge_owner",
+		"--source", "conversation",
+		"--reason", "publish approved.",
+		"--recorded-by", "codex",
+	})
+	verifyOutput := runOK(t, root, []string{"provenance", "verify", "--json", "--provenance", provenanceID})
+	if !strings.Contains(verifyOutput, `"result": "pass"`) {
+		t.Fatalf("expected provenance verify pass, got %s", verifyOutput)
+	}
+	runOK(t, root, []string{"knowledge", "publish", "--provenance", provenanceID})
 }
 
 func TestKnowledgeFindDoesNotLoadProvenanceAsKnowledge(t *testing.T) {
@@ -2589,8 +2690,13 @@ func validKnowledgeDesignForCLI(t *testing.T) knowledgewrite.KnowledgeDesign {
 
 func writeDraftPackageForCLI(t *testing.T, root string, rel string) {
 	t.Helper()
+	writeDraftPackageWithIDForCLI(t, root, rel, "package:mall-api.redis-cache.v1")
+}
+
+func writeDraftPackageWithIDForCLI(t *testing.T, root string, rel string, id string) {
+	t.Helper()
 	writeCLIFile(t, root, rel+"/KNOWLEDGE.md", `---
-id: package:mall-api.redis-cache.v1
+id: `+id+`
 title: Redis Cache Best Practices
 type: package
 tech_domains: [backend]
