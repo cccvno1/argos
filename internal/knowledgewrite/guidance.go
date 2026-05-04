@@ -37,9 +37,9 @@ func buildWriteGuidance(response DesignResponse, req DesignRequest) WriteGuidanc
 		DraftAllowed: false,
 		DesignOnly:   designOnly,
 		StopConditions: []string{
-			"Do not write draft knowledge until review.draft_write_approved is true.",
+			"Do not write draft knowledge until design and draft_write decisions are recorded in Argos provenance.",
 			"Do not write official knowledge unless official writing is explicitly approved.",
-			"Do not publish drafts unless publishing is explicitly approved.",
+			"Do not publish drafts until a publish decision is recorded in Argos provenance.",
 			"Do not use priority must unless review.priority_must_approved is true.",
 		},
 		DesignFocus: []string{
@@ -62,7 +62,14 @@ func buildWriteGuidance(response DesignResponse, req DesignRequest) WriteGuidanc
 		},
 	}
 	if draftPath != "" {
+		guidance.Commands.StartProvenance = fmt.Sprintf("argos provenance start --json --design %s --draft %s --created-by <agent>", designPath, draftPath)
+		guidance.Commands.RecordDesignDecision = "argos provenance record-decision --json --provenance <id> --stage design --decision approved --decided-by <actor> --role knowledge_owner --source conversation --reason <reason> --recorded-by <agent>"
+		guidance.Commands.RecordDraftWriteDecision = "argos provenance record-decision --json --provenance <id> --stage draft_write --decision approved --decided-by <actor> --role knowledge_owner --source conversation --reason <reason> --recorded-by <agent>"
 		guidance.Commands.CheckDraft = fmt.Sprintf("argos knowledge check --json --design %s --draft %s", designPath, draftPath)
+		guidance.Commands.RecordCheck = "argos provenance record-check --json --provenance <id>"
+		guidance.Commands.RecordPublishDecision = "argos provenance record-decision --json --provenance <id> --stage publish --decision approved --decided-by <actor> --role knowledge_owner --source conversation --reason <reason> --recorded-by <agent>"
+		guidance.Commands.VerifyProvenance = "argos provenance verify --json --provenance <id>"
+		guidance.Commands.Publish = "argos knowledge publish --provenance <id>"
 	}
 	if requestLooksConsumerFacing(req) {
 		guidance.DesignFocus = append(guidance.DesignFocus, "For consumer-facing knowledge, separate observed interface facts from user interpretation before advising consumers.")

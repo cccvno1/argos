@@ -67,6 +67,25 @@ func TestInitCreatesWriteInboxDirectories(t *testing.T) {
 	}
 }
 
+func TestInitCreatesProvenanceRoots(t *testing.T) {
+	root := t.TempDir()
+	if err := Init(root); err != nil {
+		t.Fatalf("Init returned error: %v", err)
+	}
+	for _, rel := range []string{
+		"knowledge/.inbox/provenance",
+		"knowledge/provenance",
+	} {
+		info, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel)))
+		if err != nil {
+			t.Fatalf("stat %s: %v", rel, err)
+		}
+		if !info.IsDir() {
+			t.Fatalf("%s should be a directory", rel)
+		}
+	}
+}
+
 func TestInitPreservesExistingRegularConfigContent(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "knowledge", "types.yaml")

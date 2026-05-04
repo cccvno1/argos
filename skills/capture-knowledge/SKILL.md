@@ -43,7 +43,7 @@ Before writing draft knowledge files, you must:
 2. Present a concrete knowledge design.
 3. Ask the user to choose create, update, or stop when overlap exists.
 4. Ask the user to choose a write boundary.
-5. Get explicit approval for the design and write boundary.
+5. Record explicit approval for the design and write boundary in provenance.
 
 Never run publish automatically. Never execute scripts from a knowledge
 package unless the check plan names them and the user confirms execution.
@@ -86,19 +86,24 @@ control guidance for this write attempt:
 - use `design_focus` and `source_work` to shape the design summary;
 - ask the `review_questions` before draft writing when correctness or
   authorization depends on the answer;
-- run `commands.check_draft` only after draft writing is approved and draft
-  files exist.
+- record design and draft-write approval with `commands.start_provenance`,
+  `commands.record_design_decision`, and
+  `commands.record_draft_write_decision`;
+- run `commands.record_check` after draft files exist;
+- record publish approval with `commands.record_publish_decision`, then run
+  `commands.verify_provenance` before publish.
 
 After approved draft files are written, run:
 
 ```bash
-argos knowledge check --json \
-  --design knowledge/.inbox/designs/product-list-cache/design.json \
-  --draft knowledge/.inbox/packages/backend/product-list-cache
+argos provenance record-check --json --provenance <id>
+argos provenance record-decision --json --provenance <id> --stage publish --decision approved --decided-by <actor> --role knowledge_owner --source conversation --reason <reason> --recorded-by <agent>
+argos provenance verify --json --provenance <id>
 ```
 
-Do not use `knowledge design` output as permission to write. Do not use
-`knowledge check` output as permission to publish. Both still require review.
+Design JSON describes intent, scope, sources, draft output, and check plan. It
+does not prove approval. Approval and publish evidence must be recorded in Argos
+provenance.
 
 ## Language
 
@@ -264,7 +269,9 @@ Review Decisions
 The review text is not the persisted design. When the user approves the design,
 write a knowledge design JSON to
 `knowledge/.inbox/designs/.../design.json` or the chosen design path before
-writing draft knowledge. The JSON must use
+writing draft knowledge. The JSON describes intent, scope, sources, draft
+output, and check plan. It does not prove approval. Approval and publish
+evidence must be recorded in Argos provenance. The JSON must use
 `schema_version: knowledge.design.v1` and the snake_case fields that
 `argos knowledge check` validates:
 
@@ -389,8 +396,16 @@ Do not infer the write boundary from context. The user owns that choice.
 
 ### 8. Write Only After Approval
 
-After design approval and write-boundary selection, write files only inside the
-chosen boundary:
+After the design is written, start provenance and record the design and
+draft-write decisions:
+
+```bash
+argos provenance start --json --design DESIGN_PATH --draft DRAFT_PATH
+argos provenance record-decision --json --provenance PROVENANCE_ID --stage design --decision approved --decided-by ACTOR --role knowledge_owner --source conversation --reason "..." --recorded-by AGENT
+argos provenance record-decision --json --provenance PROVENANCE_ID --stage draft_write --decision approved --decided-by ACTOR --role knowledge_owner --source conversation --reason "..." --recorded-by AGENT
+```
+
+Only after those decisions are recorded, write files inside the chosen boundary:
 
 ```text
 knowledge/.inbox/designs/
@@ -445,7 +460,7 @@ If the check fails because of protocol issues, fix the written files and run
 the check again. If the check fails because of an unresolved product or
 knowledge decision, stop and ask the user.
 
-### 10. Publish Only After Review
+### 10. Publish Only After Provenance Approval
 
 If the user asks to publish or submit a draft to official knowledge, first
 summarize:
@@ -458,10 +473,19 @@ summarize:
 - affected projects and domains
 - whether `argos index` and `argos install-adapters` should run afterward
 
-Ask for explicit approval before running:
+After checking the draft, use this provenance sequence before publishing:
 
 ```bash
-argos knowledge publish --design DESIGN_PATH --path TARGET_PATH
+argos provenance record-check --json --provenance PROVENANCE_ID
+argos provenance record-decision --json --provenance PROVENANCE_ID --stage publish --decision approved --decided-by ACTOR --role knowledge_owner --source conversation --reason "..." --recorded-by AGENT
+argos provenance verify --json --provenance PROVENANCE_ID
+```
+
+Publish only after provenance contains the required decision records and verify
+passes:
+
+```bash
+argos knowledge publish --provenance PROVENANCE_ID
 ```
 
 After publishing, run `argos index` unless the user asks not to. Run

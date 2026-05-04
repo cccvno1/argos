@@ -212,12 +212,27 @@ When the user explicitly asks to create durable knowledge, use the write flow:
 1. Run `argos project list --json`; if the target project is missing, run `argos project add --id <project> --name <name> --path <path>`.
 2. Run `argos knowledge design --json --project <project> --intent <intent>`.
 3. Write the returned `knowledge_design_template` to `write_guidance.design_path`.
-4. Ask the human to review the design and set `review.draft_write_approved`.
-5. Write draft knowledge only after review approves draft writing.
-6. Run `argos knowledge check --json --design <design.json> --draft <draft-path>`.
-7. Publish only after explicit authorization with `argos knowledge publish --design <design.json> --path <draft-path>`. Publish moves the draft to the official path and sets published knowledge to `status: active`.
-8. Run `argos index`.
-9. Confirm the new knowledge is discoverable with `argos knowledge find --json`.
+4. Start provenance with `argos provenance start --json --design <design.json> --draft <draft-path>`.
+5. Record the human design decision with `argos provenance record-decision --json --provenance <id> --stage design --decision approved --decided-by <actor> --role knowledge_owner --source conversation --reason "<reason>" --recorded-by <agent>`.
+6. Record the draft-write decision with `argos provenance record-decision --json --provenance <id> --stage draft_write --decision approved --decided-by <actor> --role knowledge_owner --source conversation --reason "<reason>" --recorded-by <agent>`.
+7. Write draft knowledge only after the design and draft-write decisions are recorded.
+8. Run `argos provenance record-check --json --provenance <id>`.
+9. Record the publish decision with `argos provenance record-decision --json --provenance <id> --stage publish --decision approved --decided-by <actor> --role knowledge_owner --source conversation --reason "<reason>" --recorded-by <agent>`.
+10. Run `argos provenance verify --json --provenance <id>`.
+11. Publish with `argos knowledge publish --provenance <id>`.
+12. Run `argos index`.
+13. Confirm the new knowledge is discoverable with `argos knowledge find --json`.
+
+### Provenance Contract
+
+Git-tracked knowledge files are the source of truth. SQLite indexes are generated
+caches. Argos provenance records under `knowledge/.inbox/provenance/` and
+`knowledge/provenance/` record design hashes, draft tree hashes, check results,
+and human decision records for each publish attempt.
+
+Argos provenance does not replace PR review. In team mode, agents publish
+official candidates on a branch and reviewers inspect the knowledge diff plus
+provenance diff before merge.
 
 ## MCP
 
@@ -267,7 +282,11 @@ argos project add --id <project> --name <name> --path <path>
 argos project list --json
 argos knowledge design --json --project <project> --intent <intent>
 argos knowledge check --json --design <design.json> --draft <draft>
-argos knowledge publish --design <design.json> --path <draft>
+argos provenance start --json --design <design.json> --draft <draft>
+argos provenance record-decision --json --provenance <id> --stage <stage> --decision <approved|changes_requested|rejected> --decided-by <actor> --role <role> --source <source> --reason <reason> --recorded-by <agent>
+argos provenance record-check --json --provenance <id>
+argos provenance verify --json --provenance <id>
+argos knowledge publish --provenance <id>
 argos index
 argos install-adapters
 argos context --json --project <project>

@@ -33,7 +33,7 @@ issues are release-quality gaps rather than proof that the core model is wrong.
 | `argos validate` after init | pass | Validates zero knowledge items. |
 | `argos index` after init | pass | Indexes zero knowledge items. |
 | Empty `knowledge find` | pass | Returns `support.level: none` and forbids Argos-backed claims. |
-| Write-to-query loop | pass after `argos project add` | Required registering `mall-api`; then design/check/publish/index/findback passed. |
+| Write-to-query loop | pass after `argos project add` | Required registering `mall-api`; design/check/provenance publish/index/findback passed. |
 | Findback with query only | pass, partial | Found `package:mall-api.redis-cache.v1`; support was `partial`. |
 | Findback with phase/tags/domains | pass, strong | Found the same ID with `support.level: strong`. |
 
@@ -89,8 +89,7 @@ None for the core agent-operated write/query flow.
 - Improve query-only findback from newly published packages. Structured context already reaches `strong`, but natural query alone remains `partial` for the smoke package.
 - Decide whether `command "new" is not implemented yet` should remain as a hidden placeholder or be removed entirely.
 - Add an install-style smoke for running the binary outside the source tree if Argos will be distributed independently of the repo.
-- Add audit and review-history storage for durable records of design approval,
-  draft write approval, check results, and publication decisions.
+- Add optional external PR metadata ingestion and signed attestations for stricter team environments.
 
 ## Evidence
 

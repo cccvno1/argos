@@ -106,8 +106,15 @@ type SourceWorkGuidance struct {
 }
 
 type WriteCommands struct {
-	WriteDesign string `json:"write_design"`
-	CheckDraft  string `json:"check_draft,omitempty"`
+	WriteDesign              string `json:"write_design"`
+	StartProvenance          string `json:"start_provenance,omitempty"`
+	RecordDesignDecision     string `json:"record_design_decision,omitempty"`
+	RecordDraftWriteDecision string `json:"record_draft_write_decision,omitempty"`
+	CheckDraft               string `json:"check_draft,omitempty"`
+	RecordCheck              string `json:"record_check,omitempty"`
+	RecordPublishDecision    string `json:"record_publish_decision,omitempty"`
+	VerifyProvenance         string `json:"verify_provenance,omitempty"`
+	Publish                  string `json:"publish,omitempty"`
 }
 
 type KnowledgeDesign struct {

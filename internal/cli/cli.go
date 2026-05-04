@@ -15,6 +15,7 @@ import (
 	"argos/internal/knowledge"
 	"argos/internal/knowledgewrite"
 	"argos/internal/mcp"
+	"argos/internal/provenance"
 	"argos/internal/query"
 	"argos/internal/registry"
 	"argos/internal/workspace"
@@ -149,6 +150,8 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		return runProject(args[1:], stdout, stderr)
 	case "knowledge":
 		return runKnowledge(args[1:], stdout, stderr)
+	case "provenance":
+		return runProvenance(args[1:], stdout, stderr)
 	case "dogfood":
 		return runDogfood(args[1:], stdout, stderr)
 	case "mcp":
@@ -571,6 +574,175 @@ func runKnowledge(args []string, stdout io.Writer, stderr io.Writer) int {
 	}
 }
 
+func runProvenance(args []string, stdout io.Writer, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "provenance: subcommand is required")
+		printUsage(stderr)
+		return 2
+	}
+	switch args[0] {
+	case "start":
+		return runProvenanceStart(args[1:], stdout, stderr)
+	case "record-decision":
+		return runProvenanceRecordDecision(args[1:], stdout, stderr)
+	case "record-check":
+		return runProvenanceRecordCheck(args[1:], stdout, stderr)
+	case "verify":
+		return runProvenanceVerify(args[1:], stdout, stderr)
+	default:
+		fmt.Fprintf(stderr, "provenance: unknown subcommand %q\n", args[0])
+		printUsage(stderr)
+		return 2
+	}
+}
+
+func runProvenanceStart(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("provenance start", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	jsonOut := flags.Bool("json", false, "print JSON output")
+	designPath := flags.String("design", "", "knowledge design JSON path")
+	draftPath := flags.String("draft", "", "draft item or package path")
+	createdBy := flags.String("created-by", "", "provenance record creator")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if !*jsonOut {
+		fmt.Fprintln(stderr, "provenance start: --json is required")
+		return 2
+	}
+	if strings.TrimSpace(*designPath) == "" {
+		fmt.Fprintln(stderr, "provenance start: --design is required")
+		return 2
+	}
+	if strings.TrimSpace(*draftPath) == "" {
+		fmt.Fprintln(stderr, "provenance start: --draft is required")
+		return 2
+	}
+	root, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(stderr, "provenance start: get current directory: %v\n", err)
+		return 1
+	}
+	record, err := provenance.Start(root, provenance.StartRequest{
+		DesignPath: *designPath,
+		DraftPath:  *draftPath,
+		CreatedBy:  *createdBy,
+	})
+	if err != nil {
+		fmt.Fprintf(stderr, "provenance start: %v\n", err)
+		return 1
+	}
+	return printJSON(stdout, stderr, record)
+}
+
+func runProvenanceRecordDecision(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("provenance record-decision", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	jsonOut := flags.Bool("json", false, "print JSON output")
+	provenanceID := flags.String("provenance", "", "provenance id or path")
+	stage := flags.String("stage", "", "decision stage")
+	decisionValue := flags.String("decision", "", "decision value")
+	decidedBy := flags.String("decided-by", "", "decision maker")
+	role := flags.String("role", "", "decision maker role")
+	source := flags.String("source", "", "decision source")
+	reason := flags.String("reason", "", "decision reason")
+	recordedBy := flags.String("recorded-by", "", "decision recorder")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if !*jsonOut {
+		fmt.Fprintln(stderr, "provenance record-decision: --json is required")
+		return 2
+	}
+	if strings.TrimSpace(*provenanceID) == "" {
+		fmt.Fprintln(stderr, "provenance record-decision: --provenance is required")
+		return 2
+	}
+	root, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(stderr, "provenance record-decision: get current directory: %v\n", err)
+		return 1
+	}
+	decision, err := provenance.RecordDecision(root, *provenanceID, provenance.DecisionInput{
+		Stage:      *stage,
+		Decision:   *decisionValue,
+		DecidedBy:  *decidedBy,
+		Role:       *role,
+		Source:     *source,
+		Reason:     *reason,
+		RecordedBy: *recordedBy,
+	})
+	if err != nil {
+		fmt.Fprintf(stderr, "provenance record-decision: %v\n", err)
+		return 1
+	}
+	return printJSON(stdout, stderr, decision)
+}
+
+func runProvenanceRecordCheck(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("provenance record-check", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	jsonOut := flags.Bool("json", false, "print JSON output")
+	provenanceID := flags.String("provenance", "", "provenance id or path")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if !*jsonOut {
+		fmt.Fprintln(stderr, "provenance record-check: --json is required")
+		return 2
+	}
+	if strings.TrimSpace(*provenanceID) == "" {
+		fmt.Fprintln(stderr, "provenance record-check: --provenance is required")
+		return 2
+	}
+	root, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(stderr, "provenance record-check: get current directory: %v\n", err)
+		return 1
+	}
+	check, err := provenance.RecordCheck(root, *provenanceID)
+	if err != nil {
+		fmt.Fprintf(stderr, "provenance record-check: %v\n", err)
+		return 1
+	}
+	return printJSON(stdout, stderr, check)
+}
+
+func runProvenanceVerify(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("provenance verify", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	jsonOut := flags.Bool("json", false, "print JSON output")
+	provenanceID := flags.String("provenance", "", "provenance id or path")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if !*jsonOut {
+		fmt.Fprintln(stderr, "provenance verify: --json is required")
+		return 2
+	}
+	if strings.TrimSpace(*provenanceID) == "" {
+		fmt.Fprintln(stderr, "provenance verify: --provenance is required")
+		return 2
+	}
+	root, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(stderr, "provenance verify: get current directory: %v\n", err)
+		return 1
+	}
+	result, err := provenance.Verify(root, *provenanceID)
+	if err != nil {
+		fmt.Fprintf(stderr, "provenance verify: %v\n", err)
+		return 1
+	}
+	if code := printJSON(stdout, stderr, result); code != 0 {
+		return code
+	}
+	if result.Result != "pass" {
+		return 1
+	}
+	return 0
+}
+
 func runKnowledgeDesign(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("knowledge design", flag.ContinueOnError)
 	flags.SetOutput(stderr)
@@ -665,17 +837,13 @@ func runKnowledgeCheck(args []string, stdout io.Writer, stderr io.Writer) int {
 func runKnowledgePublish(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("knowledge publish", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	designPath := flags.String("design", "", "knowledge design JSON path")
-	draftPath := flags.String("path", "", "draft item or package path")
+	provenancePath := flags.String("provenance", "", "provenance id or path")
+	publishedBy := flags.String("published-by", "", "publisher identity")
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
-	if strings.TrimSpace(*designPath) == "" {
-		fmt.Fprintln(stderr, "knowledge publish: --design is required")
-		return 2
-	}
-	if strings.TrimSpace(*draftPath) == "" {
-		fmt.Fprintln(stderr, "knowledge publish: --path is required")
+	if strings.TrimSpace(*provenancePath) == "" {
+		fmt.Fprintln(stderr, "knowledge publish: --provenance is required")
 		return 2
 	}
 	root, err := os.Getwd()
@@ -683,11 +851,18 @@ func runKnowledgePublish(args []string, stdout io.Writer, stderr io.Writer) int 
 		fmt.Fprintf(stderr, "knowledge publish: get current directory: %v\n", err)
 		return 1
 	}
-	if err := validatePublishApproval(root, *designPath, *draftPath); err != nil {
+	loaded, err := provenance.Load(root, *provenancePath)
+	if err != nil {
 		fmt.Fprintf(stderr, "knowledge publish: %v\n", err)
 		return 1
 	}
-	target, err := publishDraft(root, *draftPath, stderr)
+	target, err := publishDraftWithSideEffect(root, loaded.Record.Subject.DraftPath, stderr, func(target string) (func() error, error) {
+		if filepath.ToSlash(target) != filepath.ToSlash(loaded.Record.Subject.OfficialPath) {
+			return nil, fmt.Errorf("publish target %s does not match provenance official path %s", filepath.ToSlash(target), filepath.ToSlash(loaded.Record.Subject.OfficialPath))
+		}
+		_, rollback, err := provenance.PreparePublishMove(root, *provenancePath, *publishedBy)
+		return rollback, err
+	})
 	if err != nil {
 		fmt.Fprintf(stderr, "knowledge publish: %v\n", err)
 		return 1
@@ -695,35 +870,6 @@ func runKnowledgePublish(args []string, stdout io.Writer, stderr io.Writer) int 
 	fmt.Fprintf(stdout, "published %s\n", target)
 	fmt.Fprintln(stdout, "run argos index to refresh query results")
 	return 0
-}
-
-func validatePublishApproval(root string, designPath string, draftPath string) error {
-	design, err := loadPublishDesign(root, designPath)
-	if err != nil {
-		return err
-	}
-	if !design.Review.PublishApproved {
-		return fmt.Errorf("review.publish_approved is required before publish")
-	}
-	check, err := knowledgewrite.Check(root, knowledgewrite.CheckRequest{
-		DesignPath: designPath,
-		DraftPath:  draftPath,
-	})
-	if err != nil {
-		return err
-	}
-	if check.Result != "pass" {
-		return fmt.Errorf("knowledge check must pass before publish: %s", check.Result)
-	}
-	return nil
-}
-
-func loadPublishDesign(root string, relPath string) (knowledgewrite.KnowledgeDesign, error) {
-	clean := filepath.Clean(relPath)
-	if filepath.IsAbs(relPath) || clean == "." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) || clean == ".." {
-		return knowledgewrite.KnowledgeDesign{}, fmt.Errorf("%s: design path must be relative and inside workspace", relPath)
-	}
-	return knowledgewrite.LoadDesign(filepath.Join(root, clean))
 }
 
 func runKnowledgeFind(args []string, stdout io.Writer, stderr io.Writer) int {
@@ -1059,7 +1205,13 @@ func validateKnowledgeStorageScope(items []knowledge.Item, scope knowledgeStorag
 	return errs
 }
 
+type publishSideEffect func(target string) (func() error, error)
+
 func publishDraft(root string, relPath string, stderr io.Writer) (string, error) {
+	return publishDraftWithSideEffect(root, relPath, stderr, nil)
+}
+
+func publishDraftWithSideEffect(root string, relPath string, stderr io.Writer, sideEffect publishSideEffect) (string, error) {
 	clean := filepath.Clean(relPath)
 	if filepath.IsAbs(relPath) || clean == "." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) || clean == ".." {
 		return "", fmt.Errorf("%s: draft path must be relative and inside workspace", relPath)
@@ -1097,9 +1249,29 @@ func publishDraft(root string, relPath string, stderr io.Writer) (string, error)
 		}
 		return "", fmt.Errorf("activate published knowledge: %w", err)
 	}
+	var rollbackSideEffect func() error
+	if sideEffect != nil {
+		var err error
+		rollbackSideEffect, err = sideEffect(target)
+		if err != nil {
+			if rollbackErr := rollbackPublishedKnowledge(root, target, clean, snapshots); rollbackErr != nil {
+				return "", fmt.Errorf("publish side effect failed: %w; %v", err, rollbackErr)
+			}
+			return "", fmt.Errorf("publish side effect failed: %w", err)
+		}
+	}
 	if _, err := loadAndValidateKnowledge(root, stderr, validationScope{Path: target}); err != nil {
+		var rollbackFailures []string
+		if rollbackSideEffect != nil {
+			if rollbackErr := rollbackSideEffect(); rollbackErr != nil {
+				rollbackFailures = append(rollbackFailures, rollbackErr.Error())
+			}
+		}
 		if rollbackErr := rollbackPublishedKnowledge(root, target, clean, snapshots); rollbackErr != nil {
-			return "", fmt.Errorf("official validation failed after publish: %w; %v", err, rollbackErr)
+			rollbackFailures = append(rollbackFailures, rollbackErr.Error())
+		}
+		if len(rollbackFailures) > 0 {
+			return "", fmt.Errorf("official validation failed after publish: %w; %s", err, strings.Join(rollbackFailures, "; "))
 		}
 		return "", fmt.Errorf("official validation failed after publish: %w", err)
 	}
@@ -1301,6 +1473,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  context")
 	fmt.Fprintln(w, "  project")
 	fmt.Fprintln(w, "  knowledge")
+	fmt.Fprintln(w, "  provenance")
 	fmt.Fprintln(w, "  dogfood")
 	fmt.Fprintln(w, "  mcp")
 	fmt.Fprintln(w, "")
@@ -1309,9 +1482,13 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  argos project list --json")
 	fmt.Fprintln(w, "  argos knowledge design --json --project <project> --intent <intent>")
 	fmt.Fprintln(w, "  argos knowledge check --json --design <design.json> --draft <draft>")
-	fmt.Fprintln(w, "  argos knowledge publish --design <design.json> --path <draft>")
+	fmt.Fprintln(w, "  argos knowledge publish --provenance <id>")
 	fmt.Fprintln(w, "  argos knowledge list --json --project <project>")
 	fmt.Fprintln(w, "  argos knowledge find --json --project <project> --task <task>")
 	fmt.Fprintln(w, "  argos knowledge read --json <id>")
 	fmt.Fprintln(w, "  argos knowledge cite --json <id>...")
+	fmt.Fprintln(w, "  argos provenance start --json --design <design.json> --draft <draft>")
+	fmt.Fprintln(w, "  argos provenance record-decision --json --provenance <id> --stage <stage> --decision <decision> --decided-by <actor> --role <role> --source <source> --reason <reason> --recorded-by <agent>")
+	fmt.Fprintln(w, "  argos provenance record-check --json --provenance <id>")
+	fmt.Fprintln(w, "  argos provenance verify --json --provenance <id>")
 }
