@@ -23,6 +23,9 @@ func TestRunPrintsHelpWithoutCommand(t *testing.T) {
 	if !strings.Contains(out.String(), "Usage: argos <command>") {
 		t.Fatalf("expected usage output, got %q", out.String())
 	}
+	if strings.Contains(out.String(), "\n  new\n") {
+		t.Fatalf("usage should not list unimplemented new command, got %q", out.String())
+	}
 }
 
 func TestRunRejectsUnknownCommand(t *testing.T) {

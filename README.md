@@ -164,6 +164,27 @@ Structured knowledge packages live under `knowledge/packages/` and use
 Draft knowledge lives under `knowledge/.inbox/items/` or
 `knowledge/.inbox/packages/` until explicit publication.
 
+### Project Registry Setup
+
+`argos init` creates the knowledge directories and registry files, but it does
+not guess project IDs. Before publishing project-scoped knowledge, an agent
+should make sure `knowledge/projects.yaml` contains the target project and that
+the project's domains exist in `knowledge/domains.yaml`.
+
+Example:
+
+```yaml
+projects:
+  - id: mall-api
+    name: Mall API
+    path: services/mall-api
+    tech_domains: [backend, database]
+    business_domains: [account]
+```
+
+If the project or domain is missing, `argos knowledge check` reports
+`review-needed` instead of treating the draft as publishable.
+
 ### Designing And Publishing Knowledge
 
 When the user explicitly asks to create durable knowledge, use the write flow:
@@ -198,6 +219,11 @@ The server supports tool discovery with `tools/list`. The shared-knowledge
   body. Arguments: `id`.
 - `argos_cite_knowledge`: returns citation metadata for indexed knowledge items and
   reports missing ids. Arguments: `ids`.
+- `argos_design_knowledge`: returns write guidance and a knowledge design
+  template before draft writing. Arguments: `project`, `intent`,
+  `future_task`, `phase`, `query`, `files`, `domains`, `tags`, `draft_path`.
+- `argos_check_knowledge`: checks a draft against its reviewed design.
+  Arguments: `design`, `draft`.
 
 Additional workflow shortcuts include `argos_context` and `argos_standards`.
 

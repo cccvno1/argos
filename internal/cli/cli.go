@@ -993,7 +993,6 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Commands:")
 	fmt.Fprintln(w, "  init")
-	fmt.Fprintln(w, "  new")
 	fmt.Fprintln(w, "  validate")
 	fmt.Fprintln(w, "  index")
 	fmt.Fprintln(w, "  install-adapters")
