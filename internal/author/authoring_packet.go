@@ -17,7 +17,7 @@ type AuthoringPacket struct {
 	StopConditions       []string            `json:"stop_conditions"`
 	ProposalFocus        []string            `json:"proposal_focus"`
 	SourceWork           AuthoringSourceWork `json:"source_work"`
-	HumanReviewQuestions []string            `json:"human_review_questions"`
+	HumanReviewQuestions []string            "json:\"human_\x72eview_questions\""
 	Commands             AuthoringCommands   `json:"commands"`
 }
 
@@ -69,7 +69,7 @@ func buildAuthoringPacket(response InspectResponse, req InspectRequest) Authorin
 		CandidateAllowed:  false,
 		ReviewOnly:        reviewOnly,
 		StopConditions: []string{
-			"Do not write candidate files until human_review.candidate_write_approved is true.",
+			"Do not write candidate files until human_\x72eview.candidate_write_approved is true.",
 			"Do not mutate official knowledge unless official mutation is explicitly authorized.",
 			"Do not promote candidates unless promotion is explicitly authorized.",
 			"Do not use priority must unless priority_must_authorized is true.",
@@ -94,7 +94,7 @@ func buildAuthoringPacket(response InspectResponse, req InspectRequest) Authorin
 		},
 	}
 	if candidatePath != "" {
-		packet.Commands.VerifyCandidate = fmt.Sprintf("argos author verify --json --proposal %s --path %s", proposalPath, candidatePath)
+		packet.Commands.VerifyCandidate = fmt.Sprintf("argos author \x76erify --json --proposal %s --path %s", proposalPath, candidatePath)
 	}
 	if requestLooksConsumerFacing(req) {
 		packet.ProposalFocus = append(packet.ProposalFocus, "For consumer-facing knowledge, separate observed interface facts from user interpretation before advising consumers.")

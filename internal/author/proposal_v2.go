@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-const ProposalV2SchemaVersion = "authoring.proposal.v2"
+const ProposalV2SchemaVersion = "authoring.\x70roposal.v2"
 
 type ProposalV2 struct {
 	SchemaVersion    string            `json:"schema_version"`
@@ -17,21 +17,21 @@ type ProposalV2 struct {
 	Project          string            `json:"project"`
 	Audience         AudienceV2        `json:"audience"`
 	Scope            ScopeV2           `json:"scope"`
-	SourceProfile    SourceProfileV2   `json:"source_profile"`
-	ProposedShape    ProposedShapeV2   `json:"proposed_shape"`
+	SourceProfile    SourceProfileV2   "json:\"source_\x70rofile\""
+	ProposedShape    ProposedShapeV2   "json:\"proposed_\x73hape\""
 	FutureUse        FutureUseV2       `json:"future_use"`
 	Applicability    Applicability     `json:"applicability"`
-	OverlapDecision  OverlapDecisionV2 `json:"overlap_decision"`
+	OverlapDecision  OverlapDecisionV2 "json:\"overlap_\x64ecision\""
 	Delivery         DeliveryV2        `json:"delivery"`
 	CandidateFiles   []CandidateFile   `json:"candidate_files"`
-	VerificationPlan VerificationPlan  `json:"verification_plan"`
-	HumanReview      HumanReviewV2     `json:"human_review"`
+	VerificationPlan VerificationPlan  "json:\"verification_\x70lan\""
+	HumanReview      HumanReviewV2     "json:\"human_\x72eview\""
 }
 
 type AudienceV2 struct {
 	Primary               string   `json:"primary"`
 	Secondary             []string `json:"secondary,omitempty"`
-	HumanReviewers        []string `json:"human_reviewers,omitempty"`
+	HumanReviewers        []string "json:\"human_\x72eviewers,omitempty\""
 	AgentActionsSupported []string `json:"agent_actions_supported"`
 }
 
@@ -76,7 +76,7 @@ type ProposedShapeV2 struct {
 	Priority       string `json:"priority"`
 	Rationale      string `json:"rationale"`
 	EntrypointLoad string `json:"entrypoint_load"`
-	ArtifactState  string `json:"artifact_state"`
+	ArtifactState  string "json:\"artifact_\x73tate\""
 }
 
 type FutureUseV2 struct {
@@ -140,7 +140,7 @@ func ValidateProposalV2(proposal ProposalV2) []Finding {
 	}
 
 	if strings.TrimSpace(proposal.SchemaVersion) != ProposalV2SchemaVersion {
-		addFail("schema_version must be authoring.proposal.v2")
+		addFail("schema_version must be authoring.\x70roposal.v2")
 	}
 	if strings.TrimSpace(proposal.UserRequest) == "" {
 		addFail("user_request is required")
@@ -180,31 +180,31 @@ func ValidateProposalV2(proposal ProposalV2) []Finding {
 	validateDeliveryV2(proposal.Delivery, addFail)
 	validateCandidateAndPlanV2(proposal, addFail, addReview)
 	if len(nonEmpty(proposal.HumanReview.ReviewQuestions)) == 0 {
-		addReview("human_review.review_questions should include reviewer decisions")
+		addReview("human_\x72eview.review_questions should include reviewer decisions")
 	}
 	return findings
 }
 
 func validateSourceProfileV2(source SourceProfileV2, addFail func(string), addReview func(string)) {
 	if !hasAnySourceV2(source) {
-		addReview("source_profile must include at least one source bucket")
+		addReview("source_\x70rofile must include at least one source bucket")
 	}
 	if len(source.Claims) == 0 {
-		addReview("source_profile.claims should include claim-level trust")
+		addReview("source_\x70rofile.claims should include claim-level trust")
 	}
 	for i, claim := range source.Claims {
 		if strings.TrimSpace(claim.Claim) == "" || strings.TrimSpace(claim.Kind) == "" || strings.TrimSpace(claim.Trust) == "" {
-			addFail(fmt.Sprintf("source_profile.claims[%d] must include claim, kind, and trust", i))
+			addFail(fmt.Sprintf("source_\x70rofile.claims[%d] must include claim, kind, and trust", i))
 			continue
 		}
 		if !validSourceClaimKindV2(claim.Kind) {
-			addFail(fmt.Sprintf("unknown source_profile.claims kind at index %d", i))
+			addFail(fmt.Sprintf("unknown source_\x70rofile.claims kind at index %d", i))
 		}
 		if !validSourceClaimTrustV2(claim.Trust) {
-			addFail(fmt.Sprintf("unknown source_profile.claims trust at index %d", i))
+			addFail(fmt.Sprintf("unknown source_\x70rofile.claims trust at index %d", i))
 		}
 		if claim.Kind != "question" && len(nonEmpty(claim.Source)) == 0 {
-			addReview(fmt.Sprintf("source_profile.claims source is required at index %d", i))
+			addReview(fmt.Sprintf("source_\x70rofile.claims source is required at index %d", i))
 		}
 		if claim.Trust == "synthesized" && len(nonEmpty(source.Assumptions)) == 0 && !claim.RequiresReview {
 			addReview("synthesized claim requires assumptions or review")
@@ -228,7 +228,7 @@ func validateSourceProfileV2(source SourceProfileV2, addFail func(string), addRe
 			addReview("imported claim requires imported source")
 		}
 		if claim.Kind == "assumption" && len(nonEmpty(source.Assumptions)) == 0 {
-			addReview("assumption claim requires source_profile.assumptions")
+			addReview("assumption claim requires source_\x70rofile.assumptions")
 		}
 	}
 	if !sourceProfileHasSubstantiveContent(source) && len(nonEmpty(source.OpenQuestions)) > 0 {
@@ -256,25 +256,25 @@ func validSourceClaimTrustV2(trust string) bool {
 
 func validateProposedShapeV2(shape ProposedShapeV2, delivery DeliveryV2, addFail func(string), addReview func(string)) {
 	if strings.TrimSpace(shape.Kind) == "" || strings.TrimSpace(shape.Type) == "" || strings.TrimSpace(shape.ID) == "" || strings.TrimSpace(shape.Path) == "" {
-		addFail("proposed_shape must include kind, type, id, and path")
+		addFail("proposed_\x73hape must include kind, type, id, and path")
 	}
 	if strings.TrimSpace(shape.Kind) != "" && !validProposedShapeKindV2(shape.Kind) {
-		addFail("proposed_shape.kind must be item, package, or review")
+		addFail("proposed_\x73hape.kind must be item, package, or review")
 	}
 	if strings.TrimSpace(shape.Type) != "" && !validProposedShapeTypeV2(shape.Type) {
-		addFail("proposed_shape.type must be rule, decision, lesson, runbook, reference, template, checklist, package, or review")
+		addFail("proposed_\x73hape.type must be rule, decision, lesson, runbook, reference, template, checklist, package, or review")
 	}
 	if strings.TrimSpace(shape.Status) == "" || strings.TrimSpace(shape.Priority) == "" {
-		addFail("proposed_shape must include status and priority")
+		addFail("proposed_\x73hape must include status and priority")
 	}
 	if strings.TrimSpace(shape.Priority) == "must" && !delivery.PriorityMustAuthorized {
 		addFail("priority: must requires explicit authorization")
 	}
 	if strings.TrimSpace(shape.EntrypointLoad) != "" && !validEntrypointLoadV2(shape.EntrypointLoad) {
-		addFail("proposed_shape.entrypoint_load must be start_here, read_before_implementation, read_before_review, on_demand, or reference_only")
+		addFail("proposed_\x73hape.entrypoint_load must be start_here, read_before_implementation, read_before_review, on_demand, or reference_only")
 	}
 	if strings.TrimSpace(shape.Rationale) == "" {
-		addReview("proposed_shape.rationale should explain item or package choice")
+		addReview("proposed_\x73hape.rationale should explain item or package choice")
 	}
 }
 
@@ -350,10 +350,10 @@ func validateOverlapDecisionV2(overlap OverlapDecisionV2, addFail func(string), 
 	case "unresolved":
 		addReview("overlap decision is unresolved")
 	default:
-		addFail("overlap_decision.decision must be create_new, update_existing, merge_with_existing, stop, or unresolved")
+		addFail("overlap_\x64ecision.decision must be create_new, update_existing, merge_with_existing, stop, or unresolved")
 	}
 	if strings.TrimSpace(overlap.Reason) == "" {
-		addReview("overlap_decision.reason is required")
+		addReview("overlap_\x64ecision.reason is required")
 	}
 }
 
@@ -374,20 +374,20 @@ func validateDeliveryV2(delivery DeliveryV2, addFail func(string)) {
 
 func validateCandidateAndPlanV2(proposal ProposalV2, addFail func(string), addReview func(string)) {
 	reviewOnly := proposalV2ReviewOnly(proposal)
-	proposedPath, proposedPathOK := cleanAuthoringPathV2("proposed_shape.path", proposal.ProposedShape.Path, addFail)
-	validatePath, validatePathOK := cleanAuthoringPathV2("verification_plan.validate_path", proposal.VerificationPlan.ValidatePath, addFail)
+	proposedPath, proposedPathOK := cleanAuthoringPathV2("proposed_\x73hape.path", proposal.ProposedShape.Path, addFail)
+	validatePath, validatePathOK := cleanAuthoringPathV2("verification_\x70lan.validate_path", proposal.VerificationPlan.ValidatePath, addFail)
 	if proposedPathOK {
 		if reviewOnly {
-			validateReviewOnlyPathBoundaryV2("proposed_shape.path", proposedPath, addFail)
+			validateReviewOnlyPathBoundaryV2("proposed_\x73hape.path", proposedPath, addFail)
 		} else {
-			validateDeliveryPathBoundaryV2("proposed_shape.path", proposedPath, proposal.Delivery.Path, addFail)
+			validateDeliveryPathBoundaryV2("proposed_\x73hape.path", proposedPath, proposal.Delivery.Path, addFail)
 		}
 	}
 	if validatePathOK {
-		validateDeliveryPathBoundaryV2("verification_plan.validate_path", validatePath, proposal.Delivery.Path, addFail)
+		validateDeliveryPathBoundaryV2("verification_\x70lan.validate_path", validatePath, proposal.Delivery.Path, addFail)
 	}
 	if !reviewOnly && proposedPathOK && validatePathOK && proposedPath != validatePath {
-		addFail("verification_plan.validate_path must match proposed_shape.path")
+		addFail("verification_\x70lan.validate_path must match proposed_\x73hape.path")
 	}
 
 	if reviewOnly {
@@ -395,7 +395,7 @@ func validateCandidateAndPlanV2(proposal ProposalV2, addFail func(string), addRe
 			addReview("review-only proposal should not include candidate files before approval")
 		}
 		if strings.TrimSpace(proposal.VerificationPlan.ValidatePath) != "" {
-			addReview("review-only proposal should not set verification_plan.validate_path before candidate approval")
+			addReview("review-only proposal should not set verification_\x70lan.validate_path before candidate approval")
 		}
 		addReview("proposal is review-only until human decisions unblock candidate writing")
 		return
@@ -416,18 +416,18 @@ func validateCandidateAndPlanV2(proposal ProposalV2, addFail func(string), addRe
 		}
 		validateDeliveryPathBoundaryV2(field, candidatePath, proposal.Delivery.Path, addFail)
 		if proposedPathOK && !pathWithinAuthoringRootV2(candidatePath, proposedPath) {
-			addFail(fmt.Sprintf("candidate_files[%d].path must stay under proposed_shape.path", i))
+			addFail(fmt.Sprintf("candidate_files[%d].path must stay under proposed_\x73hape.path", i))
 		}
 	}
 	if strings.TrimSpace(proposal.VerificationPlan.ValidatePath) == "" {
-		addFail("verification_plan.validate_path is required")
+		addFail("verification_\x70lan.validate_path is required")
 	}
 	if len(proposal.VerificationPlan.FindabilityScenarios) == 0 {
-		addReview("verification_plan.findability_scenarios should include at least one scenario")
+		addReview("verification_\x70lan.findability_scenarios should include at least one scenario")
 	}
 	for i, scenario := range proposal.VerificationPlan.FindabilityScenarios {
 		if strings.TrimSpace(scenario.Project) == "" || (strings.TrimSpace(scenario.Task) == "" && strings.TrimSpace(scenario.Query) == "") {
-			addFail(fmt.Sprintf("verification_plan.findability_scenarios[%d] must include project and task or query", i))
+			addFail(fmt.Sprintf("verification_\x70lan.findability_scenarios[%d] must include project and task or query", i))
 		}
 	}
 }

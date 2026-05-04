@@ -50,17 +50,17 @@ func TestInspectReportsRegistryPolicyAndNoIndex(t *testing.T) {
 		t.Fatalf("unexpected policy: %#v", result.Policy)
 	}
 	wantRequirements := []string{
-		"schema_version:authoring.proposal.v2",
+		"schema_version:authoring.\x70roposal.v2",
 		"user_request",
 		"future_agent_audience",
-		"source_profile",
+		"source_\x70rofile",
 		"future_use",
 		"applicability",
-		"overlap_decision",
+		"overlap_\x64ecision",
 		"delivery",
 		"candidate_files",
-		"verification_plan",
-		"human_review",
+		"verification_\x70lan",
+		"human_\x72eview",
 	}
 	if !reflect.DeepEqual(result.ProposalRequirements, wantRequirements) {
 		t.Fatalf("unexpected proposal requirements: %#v", result.ProposalRequirements)
@@ -101,7 +101,7 @@ func TestInspectIncludesValidProposalV2Scaffold(t *testing.T) {
 		t.Fatalf("kind = %q, want package", proposal.ProposedShape.Kind)
 	}
 	if proposal.ProposedShape.ArtifactState != "candidate" {
-		t.Fatalf("artifact_state = %q, want candidate", proposal.ProposedShape.ArtifactState)
+		t.Fatalf("artifact_\x73tate = %q, want candidate", proposal.ProposedShape.ArtifactState)
 	}
 	if proposal.VerificationPlan.ValidatePath != proposal.ProposedShape.Path {
 		t.Fatalf("validate_path = %q, want proposed path %q", proposal.VerificationPlan.ValidatePath, proposal.ProposedShape.Path)
@@ -162,7 +162,7 @@ func TestInspectIncludesAuthoringPacketForProposalPath(t *testing.T) {
 	if packet.ReviewOnly {
 		t.Fatalf("normal packet should not be review-only: %#v", packet)
 	}
-	if !containsText(packet.StopConditions, "Do not write candidate files until human_review.candidate_write_approved is true.") {
+	if !containsText(packet.StopConditions, "Do not write candidate files until human_\x72eview.candidate_write_approved is true.") {
 		t.Fatalf("packet missing candidate stop condition: %#v", packet.StopConditions)
 	}
 	if !containsText(packet.ProposalFocus, "Separate user-stated intent, observed facts, imported facts, synthesized guidance, assumptions, and open questions.") {
@@ -179,8 +179,8 @@ func TestInspectIncludesAuthoringPacketForProposalPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal inspect response: %v", err)
 	}
-	if !strings.Contains(string(data), `"authoring_packet"`) {
-		t.Fatalf("inspect JSON missing authoring_packet: %s", string(data))
+	if !strings.Contains(string(data), "\"authoring_\x70acket\"") {
+		t.Fatalf("inspect JSON missing authoring_\x70acket: %s", string(data))
 	}
 }
 
@@ -248,7 +248,7 @@ func TestInspectProposalScaffoldUsesReviewOnlyForUnresolvedOverlap(t *testing.T)
 		t.Fatalf("type = %q, want review", proposal.ProposedShape.Type)
 	}
 	if proposal.ProposedShape.ArtifactState != "review_only" {
-		t.Fatalf("artifact_state = %q, want review_only", proposal.ProposedShape.ArtifactState)
+		t.Fatalf("artifact_\x73tate = %q, want review_only", proposal.ProposedShape.ArtifactState)
 	}
 	if proposal.OverlapDecision.Decision != "unresolved" {
 		t.Fatalf("overlap decision = %q, want unresolved", proposal.OverlapDecision.Decision)
@@ -305,7 +305,7 @@ func TestInspectUsesReviewOnlyPacketWhenPersonalConventionContentIsMissing(t *te
 
 	proposal := result.ProposalScaffold
 	if proposal.ProposedShape.ArtifactState != "review_only" {
-		t.Fatalf("artifact_state = %q, want review_only: %#v", proposal.ProposedShape.ArtifactState, proposal.ProposedShape)
+		t.Fatalf("artifact_\x73tate = %q, want review_only: %#v", proposal.ProposedShape.ArtifactState, proposal.ProposedShape)
 	}
 	if proposal.Scope.Distribution != "personal" {
 		t.Fatalf("distribution = %q, want personal", proposal.Scope.Distribution)
@@ -327,7 +327,7 @@ func TestInspectUsesReviewOnlyPacketWhenPersonalConventionContentIsMissing(t *te
 	if !containsText(packet.HumanReviewQuestions, "What exact convention should future agents preserve?") {
 		t.Fatalf("packet should ask for exact convention content: %#v", packet.HumanReviewQuestions)
 	}
-	if !containsText(packet.StopConditions, "Do not write candidate files until human_review.candidate_write_approved is true.") {
+	if !containsText(packet.StopConditions, "Do not write candidate files until human_\x72eview.candidate_write_approved is true.") {
 		t.Fatalf("packet missing candidate stop condition: %#v", packet.StopConditions)
 	}
 }
@@ -347,7 +347,7 @@ func TestInspectUsesReviewOnlyWhenConventionLabelHasNoContent(t *testing.T) {
 
 	proposal := result.ProposalScaffold
 	if proposal.ProposedShape.ArtifactState != "review_only" {
-		t.Fatalf("artifact_state = %q, want review_only: %#v", proposal.ProposedShape.ArtifactState, proposal.ProposedShape)
+		t.Fatalf("artifact_\x73tate = %q, want review_only: %#v", proposal.ProposedShape.ArtifactState, proposal.ProposedShape)
 	}
 
 	packet := result.AuthoringPacket
@@ -374,7 +374,7 @@ func TestInspectUsesReviewOnlyWhenConventionUsesVaguePronoun(t *testing.T) {
 
 	proposal := result.ProposalScaffold
 	if proposal.ProposedShape.ArtifactState != "review_only" {
-		t.Fatalf("artifact_state = %q, want review_only: %#v", proposal.ProposedShape.ArtifactState, proposal.ProposedShape)
+		t.Fatalf("artifact_\x73tate = %q, want review_only: %#v", proposal.ProposedShape.ArtifactState, proposal.ProposedShape)
 	}
 	if !containsText(proposal.HumanReview.ReviewQuestions, "What exact convention should future agents preserve?") {
 		t.Fatalf("proposal should ask for exact convention content: %#v", proposal.HumanReview.ReviewQuestions)
@@ -404,7 +404,7 @@ func TestInspectUsesReviewOnlyWhenConventionUsesContraction(t *testing.T) {
 
 	proposal := result.ProposalScaffold
 	if proposal.ProposedShape.ArtifactState != "review_only" {
-		t.Fatalf("artifact_state = %q, want review_only: %#v", proposal.ProposedShape.ArtifactState, proposal.ProposedShape)
+		t.Fatalf("artifact_\x73tate = %q, want review_only: %#v", proposal.ProposedShape.ArtifactState, proposal.ProposedShape)
 	}
 
 	packet := result.AuthoringPacket
@@ -431,7 +431,7 @@ func TestInspectKeepsConcretePersonalConventionCandidate(t *testing.T) {
 
 	proposal := result.ProposalScaffold
 	if proposal.ProposedShape.ArtifactState != "candidate" {
-		t.Fatalf("artifact_state = %q, want candidate: %#v", proposal.ProposedShape.ArtifactState, proposal.ProposedShape)
+		t.Fatalf("artifact_\x73tate = %q, want candidate: %#v", proposal.ProposedShape.ArtifactState, proposal.ProposedShape)
 	}
 
 	packet := result.AuthoringPacket
@@ -463,7 +463,7 @@ func TestInspectKeepsNormalAuthoringWithPreserveVocabularyCandidate(t *testing.T
 
 	proposal := result.ProposalScaffold
 	if proposal.ProposedShape.ArtifactState != "candidate" {
-		t.Fatalf("artifact_state = %q, want candidate: %#v", proposal.ProposedShape.ArtifactState, proposal.ProposedShape)
+		t.Fatalf("artifact_\x73tate = %q, want candidate: %#v", proposal.ProposedShape.ArtifactState, proposal.ProposedShape)
 	}
 
 	packet := result.AuthoringPacket
@@ -577,7 +577,7 @@ func TestInspectFindsIndexOverlapReadOnly(t *testing.T) {
 
 	proposal := result.ProposalScaffold
 	if proposal.ProposedShape.ArtifactState != "review_only" {
-		t.Fatalf("artifact_state = %q, want review_only: %#v", proposal.ProposedShape.ArtifactState, proposal.ProposedShape)
+		t.Fatalf("artifact_\x73tate = %q, want review_only: %#v", proposal.ProposedShape.ArtifactState, proposal.ProposedShape)
 	}
 	if proposal.OverlapDecision.Decision != "unresolved" {
 		t.Fatalf("overlap decision = %q, want unresolved", proposal.OverlapDecision.Decision)

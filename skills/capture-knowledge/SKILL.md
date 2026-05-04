@@ -50,7 +50,7 @@ package unless the verification plan names them and the user confirms execution.
 Never set `priority: must` unless the user explicitly authorizes it.
 Never claim authored knowledge is official while it is still in inbox.
 
-Treat `source_profile` as multi-source. Do not force the request into one mode
+Treat `sources` as multi-source. Do not force the request into one mode
 when it combines user-confirmed standards, observed files, imported references,
 templates, examples, synthesized recommendations, assumptions, and open
 questions.
@@ -58,17 +58,17 @@ questions.
 Before presenting the proposal, run or emulate:
 
 ```bash
-argos author inspect --json --project mall-api --goal "create product-list cache engineering knowledge"
+argos knowledge design --json --project mall-api --intent "create product-list cache engineering knowledge"
 ```
 
-Read `authoring_packet` before writing files. Treat it as the operational
-control packet for this authoring attempt:
+Read `write_guidance` before writing files. Treat it as the operational
+control guidance for this write attempt:
 
 - follow `recommended_action` for the next safe step;
 - use `proposal_path` for the proposal artifact;
 - use `candidate_path` only as a proposed path, not as write approval;
 - obey every `stop_conditions` entry;
-- ask the `human_review_questions` before candidate writing when correctness or
+- ask the `review.questions` before candidate writing when correctness or
   authorization depends on the answer;
 - run `commands.verify_candidate` only after candidate writing is approved and
   candidate files exist.
@@ -76,13 +76,13 @@ control packet for this authoring attempt:
 After approved candidate files are written, run:
 
 ```bash
-argos author verify --json \
-  --proposal knowledge/.inbox/proposals/product-list-cache/proposal.json \
-  --path knowledge/.inbox/packages/backend/product-list-cache
+argos knowledge check --json \
+  --design knowledge/.inbox/designs/product-list-cache/design.json \
+  --draft knowledge/.inbox/packages/backend/product-list-cache
 ```
 
-Do not use `author inspect` output as permission to write. Do not use `author
-verify` output as permission to promote. Both still require human review.
+Do not use `knowledge design` output as permission to write. Do not use
+`knowledge check` output as permission to publish. Both still require review.
 
 ## Language
 
@@ -249,27 +249,27 @@ The review text is not the persisted proposal artifact. When the user approves
 the proposal shape, write a canonical JSON proposal to
 `knowledge/.inbox/proposals/.../proposal.json` or the chosen proposal path
 before writing candidate knowledge. The JSON must use
-`schema_version: authoring.proposal.v2` and the snake_case fields that
-`argos author verify` validates:
+`schema_version: knowledge.design.v1` and the snake_case fields that
+`argos knowledge check` validates:
 
 ```text
 user_request
 knowledge_goal
 audience
 scope
-source_profile
-proposed_shape
+sources
+draft_output
 future_use
 applicability
-overlap_decision
-delivery
-candidate_files
-verification_plan
-human_review
+existing_knowledge
+write_boundary
+draft_files
+check_plan
+review
 ```
 
-Set `delivery.write_requires_human_approval` and
-`delivery.review_packet_required` to true. Keep the JSON proposal and the
+Set `write_boundary.write_requires_review_approval` and
+`write_boundary.review_packet_required` to true. Keep the JSON proposal and the
 human-facing proposal summary synchronized; do not write a Markdown-only
 proposal.
 
@@ -408,13 +408,13 @@ and in the package's `Load On Demand` guidance:
 After writing candidate files, run:
 
 ```bash
-argos author verify --json --proposal PROPOSAL_PATH --path TARGET_PATH
+argos knowledge check --json --design DESIGN_PATH --draft TARGET_PATH
 ```
 
 If the local binary is not installed but the repo can run it, use:
 
 ```bash
-go run ./cmd/argos author verify --json --proposal PROPOSAL_PATH --path TARGET_PATH
+go run ./cmd/argos knowledge check --json --design DESIGN_PATH --draft TARGET_PATH
 ```
 
 If verification fails because of protocol issues, fix the written files and run

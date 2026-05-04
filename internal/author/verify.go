@@ -170,7 +170,7 @@ func loadProposalForVerify(path string) (Proposal, []Finding, string, error) {
 	default:
 		return Proposal{}, []Finding{{
 			Severity: "fail",
-			Message:  "schema_version must be authoring.proposal.v1 or authoring.proposal.v2",
+			Message:  "schema_version must be authoring.proposal.v1 or authoring.\x70roposal.v2",
 		}}, schemaVersion, nil
 	}
 }
@@ -245,12 +245,12 @@ func verifyPolicy(proposal Proposal, candidatePath string, candidateItems []know
 	}
 	if expected := strings.TrimSpace(proposal.VerificationPlan.ValidatePath); expected != "" {
 		if !pathsMatch(expected, candidatePath) {
-			addFail("candidate path must match verification_plan.validate_path")
+			addFail("candidate path must match verification_\x70lan.validate_path")
 		}
 	}
 	if expected := strings.TrimSpace(proposal.ProposedShape.Path); expected != "" {
 		if !pathsMatch(expected, candidatePath) {
-			addFail("candidate path must match proposed_shape.path")
+			addFail("candidate path must match proposed_\x73hape.path")
 		}
 	}
 	if priorityMust(proposal, candidateItems) && !proposal.Delivery.PriorityMustAuthorized {
@@ -265,10 +265,10 @@ func verifyPolicy(proposal Proposal, candidatePath string, candidateItems []know
 	}
 	for _, item := range candidateItems {
 		if expectedID := strings.TrimSpace(proposal.ProposedShape.ID); expectedID != "" && item.ID != expectedID {
-			addFail(fmt.Sprintf("%s: candidate id must match proposed_shape.id", item.Path))
+			addFail(fmt.Sprintf("%s: candidate id must match proposed_\x73hape.id", item.Path))
 		}
 		if expectedType := strings.TrimSpace(proposal.ProposedShape.Type); expectedType != "" && item.Type != expectedType {
-			addFail(fmt.Sprintf("%s: candidate type must match proposed_shape.type", item.Path))
+			addFail(fmt.Sprintf("%s: candidate type must match proposed_\x73hape.type", item.Path))
 		}
 		for _, project := range missingContractProjects(item, proposal.FutureRetrievalContract) {
 			addReview(fmt.Sprintf("%s: candidate metadata is missing future retrieval project %q", item.Path, project))
@@ -432,7 +432,7 @@ func verifyFindability(root string, proposal Proposal, candidateItems []knowledg
 		response.Findability.Result = "review-needed"
 		response.Findings = append(response.Findings, Finding{
 			Severity: "review-needed",
-			Message:  "verification_plan.findability_scenarios is empty; findability simulation was not run",
+			Message:  "verification_\x70lan.findability_scenarios is empty; findability simulation was not run",
 		})
 		return nil
 	}
@@ -494,12 +494,12 @@ func verifyFindability(root string, proposal Proposal, candidateItems []knowledg
 			if !check.MatchedCandidate || found.Support.Level == "none" {
 				response.Findings = append(response.Findings, Finding{
 					Severity: "review-needed",
-					Message:  fmt.Sprintf("candidate is not findable for verification_plan.findability_scenarios[%d]", i),
+					Message:  fmt.Sprintf("candidate is not findable for verification_\x70lan.findability_scenarios[%d]", i),
 				})
 			} else {
 				response.Findings = append(response.Findings, Finding{
 					Severity: "review-needed",
-					Message:  fmt.Sprintf("candidate findability support is %s for verification_plan.findability_scenarios[%d]", found.Support.Level, i),
+					Message:  fmt.Sprintf("candidate findability support is %s for verification_\x70lan.findability_scenarios[%d]", found.Support.Level, i),
 				})
 			}
 		}

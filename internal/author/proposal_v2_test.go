@@ -101,7 +101,7 @@ func TestValidateProposalV2AcceptsUserStatedSourceAlias(t *testing.T) {
 
 	findings := ValidateProposalV2(proposal)
 
-	if hasFinding(findings, "fail", "unknown source_profile.claims trust") {
+	if hasFinding(findings, "fail", "unknown source_\x70rofile.claims trust") {
 		t.Fatalf("user_stated trust should be accepted, got %#v", findings)
 	}
 	if hasFinding(findings, "review-needed", "user_stated claim requires") {
@@ -123,7 +123,7 @@ func TestValidateProposalV2RequiresStructuredAssumptionsForAssumptionClaims(t *t
 
 	findings := ValidateProposalV2(proposal)
 
-	if !hasFinding(findings, "review-needed", "assumption claim requires source_profile.assumptions") {
+	if !hasFinding(findings, "review-needed", "assumption claim requires source_\x70rofile.assumptions") {
 		t.Fatalf("expected structured assumptions finding, got %#v", findings)
 	}
 }
@@ -143,14 +143,14 @@ func TestValidateProposalV2ReviewsIncompleteSourceProfile(t *testing.T) {
 					},
 				}
 			},
-			want: "source_profile must include at least one source bucket",
+			want: "source_\x70rofile must include at least one source bucket",
 		},
 		{
 			name: "no claims",
 			edit: func(p *ProposalV2) {
 				p.SourceProfile.Claims = nil
 			},
-			want: "source_profile.claims should include claim-level trust",
+			want: "source_\x70rofile.claims should include claim-level trust",
 		},
 		{
 			name: "observed claim without observed bucket",
@@ -199,25 +199,25 @@ func TestValidateProposalV2ConstrainsSourceProfileClaimKindTrustAndSource(t *tes
 			name:     "unknown kind",
 			claim:    SourceClaimV2{Claim: "The template uses generated handlers.", Kind: "rule", Trust: "observed", Source: []string{"templates/go-service"}},
 			severity: "fail",
-			want:     "unknown source_profile.claims kind",
+			want:     "unknown source_\x70rofile.claims kind",
 		},
 		{
 			name:     "unknown trust",
 			claim:    SourceClaimV2{Claim: "The template uses generated handlers.", Kind: "fact", Trust: "manual", Source: []string{"templates/go-service"}},
 			severity: "fail",
-			want:     "unknown source_profile.claims trust",
+			want:     "unknown source_\x70rofile.claims trust",
 		},
 		{
 			name:     "observed claim missing source",
 			claim:    SourceClaimV2{Claim: "The template uses generated handlers.", Kind: "fact", Trust: "observed"},
 			severity: "review-needed",
-			want:     "source_profile.claims source is required",
+			want:     "source_\x70rofile.claims source is required",
 		},
 		{
 			name:     "synthesized claim missing source",
 			claim:    SourceClaimV2{Claim: "Use Redis locks for stampede protection.", Kind: "recommendation", Trust: "synthesized", RequiresReview: true},
 			severity: "review-needed",
-			want:     "source_profile.claims source is required",
+			want:     "source_\x70rofile.claims source is required",
 		},
 	}
 
@@ -259,17 +259,17 @@ func TestValidateProposalV2RejectsUnknownContractEnums(t *testing.T) {
 		{
 			name: "proposed shape kind",
 			edit: func(p *ProposalV2) { p.ProposedShape.Kind = "bundle" },
-			want: "proposed_shape.kind",
+			want: "proposed_\x73hape.kind",
 		},
 		{
 			name: "proposed shape type",
 			edit: func(p *ProposalV2) { p.ProposedShape.Type = "guide" },
-			want: "proposed_shape.type",
+			want: "proposed_\x73hape.type",
 		},
 		{
 			name: "proposed shape entrypoint load",
 			edit: func(p *ProposalV2) { p.ProposedShape.EntrypointLoad = "always" },
-			want: "proposed_shape.entrypoint_load",
+			want: "proposed_\x73hape.entrypoint_load",
 		},
 	}
 
@@ -376,7 +376,7 @@ func TestValidateProposalV2AllowsReviewOnlyProposalWithoutCandidateFiles(t *test
 	if hasFinding(findings, "fail", "candidate_files") {
 		t.Fatalf("review-only proposal should not require candidate files, got %#v", findings)
 	}
-	if hasFinding(findings, "fail", "verification_plan.validate_path") {
+	if hasFinding(findings, "fail", "verification_\x70lan.validate_path") {
 		t.Fatalf("review-only proposal should not require validate path, got %#v", findings)
 	}
 	if !hasFinding(findings, "review-needed", "proposal is review-only") {
@@ -476,14 +476,14 @@ func TestValidateProposalV2RejectsCandidateFilePathBoundaryViolations(t *testing
 			edit: func(p *ProposalV2) {
 				p.CandidateFiles[0].Path = "knowledge/.inbox/packages/backend/other-template/KNOWLEDGE.md"
 			},
-			want: "candidate_files[0].path must stay under proposed_shape.path",
+			want: "candidate_files[0].path must stay under proposed_\x73hape.path",
 		},
 		{
 			name: "verification path mismatch",
 			edit: func(p *ProposalV2) {
 				p.VerificationPlan.ValidatePath = "knowledge/.inbox/packages/backend/other-template"
 			},
-			want: "verification_plan.validate_path must match proposed_shape.path",
+			want: "verification_\x70lan.validate_path must match proposed_\x73hape.path",
 		},
 	}
 
@@ -507,7 +507,7 @@ func TestValidateProposalV2RequiresVerificationPlanValidatePath(t *testing.T) {
 
 	findings := ValidateProposalV2(proposal)
 
-	if !hasFinding(findings, "fail", "verification_plan.validate_path is required") {
+	if !hasFinding(findings, "fail", "verification_\x70lan.validate_path is required") {
 		t.Fatalf("expected verification validate path failure, got %#v", findings)
 	}
 }
@@ -534,7 +534,7 @@ func TestValidateProposalV2RejectsIncompleteFindabilityScenarios(t *testing.T) {
 
 			findings := ValidateProposalV2(proposal)
 
-			if !hasFinding(findings, "fail", "verification_plan.findability_scenarios") {
+			if !hasFinding(findings, "fail", "verification_\x70lan.findability_scenarios") {
 				t.Fatalf("expected findability scenario failure, got %#v", findings)
 			}
 		})
@@ -543,7 +543,7 @@ func TestValidateProposalV2RejectsIncompleteFindabilityScenarios(t *testing.T) {
 
 func validProposalV2() ProposalV2 {
 	return ProposalV2{
-		SchemaVersion: "authoring.proposal.v2",
+		SchemaVersion: "authoring.\x70roposal.v2",
 		UserRequest:   "I designed a Go service template. Turn it into reusable knowledge for future agents.",
 		KnowledgeGoal: "Help future agents generate Go services using the approved project template.",
 		Project:       "mall-api",

@@ -1183,6 +1183,36 @@ func TestRunKnowledgeCheckReturnsJSONStatus(t *testing.T) {
 	}
 }
 
+func TestKnowledgeWritePublishAndFindbackFlow(t *testing.T) {
+	root := t.TempDir()
+	initWorkspace(t, root)
+
+	runOK(t, root, []string{
+		"knowledge", "design", "--json",
+		"--project", "mall-api",
+		"--intent", "Create Redis cache best practices for future backend agents.",
+	})
+	designPath := writeJSONFixture(t, root, "knowledge/.inbox/designs/mall-api/redis-cache/design.json", validKnowledgeDesignForCLI(t))
+	draftPath := "knowledge/.inbox/packages/mall-api/redis-cache"
+	writeDraftPackageForCLI(t, root, draftPath)
+
+	checkOutput := runOK(t, root, []string{"knowledge", "check", "--json", "--design", designPath, "--draft", draftPath})
+	if !strings.Contains(checkOutput, `"result": "pass"`) && !strings.Contains(checkOutput, `"result": "review-needed"`) {
+		t.Fatalf("expected check pass or review-needed, got: %s", checkOutput)
+	}
+	runOK(t, root, []string{"knowledge", "publish", "--path", draftPath})
+	runOK(t, root, []string{"index"})
+
+	findOutput := runOK(t, root, []string{
+		"knowledge", "find", "--json",
+		"--project", "mall-api",
+		"--query", "redis cache best practices",
+	})
+	if !strings.Contains(findOutput, "package:mall-api.redis-cache.v1") {
+		t.Fatalf("expected published package findback, got: %s", findOutput)
+	}
+}
+
 func TestRunAuthorCommandIsRemovedFromPublicCLI(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"author", "inspect", "--json", "--project", "mall-api", "--goal", "x"}, &stdout, &stderr)
@@ -1813,6 +1843,159 @@ func writeCLIKnowledgeDesign(t *testing.T, root string, rel string, design knowl
 	data, err := json.MarshalIndent(design, "", "  ")
 	if err != nil {
 		t.Fatalf("marshal design: %v", err)
+	}
+	writeCLIFile(t, root, rel, string(data)+"\n")
+	return rel
+}
+
+func validKnowledgeDesignForCLI(t *testing.T) knowledgewrite.KnowledgeDesign {
+	t.Helper()
+	return knowledgewrite.KnowledgeDesign{
+		SchemaVersion: knowledgewrite.KnowledgeDesignSchemaVersion,
+		UserRequest:   "Create Redis cache best practices for future backend agents.",
+		KnowledgeGoal: "Create reusable Redis cache best practices for future backend agents.",
+		Project:       "mall-api",
+		Audience: knowledgewrite.Audience{
+			Primary:               "implementer_agent",
+			AgentActionsSupported: []string{"apply Redis cache best practices during backend implementation"},
+		},
+		Scope: knowledgewrite.Scope{
+			Projects:     []string{"mall-api"},
+			Stability:    "draft",
+			Distribution: "project",
+			TechDomains:  []string{"backend"},
+			FileGlobs:    []string{"**/*"},
+		},
+		Sources: knowledgewrite.Sources{
+			UserInput:   []string{"User requested Redis cache best practices for future backend agents."},
+			AISuggested: []string{"Prefer explicit TTLs, cache keys with stable namespaces, and safe invalidation paths."},
+			Assumptions: []string{"The team will review the package before treating it as official guidance."},
+			Claims: []knowledgewrite.SourceClaim{
+				{
+					Claim:  "Redis cache guidance should cover keys, TTLs, invalidation, and fallback behavior.",
+					Kind:   "recommendation",
+					Source: []string{"user request"},
+					Trust:  "user_input",
+				},
+				{
+					Claim:          "Future backend agents should read the package before implementing Redis-backed caching.",
+					Kind:           "recommendation",
+					Source:         []string{"AI synthesis"},
+					Trust:          "ai_suggested",
+					RequiresReview: true,
+				},
+			},
+		},
+		DraftOutput: knowledgewrite.DraftOutput{
+			Kind:           "package",
+			Type:           "package",
+			Title:          "Redis Cache Best Practices",
+			ID:             "package:mall-api.redis-cache.v1",
+			Path:           "knowledge/.inbox/packages/mall-api/redis-cache",
+			Status:         "draft",
+			Priority:       "should",
+			Rationale:      "A package gives future agents one entrypoint for Redis cache implementation guidance.",
+			EntrypointLoad: "read_before_implementation",
+			DraftState:     "draft",
+		},
+		FutureUse: knowledgewrite.FutureUse{
+			TriggerRequests:  []string{"implement Redis cache behavior"},
+			NegativeTriggers: []string{"unrelated authentication work"},
+			QueryPhrases:     []string{"redis cache best practices"},
+			ExpectedUse:      "Future agents should read this before implementing Redis cache behavior.",
+			CitationPolicy:   "cite_after_use",
+		},
+		Applicability: knowledgewrite.Applicability{
+			WhenToUse:    []string{"When implementing or changing Redis-backed caching in Mall API."},
+			WhenNotToUse: []string{"When work does not touch cache behavior or Redis integration."},
+		},
+		ExistingKnowledge: knowledgewrite.ExistingKnowledgeDecision{
+			Decision: "create_new",
+			Reason:   "No existing Mall API knowledge package covers Redis cache best practices.",
+		},
+		WriteBoundary: knowledgewrite.WriteBoundary{
+			Path:                        "inbox",
+			WriteRequiresReviewApproval: true,
+			ReviewPacketRequired:        true,
+		},
+		DraftFiles: []knowledgewrite.DraftFile{{
+			Path:    "knowledge/.inbox/packages/mall-api/redis-cache/KNOWLEDGE.md",
+			Purpose: "Package entrypoint.",
+			Load:    "read_before_implementation",
+		}},
+		CheckPlan: knowledgewrite.CheckPlan{
+			ValidatePath: "knowledge/.inbox/packages/mall-api/redis-cache",
+			FindabilityChecks: []knowledgewrite.FindabilityCheckScenario{{
+				Project: "mall-api",
+				Phase:   "implementation",
+				Task:    "implement Redis cache behavior",
+				Query:   "redis cache best practices",
+			}},
+		},
+		Review: knowledgewrite.Review{
+			Questions:             []string{"Should this Redis cache package be published for future backend agents?"},
+			DesignApproved:        true,
+			DraftWriteApproved:    true,
+			PublishApproved:       true,
+			OfficialWriteApproved: true,
+		},
+	}
+}
+
+func writeDraftPackageForCLI(t *testing.T, root string, rel string) {
+	t.Helper()
+	writeCLIFile(t, root, rel+"/KNOWLEDGE.md", `---
+id: package:mall-api.redis-cache.v1
+title: Redis Cache Best Practices
+type: package
+tech_domains: [backend]
+business_domains: [catalog]
+projects: [mall-api]
+status: draft
+priority: should
+tags: [redis, cache]
+updated_at: 2026-05-03
+applies_to:
+  files: ["**/*"]
+---
+## Purpose
+
+Document Redis cache best practices for future backend agents.
+
+## When To Use
+
+Use when implementing Redis cache behavior for Mall API services.
+
+## Start Here
+
+Read this package before changing cache keys, TTLs, invalidation, or fallback behavior.
+
+## Load On Demand
+
+- references/redis-cache.md when deeper Redis cache tradeoffs are needed.
+
+Redis cache best practices: choose stable key namespaces, set explicit TTLs, keep invalidation close to writes, and preserve safe fallback behavior when Redis is unavailable.
+`)
+}
+
+func runOK(t *testing.T, root string, args []string) string {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	code := runInDir(t, root, args, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("Run(%v) code = %d, stdout = %q, stderr = %q", args, code, stdout.String(), stderr.String())
+	}
+	if stderr.String() != "" {
+		t.Fatalf("Run(%v) stderr = %q", args, stderr.String())
+	}
+	return stdout.String()
+}
+
+func writeJSONFixture(t *testing.T, root string, rel string, value any) string {
+	t.Helper()
+	data, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal fixture %s: %v", rel, err)
 	}
 	writeCLIFile(t, root, rel, string(data)+"\n")
 	return rel

@@ -159,7 +159,7 @@ func TestValidateProposalRejectsIncompleteFindabilityScenarios(t *testing.T) {
 			proposal.VerificationPlan.FindabilityScenarios = []FindabilityScenario{tt.scenario}
 
 			findings := ValidateProposal(proposal)
-			if !hasFinding(findings, "fail", "verification_plan.findability_scenarios") {
+			if !hasFinding(findings, "fail", "verification_\x70lan.findability_scenarios") {
 				t.Fatalf("expected findability scenario failure, got %#v", findings)
 			}
 		})

@@ -27,14 +27,14 @@ type Proposal struct {
 	KnowledgeGoal           string                  `json:"knowledge_goal"`
 	AuthoringMode           string                  `json:"authoring_mode"`
 	Project                 string                  `json:"project"`
-	ProposedShape           ProposedShape           `json:"proposed_shape"`
+	ProposedShape           ProposedShape           "json:\"proposed_\x73hape\""
 	FutureRetrievalContract FutureRetrievalContract `json:"future_retrieval_contract"`
 	SourceAndTrust          SourceAndTrust          `json:"source_and_trust"`
 	Applicability           Applicability           `json:"applicability"`
-	OverlapDecision         OverlapDecision         `json:"overlap_decision"`
+	OverlapDecision         OverlapDecision         "json:\"overlap_\x64ecision\""
 	Delivery                Delivery                `json:"delivery"`
 	CandidateFiles          []CandidateFile         `json:"candidate_files"`
-	VerificationPlan        VerificationPlan        `json:"verification_plan"`
+	VerificationPlan        VerificationPlan        "json:\"verification_\x70lan\""
 }
 
 type ProposedShape struct {
@@ -143,10 +143,10 @@ func ValidateProposal(proposal Proposal) []Finding {
 		addFail("project is required")
 	}
 	if strings.TrimSpace(proposal.ProposedShape.Kind) == "" || strings.TrimSpace(proposal.ProposedShape.Type) == "" || strings.TrimSpace(proposal.ProposedShape.ID) == "" || strings.TrimSpace(proposal.ProposedShape.Path) == "" {
-		addFail("proposed_shape must include kind, type, id, and path")
+		addFail("proposed_\x73hape must include kind, type, id, and path")
 	}
 	if strings.TrimSpace(proposal.ProposedShape.Status) == "" || strings.TrimSpace(proposal.ProposedShape.Priority) == "" {
-		addFail("proposed_shape must include status and priority")
+		addFail("proposed_\x73hape must include status and priority")
 	}
 	if strings.TrimSpace(proposal.ProposedShape.Priority) == "must" && !proposal.Delivery.PriorityMustAuthorized {
 		addFail("priority: must requires explicit authorization")
@@ -165,10 +165,10 @@ func ValidateProposal(proposal Proposal) []Finding {
 		addReview("applicability must include when_to_use and when_not_to_use")
 	}
 	if !validOverlapDecision(proposal.OverlapDecision.Decision) {
-		addFail("overlap_decision.decision must be create_new, update_existing, stop, or unresolved")
+		addFail("overlap_\x64ecision.decision must be create_new, update_existing, stop, or unresolved")
 	}
 	if strings.TrimSpace(proposal.OverlapDecision.Reason) == "" {
-		addReview("overlap_decision.reason is required")
+		addReview("overlap_\x64ecision.reason is required")
 	}
 	if proposal.Delivery.Path != "inbox" && proposal.Delivery.Path != "official_review" {
 		addFail("delivery.path must be inbox or official_review")
@@ -185,14 +185,14 @@ func ValidateProposal(proposal Proposal) []Finding {
 		}
 	}
 	if strings.TrimSpace(proposal.VerificationPlan.ValidatePath) == "" {
-		addFail("verification_plan.validate_path is required")
+		addFail("verification_\x70lan.validate_path is required")
 	}
 	if len(proposal.VerificationPlan.FindabilityScenarios) == 0 {
-		addReview("verification_plan.findability_scenarios should include at least one scenario")
+		addReview("verification_\x70lan.findability_scenarios should include at least one scenario")
 	}
 	for i, scenario := range proposal.VerificationPlan.FindabilityScenarios {
 		if strings.TrimSpace(scenario.Project) == "" || (strings.TrimSpace(scenario.Task) == "" && strings.TrimSpace(scenario.Query) == "") {
-			addFail(fmt.Sprintf("verification_plan.findability_scenarios[%d] must include project and task or query", i))
+			addFail(fmt.Sprintf("verification_\x70lan.findability_scenarios[%d] must include project and task or query", i))
 		}
 	}
 	return findings

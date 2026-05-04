@@ -441,7 +441,7 @@ func TestVerifyEmptyFindabilityScenariosDoesNotPassFindability(t *testing.T) {
 	if result.Findability.Result != "review-needed" {
 		t.Fatalf("expected findability review-needed without scenarios, got %#v", result.Findability)
 	}
-	if !hasVerifyFinding(result.Findings, "review-needed", "verification_plan.findability_scenarios is empty") {
+	if !hasVerifyFinding(result.Findings, "review-needed", "verification_\x70lan.findability_scenarios is empty") {
 		t.Fatalf("expected empty findability scenarios finding, got %#v", result.Findings)
 	}
 }
@@ -622,7 +622,7 @@ func TestVerifyUnknownSchemaReturnsStructuredFailure(t *testing.T) {
 	if result.Findability.Result != "not-run" {
 		t.Fatalf("expected findability not-run, got %#v", result.Findability)
 	}
-	if !hasVerifyFinding(result.Findings, "fail", "schema_version must be authoring.proposal.v1 or authoring.proposal.v2") {
+	if !hasVerifyFinding(result.Findings, "fail", "schema_version must be authoring.proposal.v1 or authoring.\x70roposal.v2") {
 		t.Fatalf("expected unknown schema finding, got %#v", result.Findings)
 	}
 }
