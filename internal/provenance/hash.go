@@ -16,7 +16,18 @@ func HashFile(root string, relPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	file, err := os.Open(filepath.Join(root, clean))
+	absPath, err := resolvedPathInsideRoot(root, clean)
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Stat(absPath)
+	if err != nil {
+		return "", fmt.Errorf("stat %s: %w", filepath.ToSlash(clean), err)
+	}
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("%s: expected regular file", filepath.ToSlash(clean))
+	}
+	file, err := os.Open(absPath)
 	if err != nil {
 		return "", fmt.Errorf("open %s: %w", filepath.ToSlash(clean), err)
 	}
@@ -88,4 +99,28 @@ func cleanRelPath(relPath string) (string, error) {
 		return "", fmt.Errorf("%s: path must stay inside workspace", relPath)
 	}
 	return clean, nil
+}
+
+func resolvedPathInsideRoot(root string, relPath string) (string, error) {
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return "", fmt.Errorf("resolve workspace root: %w", err)
+	}
+	rootResolved, err := filepath.EvalSymlinks(rootAbs)
+	if err != nil {
+		return "", fmt.Errorf("resolve workspace root symlinks: %w", err)
+	}
+	targetAbs := filepath.Join(rootAbs, relPath)
+	targetResolved, err := filepath.EvalSymlinks(targetAbs)
+	if err != nil {
+		return "", fmt.Errorf("resolve %s symlinks: %w", filepath.ToSlash(relPath), err)
+	}
+	rel, err := filepath.Rel(rootResolved, targetResolved)
+	if err != nil {
+		return "", fmt.Errorf("resolve %s relative to workspace: %w", filepath.ToSlash(relPath), err)
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return "", fmt.Errorf("%s: resolved path must stay inside workspace", filepath.ToSlash(relPath))
+	}
+	return targetResolved, nil
 }

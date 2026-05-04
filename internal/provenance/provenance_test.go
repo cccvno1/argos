@@ -1,6 +1,7 @@
 package provenance
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -58,6 +59,45 @@ func TestHashRejectsUnsafePaths(t *testing.T) {
 	}
 }
 
+func TestHashFileRejectsSymlinkOutsideWorkspace(t *testing.T) {
+	root := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "secret.txt")
+	if err := os.WriteFile(outside, []byte("secret\n"), 0o644); err != nil {
+		t.Fatalf("write outside file: %v", err)
+	}
+	link := filepath.Join(root, "knowledge/.inbox/packages/mall-api/redis-cache/secret.md")
+	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+		t.Fatalf("mkdir link parent: %v", err)
+	}
+	if err := os.Symlink(outside, link); err != nil {
+		t.Fatalf("symlink outside file: %v", err)
+	}
+
+	if _, err := HashFile(root, "knowledge/.inbox/packages/mall-api/redis-cache/secret.md"); err == nil {
+		t.Fatalf("expected symlink escape error")
+	}
+}
+
+func TestHashTreeRejectsSymlinkOutsideWorkspace(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, root, "knowledge/.inbox/packages/mall-api/redis-cache/KNOWLEDGE.md", "entrypoint\n")
+	outside := filepath.Join(t.TempDir(), "secret.txt")
+	if err := os.WriteFile(outside, []byte("secret\n"), 0o644); err != nil {
+		t.Fatalf("write outside file: %v", err)
+	}
+	link := filepath.Join(root, "knowledge/.inbox/packages/mall-api/redis-cache/references/secret.md")
+	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+		t.Fatalf("mkdir link parent: %v", err)
+	}
+	if err := os.Symlink(outside, link); err != nil {
+		t.Fatalf("symlink outside file: %v", err)
+	}
+
+	if _, err := HashTree(root, "knowledge/.inbox/packages/mall-api/redis-cache"); err == nil {
+		t.Fatalf("expected tree symlink escape error")
+	}
+}
+
 func TestRecordJSONShape(t *testing.T) {
 	record := Record{
 		SchemaVersion: SchemaVersion,
@@ -77,6 +117,22 @@ func TestRecordJSONShape(t *testing.T) {
 	}
 	if !strings.HasPrefix(record.ProvenanceID, "prov-") {
 		t.Fatalf("unexpected provenance id: %q", record.ProvenanceID)
+	}
+}
+
+func TestRecordOmitEmptyLatestCheck(t *testing.T) {
+	record := Record{
+		SchemaVersion: SchemaVersion,
+		ProvenanceID:  "prov-20260504-redis-cache-a1b2c3d4",
+		State:         StateDraft,
+	}
+
+	data, err := json.Marshal(record)
+	if err != nil {
+		t.Fatalf("marshal record: %v", err)
+	}
+	if strings.Contains(string(data), "latest_check") {
+		t.Fatalf("expected empty latest_check to be omitted, got %s", string(data))
 	}
 }
 

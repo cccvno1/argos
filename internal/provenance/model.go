@@ -17,18 +17,18 @@ const (
 )
 
 type Record struct {
-	SchemaVersion string      `json:"schema_version"`
-	ProvenanceID  string      `json:"provenance_id"`
-	State         string      `json:"state"`
-	Subject       Subject     `json:"subject"`
-	Hashes        Hashes      `json:"hashes"`
-	LatestCheck   LatestCheck `json:"latest_check,omitempty"`
-	CreatedAt     string      `json:"created_at"`
-	CreatedBy     string      `json:"created_by"`
-	PublishedAt   string      `json:"published_at,omitempty"`
-	PublishedBy   string      `json:"published_by,omitempty"`
-	PublishedFrom string      `json:"published_from,omitempty"`
-	PublishedTo   string      `json:"published_to,omitempty"`
+	SchemaVersion string       `json:"schema_version"`
+	ProvenanceID  string       `json:"provenance_id"`
+	State         string       `json:"state"`
+	Subject       Subject      `json:"subject"`
+	Hashes        Hashes       `json:"hashes"`
+	LatestCheck   *LatestCheck `json:"latest_check,omitempty"`
+	CreatedAt     string       `json:"created_at"`
+	CreatedBy     string       `json:"created_by"`
+	PublishedAt   string       `json:"published_at,omitempty"`
+	PublishedBy   string       `json:"published_by,omitempty"`
+	PublishedFrom string       `json:"published_from,omitempty"`
+	PublishedTo   string       `json:"published_to,omitempty"`
 }
 
 type Subject struct {
