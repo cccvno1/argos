@@ -81,3 +81,28 @@ type VerifyResult struct {
 	Path     string   `json:"path"`
 	Findings []string `json:"findings,omitempty"`
 }
+
+type ListFilter struct {
+	State       string
+	Project     string
+	KnowledgeID string
+}
+
+type ListResponse struct {
+	Records []ListRecord `json:"records"`
+}
+
+type ListRecord struct {
+	ProvenanceID      string `json:"provenance_id"`
+	State             string `json:"state"`
+	Path              string `json:"path"`
+	Project           string `json:"project,omitempty"`
+	KnowledgeID       string `json:"knowledge_id,omitempty"`
+	Kind              string `json:"kind,omitempty"`
+	DesignPath        string `json:"design_path,omitempty"`
+	DraftPath         string `json:"draft_path,omitempty"`
+	OfficialPath      string `json:"official_path,omitempty"`
+	LatestCheckResult string `json:"latest_check_result,omitempty"`
+	CreatedAt         string `json:"created_at,omitempty"`
+	PublishedAt       string `json:"published_at,omitempty"`
+}
