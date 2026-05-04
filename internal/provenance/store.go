@@ -303,6 +303,119 @@ func LoadDecisions(root string, idOrPath string) ([]Decision, error) {
 	return decisions, nil
 }
 
+func RecordCheck(root string, idOrPath string) (knowledgewrite.CheckResponse, error) {
+	loaded, err := Load(root, idOrPath)
+	if err != nil {
+		return knowledgewrite.CheckResponse{}, err
+	}
+	check, err := knowledgewrite.Check(root, knowledgewrite.CheckRequest{
+		DesignPath: loaded.Record.Subject.DesignPath,
+		DraftPath:  loaded.Record.Subject.DraftPath,
+	})
+	if err != nil {
+		return knowledgewrite.CheckResponse{}, err
+	}
+	checksDir, err := safeMkdirAllInsideRoot(root, filepath.Join(loaded.Dir, "checks"))
+	if err != nil {
+		return knowledgewrite.CheckResponse{}, err
+	}
+	next := nextCheckPath(checksDir)
+	data, err := json.MarshalIndent(check, "", "  ")
+	if err != nil {
+		return knowledgewrite.CheckResponse{}, fmt.Errorf("marshal check: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(checksDir, next), append(data, '\n'), 0o644); err != nil {
+		return knowledgewrite.CheckResponse{}, fmt.Errorf("write check: %w", err)
+	}
+
+	loaded.Record.Hashes.DesignSHA256, err = HashFile(root, loaded.Record.Subject.DesignPath)
+	if err != nil {
+		return knowledgewrite.CheckResponse{}, err
+	}
+	loaded.Record.Hashes.DraftTreeSHA256, err = HashTree(root, loaded.Record.Subject.DraftPath)
+	if err != nil {
+		return knowledgewrite.CheckResponse{}, err
+	}
+	checkRel := filepath.Join(loaded.Dir, "checks", next)
+	loaded.Record.Hashes.LatestCheckSHA256, err = HashFile(root, checkRel)
+	if err != nil {
+		return knowledgewrite.CheckResponse{}, err
+	}
+	loaded.Record.LatestCheck = &LatestCheck{
+		Path:   filepath.ToSlash(filepath.Join("checks", next)),
+		Result: check.Result,
+	}
+	recordPath, err := resolvedPathInsideRoot(root, loaded.Path)
+	if err != nil {
+		return knowledgewrite.CheckResponse{}, err
+	}
+	if err := writeRecord(recordPath, loaded.Record); err != nil {
+		return knowledgewrite.CheckResponse{}, err
+	}
+	return check, nil
+}
+
+func Verify(root string, idOrPath string) (VerifyResult, error) {
+	loaded, err := Load(root, idOrPath)
+	if err != nil {
+		return VerifyResult{}, err
+	}
+	var findings []string
+	record := loaded.Record
+	if record.SchemaVersion != SchemaVersion {
+		findings = append(findings, "schema_version must be "+SchemaVersion)
+	}
+	designHash, err := HashFile(root, record.Subject.DesignPath)
+	if err != nil {
+		findings = append(findings, err.Error())
+	} else if record.Hashes.DesignSHA256 == "" {
+		findings = append(findings, "design hash is required")
+	} else if designHash != record.Hashes.DesignSHA256 {
+		findings = append(findings, "design hash changed")
+	}
+	draftHash, err := HashTree(root, record.Subject.DraftPath)
+	if err != nil {
+		findings = append(findings, err.Error())
+	} else if record.Hashes.DraftTreeSHA256 == "" {
+		findings = append(findings, "draft tree hash is required")
+	} else if draftHash != record.Hashes.DraftTreeSHA256 {
+		findings = append(findings, "draft tree hash changed")
+	}
+	if record.LatestCheck == nil {
+		findings = append(findings, "latest check is required")
+	} else {
+		if record.LatestCheck.Result != "pass" {
+			findings = append(findings, "latest check must pass")
+		}
+		if record.LatestCheck.Path == "" {
+			findings = append(findings, "latest check path is required")
+		} else {
+			checkHash, err := HashFile(root, filepath.Join(loaded.Dir, record.LatestCheck.Path))
+			if err != nil {
+				findings = append(findings, err.Error())
+			} else if record.Hashes.LatestCheckSHA256 == "" {
+				findings = append(findings, "latest check hash is required")
+			} else if checkHash != record.Hashes.LatestCheckSHA256 {
+				findings = append(findings, "latest check hash changed")
+			}
+		}
+	}
+
+	decisions, err := LoadDecisions(root, idOrPath)
+	if err != nil {
+		return VerifyResult{}, err
+	}
+	requireApprovedDecision(&findings, decisions, StageDesign, record.Hashes)
+	requireApprovedDecision(&findings, decisions, StageDraftWrite, record.Hashes)
+	requireApprovedDecision(&findings, decisions, StagePublish, record.Hashes)
+
+	result := "pass"
+	if len(findings) > 0 {
+		result = "fail"
+	}
+	return VerifyResult{Result: result, ID: record.ProvenanceID, Path: loaded.Dir, Findings: findings}, nil
+}
+
 func validateDecisionInput(input DecisionInput) error {
 	if !validStage(input.Stage) {
 		return fmt.Errorf("stage must be design, draft_write, or publish")
@@ -374,6 +487,36 @@ func decisionsPath(root string, provenanceDir string) (string, error) {
 		return "", err
 	}
 	return filepath.Join(parent, "decisions.jsonl"), nil
+}
+
+func nextCheckPath(checksDir string) string {
+	entries, err := os.ReadDir(checksDir)
+	if err != nil {
+		return "check-001.json"
+	}
+	return fmt.Sprintf("check-%03d.json", len(entries)+1)
+}
+
+func requireApprovedDecision(findings *[]string, decisions []Decision, stage string, hashes Hashes) {
+	for i := len(decisions) - 1; i >= 0; i-- {
+		decision := decisions[i]
+		if decision.Stage != stage {
+			continue
+		}
+		if decision.Decision != DecisionApproved {
+			*findings = append(*findings, stage+" decision must be approved")
+			return
+		}
+		if stage == StagePublish {
+			if decision.Hashes.DesignSHA256 != hashes.DesignSHA256 ||
+				decision.Hashes.DraftTreeSHA256 != hashes.DraftTreeSHA256 ||
+				decision.Hashes.LatestCheckSHA256 != hashes.LatestCheckSHA256 {
+				*findings = append(*findings, "publish decision hashes do not match current record")
+			}
+		}
+		return
+	}
+	*findings = append(*findings, stage+" approval decision is required")
 }
 
 func newProvenanceID(project string, title string) (string, error) {

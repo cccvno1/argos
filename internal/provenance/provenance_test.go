@@ -404,6 +404,251 @@ func TestRecordDecisionRejectsInvalidDecisionInput(t *testing.T) {
 	}
 }
 
+func TestRecordCheckStoresCheckAndVerifyPasses(t *testing.T) {
+	root := t.TempDir()
+	record := startPublishableTestRecord(t, root)
+	recordDesignAndDraftApprovals(t, root, record.ProvenanceID)
+
+	check, err := RecordCheck(root, record.ProvenanceID)
+	if err != nil {
+		t.Fatalf("RecordCheck returned error: %v", err)
+	}
+	if check.Result != "pass" {
+		t.Fatalf("expected pass check, got %#v", check)
+	}
+	if _, err := RecordDecision(root, record.ProvenanceID, DecisionInput{
+		Stage:      StagePublish,
+		Decision:   DecisionApproved,
+		DecidedBy:  "chenchi",
+		Role:       "knowledge_owner",
+		Source:     "conversation",
+		Reason:     "Publish approved after check passed.",
+		RecordedBy: "codex",
+	}); err != nil {
+		t.Fatalf("record publish decision: %v", err)
+	}
+	result, err := Verify(root, record.ProvenanceID)
+	if err != nil {
+		t.Fatalf("Verify returned error: %v", err)
+	}
+	if result.Result != "pass" {
+		t.Fatalf("expected verify pass, got %#v", result)
+	}
+}
+
+func TestVerifyFailsWhenDraftChangesAfterPublishDecision(t *testing.T) {
+	root := t.TempDir()
+	record := startPublishableTestRecord(t, root)
+	recordDesignAndDraftApprovals(t, root, record.ProvenanceID)
+	if _, err := RecordCheck(root, record.ProvenanceID); err != nil {
+		t.Fatalf("RecordCheck returned error: %v", err)
+	}
+	if _, err := RecordDecision(root, record.ProvenanceID, DecisionInput{
+		Stage:      StagePublish,
+		Decision:   DecisionApproved,
+		DecidedBy:  "chenchi",
+		Role:       "knowledge_owner",
+		Source:     "conversation",
+		Reason:     "Publish approved.",
+		RecordedBy: "codex",
+	}); err != nil {
+		t.Fatalf("record publish decision: %v", err)
+	}
+	writeTestFile(t, root, "knowledge/.inbox/packages/mall-api/redis-cache/references/redis.md", "changed after approval\n")
+
+	result, err := Verify(root, record.ProvenanceID)
+	if err != nil {
+		t.Fatalf("Verify returned error: %v", err)
+	}
+	if result.Result != "fail" {
+		t.Fatalf("expected verify fail, got %#v", result)
+	}
+	if !containsFinding(result.Findings, "draft tree hash changed") {
+		t.Fatalf("expected draft hash finding, got %#v", result.Findings)
+	}
+}
+
+func startPublishableTestRecord(t *testing.T, root string) Record {
+	t.Helper()
+	writeTestFile(t, root, "knowledge/domains.yaml", "tech_domains: [backend]\nbusiness_domains: [catalog]\n")
+	writeTestFile(t, root, "knowledge/projects.yaml", "projects:\n  - id: mall-api\n    name: Mall API\n    path: services/mall-api\n    tech_domains: [backend]\n    business_domains: [catalog]\n")
+	writeTestFile(t, root, "knowledge/types.yaml", "types: [package]\n")
+	writeTestFile(t, root, "knowledge/.inbox/designs/mall-api/redis-cache/design.json", validProvenanceDesignJSON())
+	writeTestFile(t, root, "knowledge/.inbox/packages/mall-api/redis-cache/KNOWLEDGE.md", validProvenanceDraftPackage())
+	writeTestFile(t, root, "knowledge/.inbox/packages/mall-api/redis-cache/references/redis.md", "reference\n")
+	record, err := Start(root, StartRequest{
+		DesignPath: "knowledge/.inbox/designs/mall-api/redis-cache/design.json",
+		DraftPath:  "knowledge/.inbox/packages/mall-api/redis-cache",
+		CreatedBy:  "codex",
+	})
+	if err != nil {
+		t.Fatalf("Start returned error: %v", err)
+	}
+	return record
+}
+
+func recordDesignAndDraftApprovals(t *testing.T, root string, id string) {
+	t.Helper()
+	for _, stage := range []string{StageDesign, StageDraftWrite} {
+		if _, err := RecordDecision(root, id, DecisionInput{
+			Stage:      stage,
+			Decision:   DecisionApproved,
+			DecidedBy:  "chenchi",
+			Role:       "knowledge_owner",
+			Source:     "conversation",
+			Reason:     stage + " approved.",
+			RecordedBy: "codex",
+		}); err != nil {
+			t.Fatalf("RecordDecision(%s) returned error: %v", stage, err)
+		}
+	}
+}
+
+func containsFinding(findings []string, text string) bool {
+	for _, finding := range findings {
+		if strings.Contains(finding, text) {
+			return true
+		}
+	}
+	return false
+}
+
+func validProvenanceDesignJSON() string {
+	return `{
+  "schema_version": "knowledge.design.v1",
+  "user_request": "Create Redis cache best practices.",
+  "knowledge_goal": "Document Redis cache best practices.",
+  "project": "mall-api",
+  "audience": {
+    "primary": "implementer_agent",
+    "agent_actions_supported": ["implement Redis cache behavior"]
+  },
+  "scope": {
+    "projects": ["mall-api"],
+    "stability": "reviewed",
+    "distribution": "project",
+    "tech_domains": ["backend"],
+    "subject_domains": ["catalog"],
+    "file_globs": ["**/*"]
+  },
+  "sources": {
+    "user_input": ["User requested Redis cache best practices."],
+    "observed": [],
+    "imported": [],
+    "ai_suggested": [],
+    "templates": [],
+    "examples": [],
+    "assumptions": [],
+    "open_questions": [],
+    "claims": [{
+      "claim": "Redis cache best practices are needed.",
+      "kind": "fact",
+      "source": ["user request"],
+      "trust": "user_input",
+      "requires_review": false
+    }]
+  },
+  "draft_output": {
+    "kind": "package",
+    "type": "package",
+    "title": "Redis Cache Best Practices",
+    "id": "package:mall-api.redis-cache.v1",
+    "path": "knowledge/.inbox/packages/mall-api/redis-cache",
+    "status": "draft",
+    "priority": "should",
+    "rationale": "A package can hold guidance and references.",
+    "entrypoint_load": "read_before_implementation",
+    "draft_state": "draft"
+  },
+  "future_use": {
+    "trigger_requests": ["implement Redis cache behavior"],
+    "negative_triggers": ["unrelated auth work"],
+    "phases": ["implementation"],
+    "query_phrases": ["redis cache best practices"],
+    "expected_use": "Read before implementing Redis cache behavior.",
+    "citation_policy": "cite_after_use",
+    "missing_needs": []
+  },
+  "applicability": {
+    "when_to_use": ["When implementing Redis cache behavior."],
+    "when_not_to_use": ["When work does not touch Redis."],
+    "tradeoffs": []
+  },
+  "existing_knowledge": {
+    "official_matches": [],
+    "inbox_matches": [],
+    "possible_matches": [],
+    "decision": "create_new",
+    "reason": "No existing Redis cache package.",
+    "review_choice_required": false
+  },
+  "write_boundary": {
+    "path": "inbox",
+    "write_requires_review_approval": true,
+    "priority_must_approved": false,
+    "publish_approved": true,
+    "official_write_approved": false,
+    "review_packet_required": true
+  },
+  "draft_files": [{
+    "path": "knowledge/.inbox/packages/mall-api/redis-cache/KNOWLEDGE.md",
+    "purpose": "Package entrypoint.",
+    "load": "read_before_implementation"
+  }],
+  "check_plan": {
+    "validate_path": "knowledge/.inbox/packages/mall-api/redis-cache",
+    "findability_checks": [{
+      "project": "mall-api",
+      "phase": "implementation",
+      "task": "implement Redis cache behavior",
+      "query": "redis cache best practices",
+      "files": []
+    }]
+  },
+  "review": {
+    "questions": ["Is publication approved?"],
+    "design_approved": true,
+    "draft_write_approved": true,
+    "priority_must_approved": false,
+    "official_write_approved": false,
+    "publish_approved": true
+  }
+}`
+}
+
+func validProvenanceDraftPackage() string {
+	return `---
+id: package:mall-api.redis-cache.v1
+title: Redis Cache Best Practices
+type: package
+tech_domains: [backend]
+business_domains: [catalog]
+projects: [mall-api]
+status: draft
+priority: should
+tags: [redis, cache]
+updated_at: 2026-05-04
+applies_to:
+  files: ["**/*"]
+---
+## Purpose
+
+Document Redis cache best practices.
+
+## When To Use
+
+Use when implementing Redis cache behavior.
+
+## Start Here
+
+Read before implementing Redis cache behavior.
+
+## Load On Demand
+
+- references/redis.md when deeper Redis detail is needed.
+`
+}
+
 func startTestRecord(t *testing.T, root string) Record {
 	t.Helper()
 	writeTestFile(t, root, "knowledge/.inbox/designs/mall-api/redis-cache/design.json", `{
