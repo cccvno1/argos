@@ -53,7 +53,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	case "validate":
 		flags := flag.NewFlagSet("validate", flag.ContinueOnError)
 		flags.SetOutput(stderr)
-		includeInbox := flags.Bool("inbox", false, "validate inbox candidates")
+		includeInbox := flags.Bool("inbox", false, "validate inbox drafts")
 		path := flags.String("path", "", "validate a single item or package path")
 		if err := flags.Parse(args[1:]); err != nil {
 			return 2
@@ -555,8 +555,13 @@ func runKnowledgeCheck(args []string, stdout io.Writer, stderr io.Writer) int {
 func runKnowledgePublish(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("knowledge publish", flag.ContinueOnError)
 	flags.SetOutput(stderr)
+	designPath := flags.String("design", "", "knowledge design JSON path")
 	draftPath := flags.String("path", "", "draft item or package path")
 	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if strings.TrimSpace(*designPath) == "" {
+		fmt.Fprintln(stderr, "knowledge publish: --design is required")
 		return 2
 	}
 	if strings.TrimSpace(*draftPath) == "" {
@@ -568,6 +573,10 @@ func runKnowledgePublish(args []string, stdout io.Writer, stderr io.Writer) int 
 		fmt.Fprintf(stderr, "knowledge publish: get current directory: %v\n", err)
 		return 1
 	}
+	if err := validatePublishApproval(root, *designPath, *draftPath); err != nil {
+		fmt.Fprintf(stderr, "knowledge publish: %v\n", err)
+		return 1
+	}
 	target, err := publishDraft(root, *draftPath, stderr)
 	if err != nil {
 		fmt.Fprintf(stderr, "knowledge publish: %v\n", err)
@@ -576,6 +585,35 @@ func runKnowledgePublish(args []string, stdout io.Writer, stderr io.Writer) int 
 	fmt.Fprintf(stdout, "published %s\n", target)
 	fmt.Fprintln(stdout, "run argos index to refresh query results")
 	return 0
+}
+
+func validatePublishApproval(root string, designPath string, draftPath string) error {
+	design, err := loadPublishDesign(root, designPath)
+	if err != nil {
+		return err
+	}
+	if !design.Review.PublishApproved {
+		return fmt.Errorf("review.publish_approved is required before publish")
+	}
+	check, err := knowledgewrite.Check(root, knowledgewrite.CheckRequest{
+		DesignPath: designPath,
+		DraftPath:  draftPath,
+	})
+	if err != nil {
+		return err
+	}
+	if check.Result != "pass" {
+		return fmt.Errorf("knowledge check must pass before publish: %s", check.Result)
+	}
+	return nil
+}
+
+func loadPublishDesign(root string, relPath string) (knowledgewrite.KnowledgeDesign, error) {
+	clean := filepath.Clean(relPath)
+	if filepath.IsAbs(relPath) || clean == "." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) || clean == ".." {
+		return knowledgewrite.KnowledgeDesign{}, fmt.Errorf("%s: design path must be relative and inside workspace", relPath)
+	}
+	return knowledgewrite.LoadDesign(filepath.Join(root, clean))
 }
 
 func runKnowledgeFind(args []string, stdout io.Writer, stderr io.Writer) int {
@@ -967,7 +1005,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "Examples:")
 	fmt.Fprintln(w, "  argos knowledge design --json --project <project> --intent <intent>")
 	fmt.Fprintln(w, "  argos knowledge check --json --design <design.json> --draft <draft>")
-	fmt.Fprintln(w, "  argos knowledge publish --path <draft>")
+	fmt.Fprintln(w, "  argos knowledge publish --design <design.json> --path <draft>")
 	fmt.Fprintln(w, "  argos knowledge list --json --project <project>")
 	fmt.Fprintln(w, "  argos knowledge find --json --project <project> --task <task>")
 	fmt.Fprintln(w, "  argos knowledge read --json <id>")

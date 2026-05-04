@@ -361,8 +361,14 @@ func checkPolicy(design KnowledgeDesign, draftPath string, draftItems []knowledg
 	default:
 		addFail("approved write boundary cannot be determined")
 	}
+	if !design.Review.DesignApproved {
+		addFail("draft writing requires review.design_approved")
+	}
 	if !design.Review.DraftWriteApproved {
 		addFail("draft writing requires review.draft_write_approved")
+	}
+	if len(nonEmpty(design.Review.UnresolvedBlockers)) > 0 {
+		addFail("draft writing requires resolved review.unresolved_blockers")
 	}
 	if expected := strings.TrimSpace(design.CheckPlan.ValidatePath); expected != "" && !pathsMatch(expected, draftPath) {
 		addFail("draft path must match check_plan.validate_path")

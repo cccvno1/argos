@@ -448,6 +448,7 @@ func writeApprovedDraftDesign(t *testing.T, root string, tc Case) knowledgewrite
 	}}
 	design.Review.DesignApproved = true
 	design.Review.DraftWriteApproved = true
+	design.Review.UnresolvedBlockers = nil
 
 	designPath := filepath.Join(root, filepath.FromSlash(designResponse.WriteGuidance.DesignPath))
 	if err := os.MkdirAll(filepath.Dir(designPath), 0o755); err != nil {

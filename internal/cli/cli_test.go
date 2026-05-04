@@ -1230,7 +1230,7 @@ func TestKnowledgeWritePublishAndFindbackFlow(t *testing.T) {
 	if checkResult.Result != "pass" && checkResult.Result != "review-needed" {
 		t.Fatalf("expected check pass or review-needed, got: %s", checkOutput)
 	}
-	runOK(t, root, []string{"knowledge", "publish", "--path", draftPath})
+	runOK(t, root, []string{"knowledge", "publish", "--design", designPath, "--path", draftPath})
 	runOK(t, root, []string{"index"})
 
 	findOutput := runOK(t, root, []string{
@@ -1264,7 +1264,7 @@ func TestUsageUsesWriteVocabulary(t *testing.T) {
 	for _, want := range []string{
 		"argos knowledge design --json --project <project> --intent <intent>",
 		"argos knowledge check --json --design <design.json> --draft <draft>",
-		"argos knowledge publish --path <draft>",
+		"argos knowledge publish --design <design.json> --path <draft>",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("usage missing %q:\n%s", want, body)
@@ -1388,14 +1388,16 @@ business_domains: [account]
 
 func TestRunKnowledgePublishMovesInboxPackageToOfficialPackages(t *testing.T) {
 	root := t.TempDir()
-	writeCLIRegistry(t, root)
+	initWorkspace(t, root)
 	draftPath := "knowledge/.inbox/packages/backend/redis/best-practices"
+	draftID := "package:backend.redis.best-practices.v1"
+	designPath := writeCLIKnowledgeDesign(t, root, "knowledge/.inbox/designs/redis/design.json", validCLIKnowledgeDesign(draftPath, draftID))
 	targetPath := "knowledge/packages/backend/redis/best-practices"
-	writeCLIFile(t, root, draftPath+"/KNOWLEDGE.md", validCLIPackage("package:backend.redis.best-practices.v1"))
+	writeCLIFile(t, root, draftPath+"/KNOWLEDGE.md", validCLICheckDraftPackage(draftID))
 	chdir(t, root)
 
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"knowledge", "publish", "--path", draftPath}, &stdout, &stderr)
+	code := Run([]string{"knowledge", "publish", "--design", designPath, "--path", draftPath}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d stderr=%q", code, stderr.String())
 	}
@@ -1410,18 +1412,60 @@ func TestRunKnowledgePublishMovesInboxPackageToOfficialPackages(t *testing.T) {
 	}
 }
 
-func TestRunKnowledgePublishLeavesDraftInInboxWhenOfficialValidationFails(t *testing.T) {
+func TestRunKnowledgePublishRequiresDesign(t *testing.T) {
 	root := t.TempDir()
-	writeCLIRegistry(t, root)
-	duplicateID := "package:backend.redis.best-practices.v1"
+	initWorkspace(t, root)
 	draftPath := "knowledge/.inbox/packages/backend/redis/best-practices"
-	targetPath := "knowledge/packages/backend/redis/best-practices"
-	writeCLIFile(t, root, "knowledge/packages/backend/redis/existing/KNOWLEDGE.md", validCLIPackage(duplicateID))
-	writeCLIFile(t, root, draftPath+"/KNOWLEDGE.md", validCLIPackage(duplicateID))
+	writeCLIFile(t, root, draftPath+"/KNOWLEDGE.md", validCLICheckDraftPackage("package:backend.redis.best-practices.v1"))
 	chdir(t, root)
 
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"knowledge", "publish", "--path", draftPath}, &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "knowledge publish: --design is required") {
+		t.Fatalf("expected missing design error, got %q", stderr.String())
+	}
+}
+
+func TestRunKnowledgePublishRequiresPublishApproval(t *testing.T) {
+	root := t.TempDir()
+	initWorkspace(t, root)
+	draftPath := "knowledge/.inbox/packages/backend/redis/best-practices"
+	draftID := "package:backend.redis.best-practices.v1"
+	design := validCLIKnowledgeDesign(draftPath, draftID)
+	design.Review.PublishApproved = false
+	designPath := writeCLIKnowledgeDesign(t, root, "knowledge/.inbox/designs/redis/design.json", design)
+	writeCLIFile(t, root, draftPath+"/KNOWLEDGE.md", validCLICheckDraftPackage(draftID))
+	chdir(t, root)
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"knowledge", "publish", "--design", designPath, "--path", draftPath}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("expected exit code 1, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if _, err := os.Stat(filepath.Join(root, draftPath, "KNOWLEDGE.md")); err != nil {
+		t.Fatalf("expected draft to remain in inbox: %v", err)
+	}
+	if !strings.Contains(stderr.String(), "review.publish_approved") {
+		t.Fatalf("expected publish approval error, got %q", stderr.String())
+	}
+}
+
+func TestRunKnowledgePublishLeavesDraftInInboxWhenOfficialValidationFails(t *testing.T) {
+	root := t.TempDir()
+	initWorkspace(t, root)
+	duplicateID := "package:backend.redis.best-practices.v1"
+	draftPath := "knowledge/.inbox/packages/backend/redis/best-practices"
+	designPath := writeCLIKnowledgeDesign(t, root, "knowledge/.inbox/designs/redis/design.json", validCLIKnowledgeDesign(draftPath, duplicateID))
+	targetPath := "knowledge/packages/backend/redis/best-practices"
+	writeCLIFile(t, root, "knowledge/packages/backend/redis/existing/KNOWLEDGE.md", validCLIPackage(duplicateID))
+	writeCLIFile(t, root, draftPath+"/KNOWLEDGE.md", validCLICheckDraftPackage(duplicateID))
+	chdir(t, root)
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"knowledge", "publish", "--design", designPath, "--path", draftPath}, &stdout, &stderr)
 	if code != 1 {
 		t.Fatalf("expected exit code 1, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -2028,9 +2072,10 @@ func validCLIKnowledgeDesign(draftPath string, draftID string) knowledgewrite.Kn
 			}},
 		},
 		Review: knowledgewrite.Review{
-			Questions:          []string{"Is draft writing approved?"},
+			Questions:          []string{"Is draft writing and publishing approved?"},
 			DesignApproved:     true,
 			DraftWriteApproved: true,
+			PublishApproved:    true,
 		},
 	}
 }

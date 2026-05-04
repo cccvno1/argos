@@ -102,6 +102,53 @@ func TestCheckKnowledgeOfficialDraftWithoutPublishApprovalNeedsReview(t *testing
 	}
 }
 
+func TestCheckKnowledgeRequiresDesignApprovalBeforeDraft(t *testing.T) {
+	root := t.TempDir()
+	if err := workspace.Init(root); err != nil {
+		t.Fatalf("init workspace: %v", err)
+	}
+	design := validKnowledgeDesign()
+	design.Review.DesignApproved = false
+	design.Review.DraftWriteApproved = true
+	designPath := writeDesignFile(t, root, design)
+	draftPath := "knowledge/.inbox/packages/mall-api/redis-cache"
+	writeDraftPackage(t, root, draftPath)
+
+	result, err := Check(root, CheckRequest{DesignPath: designPath, DraftPath: draftPath})
+	if err != nil {
+		t.Fatalf("Check returned error: %v", err)
+	}
+	if result.Result != "fail" {
+		t.Fatalf("expected fail when design is not approved, got %#v", result)
+	}
+	if !hasFinding(result.Findings, "draft writing requires review.design_approved") {
+		t.Fatalf("missing design approval finding: %#v", result.Findings)
+	}
+}
+
+func TestCheckKnowledgeRequiresResolvedReviewBlockersBeforeDraft(t *testing.T) {
+	root := t.TempDir()
+	if err := workspace.Init(root); err != nil {
+		t.Fatalf("init workspace: %v", err)
+	}
+	design := validKnowledgeDesign()
+	design.Review.UnresolvedBlockers = []string{"confirm Redis outage fallback policy"}
+	designPath := writeDesignFile(t, root, design)
+	draftPath := "knowledge/.inbox/packages/mall-api/redis-cache"
+	writeDraftPackage(t, root, draftPath)
+
+	result, err := Check(root, CheckRequest{DesignPath: designPath, DraftPath: draftPath})
+	if err != nil {
+		t.Fatalf("Check returned error: %v", err)
+	}
+	if result.Result != "fail" {
+		t.Fatalf("expected fail with unresolved review blockers, got %#v", result)
+	}
+	if !hasFinding(result.Findings, "draft writing requires resolved review.unresolved_blockers") {
+		t.Fatalf("missing unresolved blockers finding: %#v", result.Findings)
+	}
+}
+
 func TestValidateDesignUsesReviewApprovalForPriorityMust(t *testing.T) {
 	design := validKnowledgeDesign()
 	design.DraftOutput.Priority = "must"

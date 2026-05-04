@@ -437,7 +437,7 @@ summarize:
 Ask for explicit approval before running:
 
 ```bash
-argos knowledge publish --path TARGET_PATH
+argos knowledge publish --design DESIGN_PATH --path TARGET_PATH
 ```
 
 After publishing, run `argos index` unless the user asks not to. Run
