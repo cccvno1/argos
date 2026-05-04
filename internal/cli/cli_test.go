@@ -1728,6 +1728,45 @@ func TestRunKnowledgePublishLeavesDraftInInboxWhenOfficialValidationFails(t *tes
 	}
 }
 
+func TestRunKnowledgePublishRejectsExistingOfficialDraftStatus(t *testing.T) {
+	root := t.TempDir()
+	initWorkspace(t, root)
+	draftPath := "knowledge/.inbox/packages/backend/redis/best-practices"
+	draftID := "package:backend.redis.best-practices.v1"
+	designPath := writeCLIKnowledgeDesign(t, root, "knowledge/.inbox/designs/redis/design.json", validCLIKnowledgeDesign(draftPath, draftID))
+	writeCLIFile(t, root, "knowledge/items/backend/stale-draft.md", `---
+id: rule:backend.stale-draft.v1
+title: Stale Official Draft
+type: rule
+tech_domains: [backend]
+business_domains: [catalog]
+projects: [mall-api]
+status: draft
+priority: should
+updated_at: 2026-05-04
+---
+Official roots must not carry draft status.
+`)
+	writeCLIFile(t, root, draftPath+"/KNOWLEDGE.md", validCLICheckDraftPackage(draftID))
+	chdir(t, root)
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"knowledge", "publish", "--design", designPath, "--path", draftPath}, &stdout, &stderr)
+
+	if code != 1 {
+		t.Fatalf("expected exit code 1, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if stdout.String() != "" {
+		t.Fatalf("expected empty stdout, got %q", stdout.String())
+	}
+	if _, err := os.Stat(filepath.Join(root, draftPath, "KNOWLEDGE.md")); err != nil {
+		t.Fatalf("expected draft to remain in inbox: %v", err)
+	}
+	if !strings.Contains(stderr.String(), "official knowledge must not use status: draft") {
+		t.Fatalf("expected official draft status error, got %q", stderr.String())
+	}
+}
+
 func TestRunContextPrintsWorkflowContractJSON(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer

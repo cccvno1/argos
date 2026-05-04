@@ -1226,6 +1226,7 @@ func validateOfficialKnowledgeWithDraft(root string, draftPath string, target st
 	items := append([]knowledge.Item{}, official...)
 	items = append(items, rebaseKnowledgeItemPaths(draftItems, draftPath, target)...)
 	errs := knowledge.ValidateItems(items, reg)
+	errs = append(errs, validateKnowledgeStorageScope(official, knowledgeStorageOfficial)...)
 	for _, err := range errs {
 		fmt.Fprintln(stderr, err)
 	}
