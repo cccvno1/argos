@@ -234,6 +234,12 @@ Argos provenance does not replace PR review. In team mode, agents publish
 official candidates on a branch and reviewers inspect the knowledge diff plus
 provenance diff before merge.
 
+Use `argos provenance status --json --provenance <id>` to inspect one write
+attempt before publishing. Use `argos knowledge audit --json` to summarize open
+evidence work across the repository. These commands organize evidence for
+personal review and PR review; they do not grant approval or replace the
+repository review process.
+
 ## MCP
 
 Run the local MCP server over stdio:
@@ -286,6 +292,9 @@ argos provenance start --json --design <design.json> --draft <draft>
 argos provenance record-decision --json --provenance <id> --stage <stage> --decision <approved|changes_requested|rejected> --decided-by <actor> --role <role> --source <source> --reason <reason> --recorded-by <agent>
 argos provenance record-check --json --provenance <id>
 argos provenance verify --json --provenance <id>
+argos provenance list --json
+argos provenance status --json --provenance <id>
+argos knowledge audit --json
 argos knowledge publish --provenance <id>
 argos index
 argos install-adapters
