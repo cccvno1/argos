@@ -133,6 +133,77 @@ business_domains: [account, catalog]
 	}
 }
 
+func TestAddProjectNormalizesBackslashPath(t *testing.T) {
+	root := t.TempDir()
+	writeRegistryFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend]
+business_domains: [account]
+`)
+	writeRegistryFile(t, root, "knowledge/projects.yaml", "projects: []\n")
+	writeRegistryFile(t, root, "knowledge/types.yaml", "types: [rule]\n")
+
+	err := AddProject(root, Project{
+		ID:              "mall-api",
+		Name:            "Mall API",
+		Path:            `services\mall-api`,
+		TechDomains:     []string{"backend"},
+		BusinessDomains: []string{"account"},
+	})
+	if err != nil {
+		t.Fatalf("AddProject returned error: %v", err)
+	}
+
+	reg, err := Load(root)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if len(reg.Projects) != 1 {
+		t.Fatalf("expected one project, got %#v", reg.Projects)
+	}
+	if reg.Projects[0].Path != "services/mall-api" {
+		t.Fatalf("unexpected project path: %q", reg.Projects[0].Path)
+	}
+}
+
+func TestAddProjectPreservesExistingProjects(t *testing.T) {
+	root := t.TempDir()
+	writeRegistryFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend, frontend]
+business_domains: [account, catalog]
+`)
+	writeRegistryFile(t, root, "knowledge/projects.yaml", `projects:
+  - id: mall-api
+    name: Mall API
+    path: services/mall-api
+    tech_domains: [backend]
+    business_domains: [account]
+`)
+	writeRegistryFile(t, root, "knowledge/types.yaml", "types: [rule]\n")
+
+	err := AddProject(root, Project{
+		ID:              "mall-web",
+		Name:            "Mall Web",
+		Path:            "apps/mall-web",
+		TechDomains:     []string{"frontend"},
+		BusinessDomains: []string{"catalog"},
+	})
+	if err != nil {
+		t.Fatalf("AddProject returned error: %v", err)
+	}
+
+	reg, err := Load(root)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if len(reg.Projects) != 2 {
+		t.Fatalf("expected two projects, got %#v", reg.Projects)
+	}
+	if reg.Projects[0].ID != "mall-api" || reg.Projects[0].Name != "Mall API" || reg.Projects[0].Path != "services/mall-api" {
+		t.Fatalf("existing project was not preserved: %#v", reg.Projects[0])
+	}
+	if reg.Projects[1].ID != "mall-web" || reg.Projects[1].Name != "Mall Web" || reg.Projects[1].Path != "apps/mall-web" {
+		t.Fatalf("new project was not appended: %#v", reg.Projects[1])
+	}
+}
+
 func TestAddProjectRejectsDuplicateID(t *testing.T) {
 	root := t.TempDir()
 	writeRegistryFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend]

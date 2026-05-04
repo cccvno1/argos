@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -72,10 +73,7 @@ func writeProjectsFile(root string, file projectsFile) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create projects registry parent: %w", err)
 	}
-	if err := os.WriteFile(path, body.Bytes(), 0o644); err != nil {
-		return fmt.Errorf("write %s: %w", path, err)
-	}
-	return nil
+	return writeFileAtomically(path, body.Bytes())
 }
 
 func projectsPath(root string) string {
@@ -91,16 +89,17 @@ func normalizeProject(project Project) Project {
 	return project
 }
 
-func cleanProjectPath(path string) string {
-	path = strings.TrimSpace(path)
-	if path == "" {
+func cleanProjectPath(projectPath string) string {
+	projectPath = strings.TrimSpace(projectPath)
+	if projectPath == "" {
 		return ""
 	}
-	path = filepath.ToSlash(filepath.Clean(path))
-	if path == "." {
+	projectPath = strings.ReplaceAll(projectPath, `\`, "/")
+	projectPath = path.Clean(projectPath)
+	if projectPath == "." {
 		return ""
 	}
-	return path
+	return projectPath
 }
 
 func validateProjectRequired(project Project) error {
@@ -172,4 +171,41 @@ func copyProjects(projects []Project) []Project {
 		out[i].BusinessDomains = append([]string{}, project.BusinessDomains...)
 	}
 	return out
+}
+
+func writeFileAtomically(target string, data []byte) error {
+	dir := filepath.Dir(target)
+	temp, err := os.CreateTemp(dir, ".projects-*.yaml")
+	if err != nil {
+		return fmt.Errorf("create temp projects registry: %w", err)
+	}
+
+	tempName := temp.Name()
+	removeTemp := true
+	defer func() {
+		if removeTemp {
+			_ = os.Remove(tempName)
+		}
+	}()
+
+	if _, err := temp.Write(data); err != nil {
+		_ = temp.Close()
+		return fmt.Errorf("write %s: %w", tempName, err)
+	}
+	if err := temp.Chmod(0o644); err != nil {
+		_ = temp.Close()
+		return fmt.Errorf("chmod %s: %w", tempName, err)
+	}
+	if err := temp.Sync(); err != nil {
+		_ = temp.Close()
+		return fmt.Errorf("sync %s: %w", tempName, err)
+	}
+	if err := temp.Close(); err != nil {
+		return fmt.Errorf("close %s: %w", tempName, err)
+	}
+	if err := os.Rename(tempName, target); err != nil {
+		return fmt.Errorf("rename %s to %s: %w", tempName, target, err)
+	}
+	removeTemp = false
+	return nil
 }
