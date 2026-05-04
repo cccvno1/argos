@@ -143,6 +143,10 @@ runner report, run `dogfood write evaluate`, and record the evaluated result in 
 The public fixture seed lives at
 `testdata/write-golden/fixtures/full`.
 
+Write dogfood is a source-tree internal release-validation harness. It may read
+repository `testdata`, and it is not required for normal knowledge writing with
+an installed Argos binary.
+
 ```bash
 ROUND_ROOT=$(mktemp -d /tmp/argos-write-dogfood.XXXXXX)
 mkdir -p "$ROUND_ROOT/packets" "$ROUND_ROOT/reports"
@@ -164,22 +168,38 @@ Structured knowledge packages live under `knowledge/packages/` and use
 Draft knowledge lives under `knowledge/.inbox/items/` or
 `knowledge/.inbox/packages/` until explicit publication.
 
+### Storage Contract
+
+Inbox drafts under `knowledge/.inbox/items/` and
+`knowledge/.inbox/packages/` must use `status: draft`.
+
+Official knowledge under `knowledge/items/` and `knowledge/packages/` must not
+use `status: draft`. Published knowledge normally uses `status: active`;
+deprecated official knowledge uses `status: deprecated`.
+
+Packages use `KNOWLEDGE.md` as the indexed entrypoint. Supporting directories
+are loaded only when referenced from the entrypoint.
+
 ### Project Registry Setup
 
 `argos init` creates the knowledge directories and registry files, but it does
 not guess project IDs. Before publishing project-scoped knowledge, an agent
-should make sure `knowledge/projects.yaml` contains the target project and that
-the project's domains exist in `knowledge/domains.yaml`.
+should inspect registered projects:
 
-Example:
+```bash
+argos project list --json
+```
 
-```yaml
-projects:
-  - id: mall-api
-    name: Mall API
-    path: services/mall-api
-    tech_domains: [backend, database]
-    business_domains: [account]
+If the target project is missing, register it with the CLI:
+
+```bash
+argos project add --id mall-api --name "Mall API" --path services/mall-api --tech-domain backend --business-domain account
+```
+
+Then confirm it is present:
+
+```bash
+argos project list --json
 ```
 
 If the project or domain is missing, `argos knowledge check` reports
@@ -189,14 +209,15 @@ If the project or domain is missing, `argos knowledge check` reports
 
 When the user explicitly asks to create durable knowledge, use the write flow:
 
-1. Run `argos knowledge design --json --project <project> --intent <intent>`.
-2. Write the returned `knowledge_design_template` to `write_guidance.design_path`.
-3. Ask the human to review the design and set `review.draft_write_approved`.
-4. Write draft knowledge only after review approves draft writing.
-5. Run `argos knowledge check --json --design <design.json> --draft <draft-path>`.
-6. Publish only after explicit authorization with `argos knowledge publish --design <design.json> --path <draft-path>`. Publish moves the draft to the official path and sets published knowledge to `status: active`.
-7. Run `argos index`.
-8. Confirm the new knowledge is discoverable with `argos knowledge find --json`.
+1. Run `argos project list --json`; if the target project is missing, run `argos project add --id <project> --name <name> --path <path>`.
+2. Run `argos knowledge design --json --project <project> --intent <intent>`.
+3. Write the returned `knowledge_design_template` to `write_guidance.design_path`.
+4. Ask the human to review the design and set `review.draft_write_approved`.
+5. Write draft knowledge only after review approves draft writing.
+6. Run `argos knowledge check --json --design <design.json> --draft <draft-path>`.
+7. Publish only after explicit authorization with `argos knowledge publish --design <design.json> --path <draft-path>`. Publish moves the draft to the official path and sets published knowledge to `status: active`.
+8. Run `argos index`.
+9. Confirm the new knowledge is discoverable with `argos knowledge find --json`.
 
 ## MCP
 
@@ -242,6 +263,8 @@ argos init
 argos validate
 argos validate --inbox
 argos validate --path <path>
+argos project add --id <project> --name <name> --path <path>
+argos project list --json
 argos knowledge design --json --project <project> --intent <intent>
 argos knowledge check --json --design <design.json> --draft <draft>
 argos knowledge publish --design <design.json> --path <draft>

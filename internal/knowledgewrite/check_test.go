@@ -102,6 +102,38 @@ func TestCheckKnowledgeOfficialDraftWithoutPublishApprovalNeedsReview(t *testing
 	}
 }
 
+func TestCheckKnowledgeRejectsDraftStatusUnderOfficialRoot(t *testing.T) {
+	root := t.TempDir()
+	if err := workspace.Init(root); err != nil {
+		t.Fatalf("init workspace: %v", err)
+	}
+	design := validKnowledgeDesign()
+	design.WriteBoundary.Path = "official_review"
+	design.Review.OfficialWriteApproved = true
+	design.Review.PublishApproved = true
+	design.DraftOutput.Path = "knowledge/packages/mall-api/redis-cache"
+	design.CheckPlan.ValidatePath = "knowledge/packages/mall-api/redis-cache"
+	design.DraftFiles = []DraftFile{{
+		Path:    "knowledge/packages/mall-api/redis-cache/KNOWLEDGE.md",
+		Purpose: "entrypoint",
+		Load:    "read_before_implementation",
+	}}
+	designPath := writeDesignFile(t, root, design)
+	draftPath := "knowledge/packages/mall-api/redis-cache"
+	writeDraftPackage(t, root, draftPath)
+
+	result, err := Check(root, CheckRequest{DesignPath: designPath, DraftPath: draftPath})
+	if err != nil {
+		t.Fatalf("Check returned error: %v", err)
+	}
+	if result.Result != "fail" {
+		t.Fatalf("expected fail for official knowledge with draft status, got %#v", result)
+	}
+	if !hasFindingWithSeverity(result.Findings, "fail", "official knowledge must not use status: draft") {
+		t.Fatalf("missing official draft status finding: %#v", result.Findings)
+	}
+}
+
 func TestCheckKnowledgeRequiresDesignApprovalBeforeDraft(t *testing.T) {
 	root := t.TempDir()
 	if err := workspace.Init(root); err != nil {

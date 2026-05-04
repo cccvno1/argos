@@ -11,6 +11,7 @@ import (
 
 	"argos/internal/index"
 	"argos/internal/knowledgewrite"
+	"argos/internal/registry"
 )
 
 func TestRunPrintsHelpWithoutCommand(t *testing.T) {
@@ -37,6 +38,216 @@ func TestRunRejectsUnknownCommand(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "unknown command: unknown") {
 		t.Fatalf("expected unknown command error, got %q", out.String())
+	}
+}
+
+func TestRunProjectAddCreatesProject(t *testing.T) {
+	root := t.TempDir()
+	chdir(t, root)
+	runOK(t, root, []string{"init"})
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"project", "add",
+		"--id", "mall-api",
+		"--name", "Mall API",
+		"--path", "services/mall-api",
+		"--tech-domain", "backend",
+		"--tech-domain", "database",
+		"--business-domain", "account",
+	}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stderr=%q stdout=%q", code, stderr.String(), stdout.String())
+	}
+	if strings.TrimSpace(stdout.String()) != "added project mall-api" {
+		t.Fatalf("unexpected stdout: %q", stdout.String())
+	}
+	if stderr.String() != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+	reg, err := registry.Load(root)
+	if err != nil {
+		t.Fatalf("load registry: %v", err)
+	}
+	if len(reg.Projects) != 1 || reg.Projects[0].ID != "mall-api" {
+		t.Fatalf("unexpected projects: %#v", reg.Projects)
+	}
+	project := reg.Projects[0]
+	if project.Name != "Mall API" {
+		t.Fatalf("unexpected project name: %#v", project)
+	}
+	if project.Path != "services/mall-api" {
+		t.Fatalf("unexpected project path: %#v", project)
+	}
+	if strings.Join(project.TechDomains, ",") != "backend,database" {
+		t.Fatalf("unexpected tech domains: %#v", project.TechDomains)
+	}
+	if strings.Join(project.BusinessDomains, ",") != "account" {
+		t.Fatalf("unexpected business domains: %#v", project.BusinessDomains)
+	}
+}
+
+func TestRunProjectListReturnsJSON(t *testing.T) {
+	root := t.TempDir()
+	chdir(t, root)
+	runOK(t, root, []string{"init"})
+	runOK(t, root, []string{
+		"project", "add",
+		"--id", "mall-api",
+		"--name", "Mall API",
+		"--path", "services/mall-api",
+		"--tech-domain", "backend",
+		"--business-domain", "account",
+	})
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"project", "list", "--json"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stderr=%q stdout=%q", code, stderr.String(), stdout.String())
+	}
+	if stderr.String() != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+	var result struct {
+		Projects []registry.Project `json:"projects"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, stdout.String())
+	}
+	if len(result.Projects) != 1 || result.Projects[0].ID != "mall-api" {
+		t.Fatalf("unexpected projects JSON: %s", stdout.String())
+	}
+	project := result.Projects[0]
+	if project.Name != "Mall API" {
+		t.Fatalf("unexpected decoded project name: %#v", project)
+	}
+	if project.Path != "services/mall-api" {
+		t.Fatalf("unexpected decoded project path: %#v", project)
+	}
+	if strings.Join(project.TechDomains, ",") != "backend" {
+		t.Fatalf("unexpected decoded tech domains: %#v", project.TechDomains)
+	}
+	if strings.Join(project.BusinessDomains, ",") != "account" {
+		t.Fatalf("unexpected decoded business domains: %#v", project.BusinessDomains)
+	}
+	if !strings.Contains(stdout.String(), `"tech_domains"`) || !strings.Contains(stdout.String(), `"business_domains"`) {
+		t.Fatalf("project list should use snake_case JSON fields, got: %s", stdout.String())
+	}
+	if strings.Contains(stdout.String(), `"ID"`) || strings.Contains(stdout.String(), `"TechDomains"`) {
+		t.Fatalf("project list should use snake_case JSON fields, got: %s", stdout.String())
+	}
+}
+
+func TestRunProjectAddRequiresFields(t *testing.T) {
+	root := t.TempDir()
+	chdir(t, root)
+	runOK(t, root, []string{"init"})
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"project", "add", "--id", "mall-api"}, &stdout, &stderr)
+
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "project add: --name is required") {
+		t.Fatalf("expected missing name error, got %q", stderr.String())
+	}
+}
+
+func TestRunProjectListRequiresJSON(t *testing.T) {
+	root := t.TempDir()
+	chdir(t, root)
+	runOK(t, root, []string{"init"})
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"project", "list"}, &stdout, &stderr)
+
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "project list: --json is required") {
+		t.Fatalf("expected missing json error, got %q", stderr.String())
+	}
+}
+
+func TestRunProjectAddRejectsDuplicateID(t *testing.T) {
+	root := t.TempDir()
+	chdir(t, root)
+	runOK(t, root, []string{"init"})
+	runOK(t, root, []string{
+		"project", "add",
+		"--id", "mall-api",
+		"--name", "Mall API",
+		"--path", "services/mall-api",
+	})
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"project", "add",
+		"--id", "mall-api",
+		"--name", "Mall API 2",
+		"--path", "services/mall-api-2",
+	}, &stdout, &stderr)
+
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if stdout.String() != "" {
+		t.Fatalf("expected empty stdout, got %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "project already exists: mall-api") {
+		t.Fatalf("expected duplicate project error, got %q", stderr.String())
+	}
+}
+
+func TestRunProjectAddRejectsUnknownDomain(t *testing.T) {
+	root := t.TempDir()
+	chdir(t, root)
+	runOK(t, root, []string{"init"})
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"project", "add",
+		"--id", "mall-api",
+		"--name", "Mall API",
+		"--path", "services/mall-api",
+		"--tech-domain", "mobile",
+	}, &stdout, &stderr)
+
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if stdout.String() != "" {
+		t.Fatalf("expected empty stdout, got %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "unknown tech domain: mobile") {
+		t.Fatalf("expected unknown domain error, got %q", stderr.String())
+	}
+}
+
+func TestRunProjectAddRejectsUnsafePath(t *testing.T) {
+	root := t.TempDir()
+	chdir(t, root)
+	runOK(t, root, []string{"init"})
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"project", "add",
+		"--id", "mall-api",
+		"--name", "Mall API",
+		"--path", "../mall-api",
+	}, &stdout, &stderr)
+
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if stdout.String() != "" {
+		t.Fatalf("expected empty stdout, got %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "project path must stay inside workspace") {
+		t.Fatalf("expected unsafe path error, got %q", stderr.String())
 	}
 }
 
@@ -86,7 +297,7 @@ Use short-lived access tokens.
 func TestRunValidatePathValidatesSingleInboxPackage(t *testing.T) {
 	root := t.TempDir()
 	writeCLIRegistry(t, root)
-	writeCLIFile(t, root, "knowledge/.inbox/packages/backend/redis/best-practices/KNOWLEDGE.md", validCLIPackage("package:backend.redis.best-practices.v1"))
+	writeCLIFile(t, root, "knowledge/.inbox/packages/backend/redis/best-practices/KNOWLEDGE.md", validCLIDraftPackage("package:backend.redis.best-practices.v1"))
 	chdir(t, root)
 
 	var stdout bytes.Buffer
@@ -107,7 +318,7 @@ func TestRunValidatePathValidatesSingleInboxPackage(t *testing.T) {
 func TestRunValidateInboxValidatesInboxOnly(t *testing.T) {
 	root := t.TempDir()
 	writeCLIRegistry(t, root)
-	writeCLIFile(t, root, "knowledge/.inbox/packages/backend/redis/best-practices/KNOWLEDGE.md", validCLIPackage("package:backend.redis.best-practices.v1"))
+	writeCLIFile(t, root, "knowledge/.inbox/packages/backend/redis/best-practices/KNOWLEDGE.md", validCLIDraftPackage("package:backend.redis.best-practices.v1"))
 	writeCLIFile(t, root, "knowledge/packages/backend/broken/KNOWLEDGE.md", `---
 id: package:backend.broken.v1
 title: Broken
@@ -1188,7 +1399,16 @@ func TestRunKnowledgeCheckReturnsJSONStatus(t *testing.T) {
 
 func TestKnowledgeWritePublishAndFindbackFlow(t *testing.T) {
 	root := t.TempDir()
-	initWorkspace(t, root)
+	chdir(t, root)
+	runOK(t, root, []string{"init"})
+	runOK(t, root, []string{
+		"project", "add",
+		"--id", "mall-api",
+		"--name", "Mall API",
+		"--path", "services/mall-api",
+		"--tech-domain", "backend",
+		"--business-domain", "account",
+	})
 
 	designOutput := runOK(t, root, []string{
 		"knowledge", "design", "--json",
@@ -1277,6 +1497,8 @@ func TestUsageUsesWriteVocabulary(t *testing.T) {
 	}
 	body := stderr.String()
 	for _, want := range []string{
+		"argos project add --id <project> --name <name> --path <path>",
+		"argos project list --json",
 		"argos knowledge design --json --project <project> --intent <intent>",
 		"argos knowledge check --json --design <design.json> --draft <draft>",
 		"argos knowledge publish --design <design.json> --path <draft>",
@@ -1437,6 +1659,71 @@ func TestRunKnowledgePublishMovesInboxPackageToOfficialPackages(t *testing.T) {
 	}
 }
 
+func TestRunKnowledgePublishRejectsPackageEntrypointPath(t *testing.T) {
+	root := t.TempDir()
+	initWorkspace(t, root)
+	draftPath := "knowledge/.inbox/packages/backend/redis/best-practices"
+	draftFile := draftPath + "/KNOWLEDGE.md"
+	draftID := "package:backend.redis.best-practices.v1"
+	design := validCLIKnowledgeDesign(draftFile, draftID)
+	design.DraftFiles = []knowledgewrite.DraftFile{{
+		Path:    draftFile,
+		Purpose: "Package entrypoint.",
+		Load:    "read_before_implementation",
+	}}
+	designPath := writeCLIKnowledgeDesign(t, root, "knowledge/.inbox/designs/redis/design.json", design)
+	targetPath := "knowledge/packages/backend/redis/best-practices"
+	writeCLIFile(t, root, draftFile, validCLICheckDraftPackage(draftID))
+	writeCLIFile(t, root, draftPath+"/references/redis-cache.md", "Redis cache reference must move with the package.\n")
+	chdir(t, root)
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"knowledge", "publish", "--design", designPath, "--path", draftFile}, &stdout, &stderr)
+
+	if code != 1 {
+		t.Fatalf("expected exit code 1, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if stdout.String() != "" {
+		t.Fatalf("expected empty stdout, got %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "package publish path must be the package directory, not KNOWLEDGE.md") {
+		t.Fatalf("expected package entrypoint path error, got %q", stderr.String())
+	}
+	if _, err := os.Stat(filepath.Join(root, draftFile)); err != nil {
+		t.Fatalf("expected draft entrypoint to remain in inbox: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, draftPath, "references/redis-cache.md")); err != nil {
+		t.Fatalf("expected draft reference to remain in inbox: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, targetPath)); !os.IsNotExist(err) {
+		t.Fatalf("expected official package not to exist, stat err=%v", err)
+	}
+}
+
+func TestRunKnowledgePublishRejectsNonInboxPath(t *testing.T) {
+	root := t.TempDir()
+	initWorkspace(t, root)
+	draftPath := "knowledge/packages/backend/redis/best-practices"
+	draftID := "package:backend.redis.best-practices.v1"
+	design := validCLIKnowledgeDesign(draftPath, draftID)
+	design.WriteBoundary.Path = "official_review"
+	design.Review.OfficialWriteApproved = true
+	design.DraftOutput.Status = "active"
+	designPath := writeCLIKnowledgeDesign(t, root, "knowledge/.inbox/designs/redis/design.json", design)
+	writeCLIFile(t, root, draftPath+"/KNOWLEDGE.md", strings.Replace(validCLICheckDraftPackage(draftID), "status: draft", "status: active", 1))
+	chdir(t, root)
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"knowledge", "publish", "--design", designPath, "--path", draftPath}, &stdout, &stderr)
+
+	if code != 1 {
+		t.Fatalf("expected exit code 1, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "draft must be under knowledge/.inbox/items or knowledge/.inbox/packages") {
+		t.Fatalf("expected non-inbox publish error, got %q", stderr.String())
+	}
+}
+
 func TestRunKnowledgePublishRequiresDesign(t *testing.T) {
 	root := t.TempDir()
 	initWorkspace(t, root)
@@ -1505,6 +1792,45 @@ func TestRunKnowledgePublishLeavesDraftInInboxWhenOfficialValidationFails(t *tes
 	}
 	if !strings.Contains(stderr.String(), "duplicate id "+duplicateID) {
 		t.Fatalf("expected duplicate id validation error, got %q", stderr.String())
+	}
+}
+
+func TestRunKnowledgePublishRejectsExistingOfficialDraftStatus(t *testing.T) {
+	root := t.TempDir()
+	initWorkspace(t, root)
+	draftPath := "knowledge/.inbox/packages/backend/redis/best-practices"
+	draftID := "package:backend.redis.best-practices.v1"
+	designPath := writeCLIKnowledgeDesign(t, root, "knowledge/.inbox/designs/redis/design.json", validCLIKnowledgeDesign(draftPath, draftID))
+	writeCLIFile(t, root, "knowledge/items/backend/stale-draft.md", `---
+id: rule:backend.stale-draft.v1
+title: Stale Official Draft
+type: rule
+tech_domains: [backend]
+business_domains: [catalog]
+projects: [mall-api]
+status: draft
+priority: should
+updated_at: 2026-05-04
+---
+Official roots must not carry draft status.
+`)
+	writeCLIFile(t, root, draftPath+"/KNOWLEDGE.md", validCLICheckDraftPackage(draftID))
+	chdir(t, root)
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"knowledge", "publish", "--design", designPath, "--path", draftPath}, &stdout, &stderr)
+
+	if code != 1 {
+		t.Fatalf("expected exit code 1, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if stdout.String() != "" {
+		t.Fatalf("expected empty stdout, got %q", stdout.String())
+	}
+	if _, err := os.Stat(filepath.Join(root, draftPath, "KNOWLEDGE.md")); err != nil {
+		t.Fatalf("expected draft to remain in inbox: %v", err)
+	}
+	if !strings.Contains(stderr.String(), "official knowledge must not use status: draft") {
+		t.Fatalf("expected official draft status error, got %q", stderr.String())
 	}
 }
 
@@ -1810,6 +2136,108 @@ Use short-lived access tokens.
 	}
 }
 
+func TestRunValidateRejectsOfficialDraftStatus(t *testing.T) {
+	root := t.TempDir()
+	writeCLIRegistry(t, root)
+	writeCLIFile(t, root, "knowledge/items/backend/draft.md", `---
+id: rule:backend.draft.v1
+title: Draft Official Rule
+type: rule
+tech_domains: [backend]
+business_domains: [account]
+projects: []
+status: draft
+priority: should
+updated_at: 2026-05-04
+---
+Official roots must not carry draft status.
+`)
+	chdir(t, root)
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"validate"}, &stdout, &stderr)
+
+	if code != 1 {
+		t.Fatalf("expected exit code 1, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "official knowledge must not use status: draft") {
+		t.Fatalf("expected official draft error, got %q", stderr.String())
+	}
+}
+
+func TestRunValidateInboxRejectsActiveStatus(t *testing.T) {
+	root := t.TempDir()
+	writeCLIRegistry(t, root)
+	writeCLIFile(t, root, "knowledge/.inbox/items/backend/active.md", `---
+id: rule:backend.active-draft.v1
+title: Active Inbox Rule
+type: rule
+tech_domains: [backend]
+business_domains: [account]
+projects: []
+status: active
+priority: should
+updated_at: 2026-05-04
+---
+Inbox roots must carry draft status.
+`)
+	chdir(t, root)
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"validate", "--inbox"}, &stdout, &stderr)
+
+	if code != 1 {
+		t.Fatalf("expected exit code 1, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "inbox knowledge must use status: draft; set the draft back to status: draft before check or publish") {
+		t.Fatalf("expected inbox status error, got %q", stderr.String())
+	}
+}
+
+func TestRunValidatePathDerivesStorageScope(t *testing.T) {
+	root := t.TempDir()
+	writeCLIRegistry(t, root)
+	writeCLIFile(t, root, "knowledge/.inbox/items/backend/active.md", `---
+id: rule:backend.active-draft.v1
+title: Active Inbox Rule
+type: rule
+tech_domains: [backend]
+business_domains: [account]
+projects: []
+status: active
+priority: should
+updated_at: 2026-05-04
+---
+Inbox roots must carry draft status.
+`)
+	writeCLIFile(t, root, "knowledge/items/backend/draft.md", `---
+id: rule:backend.official-draft.v1
+title: Draft Official Rule
+type: rule
+tech_domains: [backend]
+business_domains: [account]
+projects: []
+status: draft
+priority: should
+updated_at: 2026-05-04
+---
+Official roots must not carry draft status.
+`)
+	chdir(t, root)
+
+	var inboxStdout, inboxStderr bytes.Buffer
+	inboxCode := Run([]string{"validate", "--path", "knowledge/.inbox/items/backend/active.md"}, &inboxStdout, &inboxStderr)
+	if inboxCode != 1 || !strings.Contains(inboxStderr.String(), "inbox knowledge must use status: draft; set the draft back to status: draft before check or publish") {
+		t.Fatalf("expected inbox path status error, code=%d stderr=%q", inboxCode, inboxStderr.String())
+	}
+
+	var officialStdout, officialStderr bytes.Buffer
+	officialCode := Run([]string{"validate", "--path", "knowledge/items/backend/draft.md"}, &officialStdout, &officialStderr)
+	if officialCode != 1 || !strings.Contains(officialStderr.String(), "official knowledge must not use status: draft") {
+		t.Fatalf("expected official path status error, code=%d stderr=%q", officialCode, officialStderr.String())
+	}
+}
+
 func writeCLIFile(t *testing.T, root, rel, body string) {
 	t.Helper()
 
@@ -1969,7 +2397,7 @@ id: package:mall-api.redis-cache.v1
 title: Redis Cache Best Practices
 type: package
 tech_domains: [backend]
-business_domains: [catalog]
+business_domains: [account]
 projects: [mall-api]
 status: draft
 priority: should
@@ -2140,6 +2568,14 @@ Full body implementation detail: refresh token endpoints must rotate tokens and 
 }
 
 func validCLIPackage(id string) string {
+	return validCLIPackageWithStatus(id, "active")
+}
+
+func validCLIDraftPackage(id string) string {
+	return validCLIPackageWithStatus(id, "draft")
+}
+
+func validCLIPackageWithStatus(id string, status string) string {
 	return `---
 id: ` + id + `
 title: Redis Best Practices
@@ -2147,7 +2583,7 @@ type: package
 tech_domains: [backend]
 business_domains: []
 projects: []
-status: draft
+status: ` + status + `
 priority: should
 tags: [redis]
 updated_at: 2026-04-29

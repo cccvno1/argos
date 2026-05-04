@@ -386,6 +386,13 @@ func checkPolicy(design KnowledgeDesign, draftPath string, draftItems []knowledg
 			}
 		}
 	}
+	if isOfficialDraftPath(draftSlash) {
+		for _, item := range draftItems {
+			if strings.TrimSpace(item.Status) == "draft" {
+				addFail(fmt.Sprintf("%s: official knowledge must not use status: draft; publish from inbox or set status: active after review", item.Path))
+			}
+		}
+	}
 	for _, item := range draftItems {
 		if expectedID := strings.TrimSpace(design.DraftOutput.ID); expectedID != "" && item.ID != expectedID {
 			addFail(fmt.Sprintf("%s: draft id must match draft_output.id", item.Path))

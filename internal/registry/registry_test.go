@@ -95,6 +95,341 @@ unexpected: nope
 	}
 }
 
+func TestAddProjectWritesStructuredProjectsYAML(t *testing.T) {
+	root := t.TempDir()
+	writeRegistryFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend, database]
+business_domains: [account, catalog]
+`)
+	writeRegistryFile(t, root, "knowledge/projects.yaml", "projects: []\n")
+	writeRegistryFile(t, root, "knowledge/types.yaml", "types: [rule]\n")
+
+	err := AddProject(root, Project{
+		ID:              "mall-api",
+		Name:            "Mall API",
+		Path:            "services/mall-api",
+		TechDomains:     []string{"backend", "database", "backend", " "},
+		BusinessDomains: []string{"account", "catalog", "account"},
+	})
+	if err != nil {
+		t.Fatalf("AddProject returned error: %v", err)
+	}
+
+	reg, err := Load(root)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if len(reg.Projects) != 1 {
+		t.Fatalf("expected one project, got %#v", reg.Projects)
+	}
+	got := reg.Projects[0]
+	if got.ID != "mall-api" || got.Name != "Mall API" || got.Path != "services/mall-api" {
+		t.Fatalf("unexpected project identity: %#v", got)
+	}
+	if strings.Join(got.TechDomains, ",") != "backend,database" {
+		t.Fatalf("unexpected tech domains: %#v", got.TechDomains)
+	}
+	if strings.Join(got.BusinessDomains, ",") != "account,catalog" {
+		t.Fatalf("unexpected business domains: %#v", got.BusinessDomains)
+	}
+}
+
+func TestAddProjectNormalizesBackslashPath(t *testing.T) {
+	root := t.TempDir()
+	writeRegistryFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend]
+business_domains: [account]
+`)
+	writeRegistryFile(t, root, "knowledge/projects.yaml", "projects: []\n")
+	writeRegistryFile(t, root, "knowledge/types.yaml", "types: [rule]\n")
+
+	err := AddProject(root, Project{
+		ID:              "mall-api",
+		Name:            "Mall API",
+		Path:            `services\mall-api`,
+		TechDomains:     []string{"backend"},
+		BusinessDomains: []string{"account"},
+	})
+	if err != nil {
+		t.Fatalf("AddProject returned error: %v", err)
+	}
+
+	reg, err := Load(root)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if len(reg.Projects) != 1 {
+		t.Fatalf("expected one project, got %#v", reg.Projects)
+	}
+	if reg.Projects[0].Path != "services/mall-api" {
+		t.Fatalf("unexpected project path: %q", reg.Projects[0].Path)
+	}
+}
+
+func TestAddProjectAcceptsRootProjectPath(t *testing.T) {
+	root := t.TempDir()
+	writeRegistryFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend]
+business_domains: [account]
+`)
+	writeRegistryFile(t, root, "knowledge/projects.yaml", "projects: []\n")
+	writeRegistryFile(t, root, "knowledge/types.yaml", "types: [rule]\n")
+
+	err := AddProject(root, Project{
+		ID:              "workspace-root",
+		Name:            "Workspace Root",
+		Path:            ".",
+		TechDomains:     []string{"backend"},
+		BusinessDomains: []string{"account"},
+	})
+	if err != nil {
+		t.Fatalf("AddProject returned error: %v", err)
+	}
+
+	reg, err := Load(root)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if len(reg.Projects) != 1 {
+		t.Fatalf("expected one project, got %#v", reg.Projects)
+	}
+	if reg.Projects[0].Path != "." {
+		t.Fatalf("unexpected project path: %q", reg.Projects[0].Path)
+	}
+}
+
+func TestAddProjectRejectsUnsafeProjectPaths(t *testing.T) {
+	tests := []struct {
+		name    string
+		path    string
+		wantErr string
+	}{
+		{
+			name:    "absolute path",
+			path:    "/tmp/mall-api",
+			wantErr: "project path must be relative",
+		},
+		{
+			name:    "windows absolute path",
+			path:    `C:\tmp\mall-api`,
+			wantErr: "project path must be relative",
+		},
+		{
+			name:    "parent traversal",
+			path:    "../mall-api",
+			wantErr: "project path must stay inside workspace",
+		},
+		{
+			name:    "nested parent traversal",
+			path:    "services/../mall-api",
+			wantErr: "project path must stay inside workspace",
+		},
+		{
+			name:    "nested repeated parent traversal",
+			path:    "services/../../mall-api",
+			wantErr: "project path must stay inside workspace",
+		},
+		{
+			name:    "nested backslash parent traversal",
+			path:    `services\..\mall-api`,
+			wantErr: "project path must stay inside workspace",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			writeRegistryFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend]
+business_domains: [account]
+`)
+			writeRegistryFile(t, root, "knowledge/projects.yaml", "projects: []\n")
+			writeRegistryFile(t, root, "knowledge/types.yaml", "types: [rule]\n")
+
+			err := AddProject(root, Project{
+				ID:              "mall-api",
+				Name:            "Mall API",
+				Path:            tt.path,
+				TechDomains:     []string{"backend"},
+				BusinessDomains: []string{"account"},
+			})
+			if err == nil {
+				t.Fatal("expected unsafe project path error")
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("expected %q in error, got %v", tt.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestAddProjectPreservesExistingProjects(t *testing.T) {
+	root := t.TempDir()
+	writeRegistryFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend, frontend]
+business_domains: [account, catalog]
+`)
+	writeRegistryFile(t, root, "knowledge/projects.yaml", `projects:
+  - id: mall-api
+    name: Mall API
+    path: services/mall-api
+    tech_domains: [backend]
+    business_domains: [account]
+`)
+	writeRegistryFile(t, root, "knowledge/types.yaml", "types: [rule]\n")
+
+	err := AddProject(root, Project{
+		ID:              "mall-web",
+		Name:            "Mall Web",
+		Path:            "apps/mall-web",
+		TechDomains:     []string{"frontend"},
+		BusinessDomains: []string{"catalog"},
+	})
+	if err != nil {
+		t.Fatalf("AddProject returned error: %v", err)
+	}
+
+	reg, err := Load(root)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if len(reg.Projects) != 2 {
+		t.Fatalf("expected two projects, got %#v", reg.Projects)
+	}
+	if reg.Projects[0].ID != "mall-api" || reg.Projects[0].Name != "Mall API" || reg.Projects[0].Path != "services/mall-api" {
+		t.Fatalf("existing project was not preserved: %#v", reg.Projects[0])
+	}
+	if reg.Projects[1].ID != "mall-web" || reg.Projects[1].Name != "Mall Web" || reg.Projects[1].Path != "apps/mall-web" {
+		t.Fatalf("new project was not appended: %#v", reg.Projects[1])
+	}
+}
+
+func TestAddProjectRejectsLockedProjectsRegistry(t *testing.T) {
+	root := t.TempDir()
+	writeRegistryFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend]
+business_domains: [account]
+`)
+	writeRegistryFile(t, root, "knowledge/projects.yaml", "projects: []\n")
+	writeRegistryFile(t, root, "knowledge/types.yaml", "types: [rule]\n")
+	lockPath := filepath.Join(root, "knowledge", "projects.yaml.lock")
+	if err := os.WriteFile(lockPath, []byte("locked"), 0o644); err != nil {
+		t.Fatalf("write %s: %v", lockPath, err)
+	}
+
+	err := AddProject(root, Project{
+		ID:              "mall-api",
+		Name:            "Mall API",
+		Path:            "services/mall-api",
+		TechDomains:     []string{"backend"},
+		BusinessDomains: []string{"account"},
+	})
+	if err == nil {
+		t.Fatal("expected locked projects registry error")
+	}
+	if !strings.Contains(err.Error(), "projects registry is locked") {
+		t.Fatalf("expected locked registry error, got: %v", err)
+	}
+
+	reg, err := Load(root)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if len(reg.Projects) != 0 {
+		t.Fatalf("expected no appended projects, got %#v", reg.Projects)
+	}
+}
+
+func TestAddProjectRemovesProjectsRegistryLockAfterSuccess(t *testing.T) {
+	root := t.TempDir()
+	writeRegistryFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend]
+business_domains: [account]
+`)
+	writeRegistryFile(t, root, "knowledge/projects.yaml", "projects: []\n")
+	writeRegistryFile(t, root, "knowledge/types.yaml", "types: [rule]\n")
+
+	err := AddProject(root, Project{
+		ID:              "mall-api",
+		Name:            "Mall API",
+		Path:            "services/mall-api",
+		TechDomains:     []string{"backend"},
+		BusinessDomains: []string{"account"},
+	})
+	if err != nil {
+		t.Fatalf("AddProject returned error: %v", err)
+	}
+
+	lockPath := filepath.Join(root, "knowledge", "projects.yaml.lock")
+	if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
+		t.Fatalf("expected projects registry lock to be removed, got stat error: %v", err)
+	}
+}
+
+func TestAddProjectRejectsDuplicateID(t *testing.T) {
+	root := t.TempDir()
+	writeRegistryFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend]
+business_domains: [account]
+`)
+	writeRegistryFile(t, root, "knowledge/projects.yaml", `projects:
+  - id: mall-api
+    name: Mall API
+    path: services/mall-api
+    tech_domains: [backend]
+    business_domains: [account]
+`)
+	writeRegistryFile(t, root, "knowledge/types.yaml", "types: [rule]\n")
+
+	err := AddProject(root, Project{ID: "mall-api", Name: "Mall API 2", Path: "services/mall-api-2"})
+	if err == nil {
+		t.Fatal("expected duplicate project error")
+	}
+	if !strings.Contains(err.Error(), "project already exists: mall-api") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestAddProjectRejectsUnknownDomains(t *testing.T) {
+	root := t.TempDir()
+	writeRegistryFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend]
+business_domains: [account]
+`)
+	writeRegistryFile(t, root, "knowledge/projects.yaml", "projects: []\n")
+	writeRegistryFile(t, root, "knowledge/types.yaml", "types: [rule]\n")
+
+	err := AddProject(root, Project{
+		ID:              "mall-api",
+		Name:            "Mall API",
+		Path:            "services/mall-api",
+		TechDomains:     []string{"mobile"},
+		BusinessDomains: []string{"catalog"},
+	})
+	if err == nil {
+		t.Fatal("expected unknown domain error")
+	}
+	for _, want := range []string{"unknown tech domain: mobile", "unknown business domain: catalog"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("expected %q in error, got %v", want, err)
+		}
+	}
+}
+
+func TestListProjectsReturnsRegisteredProjects(t *testing.T) {
+	root := t.TempDir()
+	writeRegistryFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend]
+business_domains: [account]
+`)
+	writeRegistryFile(t, root, "knowledge/projects.yaml", `projects:
+  - id: mall-api
+    name: Mall API
+    path: services/mall-api
+    tech_domains: [backend]
+    business_domains: [account]
+`)
+	writeRegistryFile(t, root, "knowledge/types.yaml", "types: [rule]\n")
+
+	projects, err := ListProjects(root)
+	if err != nil {
+		t.Fatalf("ListProjects returned error: %v", err)
+	}
+	if len(projects) != 1 || projects[0].ID != "mall-api" {
+		t.Fatalf("unexpected projects: %#v", projects)
+	}
+}
+
 func writeRegistryFile(t *testing.T, root, rel, body string) {
 	t.Helper()
 

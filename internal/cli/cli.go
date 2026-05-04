@@ -145,6 +145,8 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			Files:   files,
 		})
 		return printJSON(stdout, stderr, result)
+	case "project":
+		return runProject(args[1:], stdout, stderr)
 	case "knowledge":
 		return runKnowledge(args[1:], stdout, stderr)
 	case "dogfood":
@@ -431,6 +433,114 @@ func runDogfoodEvaluate(args []string, stdout io.Writer, stderr io.Writer) int {
 	}
 	fmt.Fprintf(stdout, "%s: %s\n", evaluation.CaseID, evaluation.Result)
 	return 0
+}
+
+func runProject(args []string, stdout io.Writer, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "project: subcommand is required")
+		printUsage(stderr)
+		return 2
+	}
+	switch args[0] {
+	case "add":
+		return runProjectAdd(args[1:], stdout, stderr)
+	case "list":
+		return runProjectList(args[1:], stdout, stderr)
+	default:
+		fmt.Fprintf(stderr, "project: unknown subcommand %q\n", args[0])
+		printUsage(stderr)
+		return 2
+	}
+}
+
+func runProjectAdd(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("project add", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	id := flags.String("id", "", "project id")
+	name := flags.String("name", "", "project name")
+	projectPath := flags.String("path", "", "project source path")
+	var techDomains multiValueFlag
+	var businessDomains multiValueFlag
+	flags.Var(&techDomains, "tech-domain", "tech domain; may be repeated")
+	flags.Var(&businessDomains, "business-domain", "business domain; may be repeated")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if strings.TrimSpace(*id) == "" {
+		fmt.Fprintln(stderr, "project add: --id is required")
+		return 2
+	}
+	if strings.TrimSpace(*name) == "" {
+		fmt.Fprintln(stderr, "project add: --name is required")
+		return 2
+	}
+	if strings.TrimSpace(*projectPath) == "" {
+		fmt.Fprintln(stderr, "project add: --path is required")
+		return 2
+	}
+	root, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(stderr, "project add: get current directory: %v\n", err)
+		return 1
+	}
+	project := registry.Project{
+		ID:              *id,
+		Name:            *name,
+		Path:            *projectPath,
+		TechDomains:     techDomains,
+		BusinessDomains: businessDomains,
+	}
+	if err := registry.AddProject(root, project); err != nil {
+		fmt.Fprintf(stderr, "project add: %v\n", err)
+		return projectAddErrorCode(err)
+	}
+	fmt.Fprintf(stdout, "added project %s\n", strings.TrimSpace(*id))
+	return 0
+}
+
+func projectAddErrorCode(err error) int {
+	message := err.Error()
+	for _, validationError := range []string{
+		"project already exists:",
+		"project id is required",
+		"project name is required",
+		"project path is required",
+		"project path must be relative",
+		"project path must stay inside workspace",
+		"unknown tech domain:",
+		"unknown business domain:",
+	} {
+		if strings.Contains(message, validationError) {
+			return 2
+		}
+	}
+	return 1
+}
+
+func runProjectList(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("project list", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	jsonOut := flags.Bool("json", false, "print JSON output")
+	if err := flags.Parse(args); err != nil {
+		return 2
+	}
+	if !*jsonOut {
+		fmt.Fprintln(stderr, "project list: --json is required")
+		return 2
+	}
+	root, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(stderr, "project list: get current directory: %v\n", err)
+		return 1
+	}
+	projects, err := registry.ListProjects(root)
+	if err != nil {
+		fmt.Fprintf(stderr, "project list: %v\n", err)
+		return 1
+	}
+	return printJSON(stdout, stderr, struct {
+		Projects []registry.Project `json:"projects"`
+	}{Projects: projects})
 }
 
 func runKnowledge(args []string, stdout io.Writer, stderr io.Writer) int {
@@ -859,6 +969,14 @@ type validationScope struct {
 	Path  string
 }
 
+type knowledgeStorageScope string
+
+const (
+	knowledgeStorageOfficial knowledgeStorageScope = "official"
+	knowledgeStorageInbox    knowledgeStorageScope = "inbox"
+	knowledgeStorageUnknown  knowledgeStorageScope = "unknown"
+)
+
 func loadAndValidateKnowledge(root string, stderr io.Writer, scope validationScope) ([]knowledge.Item, error) {
 	reg, err := registry.Load(root)
 	if err != nil {
@@ -881,6 +999,7 @@ func loadAndValidateKnowledge(root string, stderr io.Writer, scope validationSco
 	}
 
 	errs := knowledge.ValidateItems(items, reg)
+	errs = append(errs, validateKnowledgeStorageScope(items, storageScopeForValidation(scope))...)
 	for _, err := range errs {
 		fmt.Fprintln(stderr, err)
 	}
@@ -890,6 +1009,54 @@ func loadAndValidateKnowledge(root string, stderr io.Writer, scope validationSco
 		return nil, err
 	}
 	return items, nil
+}
+
+func storageScopeForValidation(scope validationScope) knowledgeStorageScope {
+	if strings.TrimSpace(scope.Path) != "" {
+		return storageScopeForPath(scope.Path)
+	}
+	if scope.Inbox {
+		return knowledgeStorageInbox
+	}
+	return knowledgeStorageOfficial
+}
+
+func storageScopeForPath(path string) knowledgeStorageScope {
+	slash := filepath.ToSlash(filepath.Clean(strings.TrimSpace(path)))
+	if slash == "." || slash == "" {
+		return knowledgeStorageUnknown
+	}
+	if slash == "knowledge/.inbox/items" ||
+		slash == "knowledge/.inbox/packages" ||
+		strings.HasPrefix(slash, "knowledge/.inbox/items/") ||
+		strings.HasPrefix(slash, "knowledge/.inbox/packages/") {
+		return knowledgeStorageInbox
+	}
+	if slash == "knowledge/items" ||
+		slash == "knowledge/packages" ||
+		strings.HasPrefix(slash, "knowledge/items/") ||
+		strings.HasPrefix(slash, "knowledge/packages/") {
+		return knowledgeStorageOfficial
+	}
+	return knowledgeStorageUnknown
+}
+
+func validateKnowledgeStorageScope(items []knowledge.Item, scope knowledgeStorageScope) []error {
+	var errs []error
+	for _, item := range items {
+		status := strings.TrimSpace(item.Status)
+		switch scope {
+		case knowledgeStorageInbox:
+			if status != "draft" {
+				errs = append(errs, fmt.Errorf("%s: inbox knowledge must use status: draft; set the draft back to status: draft before check or publish", item.Path))
+			}
+		case knowledgeStorageOfficial:
+			if status == "draft" {
+				errs = append(errs, fmt.Errorf("%s: official knowledge must not use status: draft; publish from inbox or set status: active after review", item.Path))
+			}
+		}
+	}
+	return errs
 }
 
 func publishDraft(root string, relPath string, stderr io.Writer) (string, error) {
@@ -1059,6 +1226,7 @@ func validateOfficialKnowledgeWithDraft(root string, draftPath string, target st
 	items := append([]knowledge.Item{}, official...)
 	items = append(items, rebaseKnowledgeItemPaths(draftItems, draftPath, target)...)
 	errs := knowledge.ValidateItems(items, reg)
+	errs = append(errs, validateKnowledgeStorageScope(official, knowledgeStorageOfficial)...)
 	for _, err := range errs {
 		fmt.Fprintln(stderr, err)
 	}
@@ -1094,11 +1262,21 @@ func rebaseKnowledgePath(path string, from string, to string) string {
 
 func publishTarget(clean string) (string, error) {
 	slash := filepath.ToSlash(clean)
+	const inboxPackages = "knowledge/.inbox/packages/"
+	if strings.HasPrefix(slash, inboxPackages) {
+		rest := strings.TrimPrefix(slash, inboxPackages)
+		if rest == "" || strings.Contains(rest, "../") {
+			return "", fmt.Errorf("%s: invalid inbox draft path", clean)
+		}
+		if rest == "KNOWLEDGE.md" || strings.HasSuffix(rest, "/KNOWLEDGE.md") {
+			return "", fmt.Errorf("%s: package publish path must be the package directory, not KNOWLEDGE.md", clean)
+		}
+		return filepath.FromSlash("knowledge/packages/" + rest), nil
+	}
 	for _, mapping := range []struct {
 		inbox    string
 		official string
 	}{
-		{"knowledge/.inbox/packages/", "knowledge/packages/"},
 		{"knowledge/.inbox/items/", "knowledge/items/"},
 	} {
 		if strings.HasPrefix(slash, mapping.inbox) {
@@ -1121,11 +1299,14 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  index")
 	fmt.Fprintln(w, "  install-adapters")
 	fmt.Fprintln(w, "  context")
+	fmt.Fprintln(w, "  project")
 	fmt.Fprintln(w, "  knowledge")
 	fmt.Fprintln(w, "  dogfood")
 	fmt.Fprintln(w, "  mcp")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Examples:")
+	fmt.Fprintln(w, "  argos project add --id <project> --name <name> --path <path>")
+	fmt.Fprintln(w, "  argos project list --json")
 	fmt.Fprintln(w, "  argos knowledge design --json --project <project> --intent <intent>")
 	fmt.Fprintln(w, "  argos knowledge check --json --design <design.json> --draft <draft>")
 	fmt.Fprintln(w, "  argos knowledge publish --design <design.json> --path <draft>")
