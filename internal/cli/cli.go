@@ -1262,11 +1262,21 @@ func rebaseKnowledgePath(path string, from string, to string) string {
 
 func publishTarget(clean string) (string, error) {
 	slash := filepath.ToSlash(clean)
+	const inboxPackages = "knowledge/.inbox/packages/"
+	if strings.HasPrefix(slash, inboxPackages) {
+		rest := strings.TrimPrefix(slash, inboxPackages)
+		if rest == "" || strings.Contains(rest, "../") {
+			return "", fmt.Errorf("%s: invalid inbox draft path", clean)
+		}
+		if rest == "KNOWLEDGE.md" || strings.HasSuffix(rest, "/KNOWLEDGE.md") {
+			return "", fmt.Errorf("%s: package publish path must be the package directory, not KNOWLEDGE.md", clean)
+		}
+		return filepath.FromSlash("knowledge/packages/" + rest), nil
+	}
 	for _, mapping := range []struct {
 		inbox    string
 		official string
 	}{
-		{"knowledge/.inbox/packages/", "knowledge/packages/"},
 		{"knowledge/.inbox/items/", "knowledge/items/"},
 	} {
 		if strings.HasPrefix(slash, mapping.inbox) {

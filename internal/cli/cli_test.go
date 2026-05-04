@@ -1659,6 +1659,47 @@ func TestRunKnowledgePublishMovesInboxPackageToOfficialPackages(t *testing.T) {
 	}
 }
 
+func TestRunKnowledgePublishRejectsPackageEntrypointPath(t *testing.T) {
+	root := t.TempDir()
+	initWorkspace(t, root)
+	draftPath := "knowledge/.inbox/packages/backend/redis/best-practices"
+	draftFile := draftPath + "/KNOWLEDGE.md"
+	draftID := "package:backend.redis.best-practices.v1"
+	design := validCLIKnowledgeDesign(draftFile, draftID)
+	design.DraftFiles = []knowledgewrite.DraftFile{{
+		Path:    draftFile,
+		Purpose: "Package entrypoint.",
+		Load:    "read_before_implementation",
+	}}
+	designPath := writeCLIKnowledgeDesign(t, root, "knowledge/.inbox/designs/redis/design.json", design)
+	targetPath := "knowledge/packages/backend/redis/best-practices"
+	writeCLIFile(t, root, draftFile, validCLICheckDraftPackage(draftID))
+	writeCLIFile(t, root, draftPath+"/references/redis-cache.md", "Redis cache reference must move with the package.\n")
+	chdir(t, root)
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"knowledge", "publish", "--design", designPath, "--path", draftFile}, &stdout, &stderr)
+
+	if code != 1 {
+		t.Fatalf("expected exit code 1, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if stdout.String() != "" {
+		t.Fatalf("expected empty stdout, got %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "package publish path must be the package directory, not KNOWLEDGE.md") {
+		t.Fatalf("expected package entrypoint path error, got %q", stderr.String())
+	}
+	if _, err := os.Stat(filepath.Join(root, draftFile)); err != nil {
+		t.Fatalf("expected draft entrypoint to remain in inbox: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, draftPath, "references/redis-cache.md")); err != nil {
+		t.Fatalf("expected draft reference to remain in inbox: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, targetPath)); !os.IsNotExist(err) {
+		t.Fatalf("expected official package not to exist, stat err=%v", err)
+	}
+}
+
 func TestRunKnowledgePublishRejectsNonInboxPath(t *testing.T) {
 	root := t.TempDir()
 	initWorkspace(t, root)
