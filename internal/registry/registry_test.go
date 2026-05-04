@@ -164,6 +164,86 @@ business_domains: [account]
 	}
 }
 
+func TestAddProjectAcceptsRootProjectPath(t *testing.T) {
+	root := t.TempDir()
+	writeRegistryFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend]
+business_domains: [account]
+`)
+	writeRegistryFile(t, root, "knowledge/projects.yaml", "projects: []\n")
+	writeRegistryFile(t, root, "knowledge/types.yaml", "types: [rule]\n")
+
+	err := AddProject(root, Project{
+		ID:              "workspace-root",
+		Name:            "Workspace Root",
+		Path:            ".",
+		TechDomains:     []string{"backend"},
+		BusinessDomains: []string{"account"},
+	})
+	if err != nil {
+		t.Fatalf("AddProject returned error: %v", err)
+	}
+
+	reg, err := Load(root)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if len(reg.Projects) != 1 {
+		t.Fatalf("expected one project, got %#v", reg.Projects)
+	}
+	if reg.Projects[0].Path != "." {
+		t.Fatalf("unexpected project path: %q", reg.Projects[0].Path)
+	}
+}
+
+func TestAddProjectRejectsUnsafeProjectPaths(t *testing.T) {
+	tests := []struct {
+		name    string
+		path    string
+		wantErr string
+	}{
+		{
+			name:    "absolute path",
+			path:    "/tmp/mall-api",
+			wantErr: "project path must be relative",
+		},
+		{
+			name:    "windows absolute path",
+			path:    `C:\tmp\mall-api`,
+			wantErr: "project path must be relative",
+		},
+		{
+			name:    "parent traversal",
+			path:    "../mall-api",
+			wantErr: "project path must stay inside workspace",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			writeRegistryFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend]
+business_domains: [account]
+`)
+			writeRegistryFile(t, root, "knowledge/projects.yaml", "projects: []\n")
+			writeRegistryFile(t, root, "knowledge/types.yaml", "types: [rule]\n")
+
+			err := AddProject(root, Project{
+				ID:              "mall-api",
+				Name:            "Mall API",
+				Path:            tt.path,
+				TechDomains:     []string{"backend"},
+				BusinessDomains: []string{"account"},
+			})
+			if err == nil {
+				t.Fatal("expected unsafe project path error")
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("expected %q in error, got %v", tt.wantErr, err)
+			}
+		})
+	}
+}
+
 func TestAddProjectPreservesExistingProjects(t *testing.T) {
 	root := t.TempDir()
 	writeRegistryFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend, frontend]

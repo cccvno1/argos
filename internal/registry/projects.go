@@ -30,6 +30,9 @@ func AddProject(root string, project Project) error {
 	if err := validateProjectRequired(project); err != nil {
 		return err
 	}
+	if err := validateProjectPath(project.Path); err != nil {
+		return err
+	}
 
 	unlock, err := lockProjectsRegistry(root)
 	if err != nil {
@@ -126,9 +129,6 @@ func cleanProjectPath(projectPath string) string {
 	}
 	projectPath = strings.ReplaceAll(projectPath, `\`, "/")
 	projectPath = path.Clean(projectPath)
-	if projectPath == "." {
-		return ""
-	}
 	return projectPath
 }
 
@@ -147,6 +147,24 @@ func validateProjectRequired(project Project) error {
 		return fmt.Errorf("%s", strings.Join(failures, "; "))
 	}
 	return nil
+}
+
+func validateProjectPath(projectPath string) error {
+	if path.IsAbs(projectPath) || hasWindowsVolumeName(projectPath) {
+		return fmt.Errorf("project path must be relative")
+	}
+	if projectPath == ".." || strings.HasPrefix(projectPath, "../") {
+		return fmt.Errorf("project path must stay inside workspace")
+	}
+	return nil
+}
+
+func hasWindowsVolumeName(projectPath string) bool {
+	if len(projectPath) < 2 || projectPath[1] != ':' {
+		return false
+	}
+	drive := projectPath[0]
+	return ('A' <= drive && drive <= 'Z') || ('a' <= drive && drive <= 'z')
 }
 
 func validateProjectDomains(reg Registry, project Project) error {
