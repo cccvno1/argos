@@ -872,35 +872,6 @@ func runKnowledgePublish(args []string, stdout io.Writer, stderr io.Writer) int 
 	return 0
 }
 
-func validatePublishApproval(root string, designPath string, draftPath string) error {
-	design, err := loadPublishDesign(root, designPath)
-	if err != nil {
-		return err
-	}
-	if !design.Review.PublishApproved {
-		return fmt.Errorf("review.publish_approved is required before publish")
-	}
-	check, err := knowledgewrite.Check(root, knowledgewrite.CheckRequest{
-		DesignPath: designPath,
-		DraftPath:  draftPath,
-	})
-	if err != nil {
-		return err
-	}
-	if check.Result != "pass" {
-		return fmt.Errorf("knowledge check must pass before publish: %s", check.Result)
-	}
-	return nil
-}
-
-func loadPublishDesign(root string, relPath string) (knowledgewrite.KnowledgeDesign, error) {
-	clean := filepath.Clean(relPath)
-	if filepath.IsAbs(relPath) || clean == "." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) || clean == ".." {
-		return knowledgewrite.KnowledgeDesign{}, fmt.Errorf("%s: design path must be relative and inside workspace", relPath)
-	}
-	return knowledgewrite.LoadDesign(filepath.Join(root, clean))
-}
-
 func runKnowledgeFind(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("knowledge find", flag.ContinueOnError)
 	flags.SetOutput(stderr)

@@ -1584,10 +1584,22 @@ func TestUsageUsesWriteVocabulary(t *testing.T) {
 		"argos project list --json",
 		"argos knowledge design --json --project <project> --intent <intent>",
 		"argos knowledge check --json --design <design.json> --draft <draft>",
+		"argos provenance start --json --design <design.json> --draft <draft>",
+		"argos provenance record-decision --json --provenance <id>",
+		"argos provenance record-check --json --provenance <id>",
+		"argos provenance verify --json --provenance <id>",
 		"argos knowledge publish --provenance <id>",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("usage missing %q:\n%s", want, body)
+		}
+	}
+	for _, forbidden := range []string{
+		removedWriteTerm("review", ".", "publish_approved is required before publish"),
+		removedWriteTerm("argos knowledge publish --design <design.json>", " --path <draft>"),
+	} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("usage contains forbidden %q:\n%s", forbidden, body)
 		}
 	}
 	assertNoRemovedWriteTerms(t, body)
