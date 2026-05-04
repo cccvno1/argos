@@ -111,6 +111,26 @@ func TestListRejectsSymlinkedProvenanceRoot(t *testing.T) {
 	}
 }
 
+func TestListRejectsSymlinkedIntermediateProvenanceRootComponent(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(outside, "provenance"), 0o755); err != nil {
+		t.Fatalf("mkdir outside provenance: %v", err)
+	}
+	knowledge := filepath.Join(root, "knowledge")
+	if err := os.MkdirAll(knowledge, 0o755); err != nil {
+		t.Fatalf("mkdir knowledge: %v", err)
+	}
+	if err := os.Symlink(outside, filepath.Join(knowledge, ".inbox")); err != nil {
+		t.Fatalf("symlink inbox: %v", err)
+	}
+
+	_, err := List(root, ListFilter{})
+	if err == nil || !strings.Contains(err.Error(), "path must not contain symlinks") {
+		t.Fatalf("expected symlinked provenance root component error, got %v", err)
+	}
+}
+
 func TestListRejectsSymlinkedProvenanceRecordDirectory(t *testing.T) {
 	root := t.TempDir()
 	outside := t.TempDir()

@@ -60,6 +60,9 @@ func listRecordsUnder(root string, relRoot string) ([]Loaded, error) {
 		}
 		return nil, fmt.Errorf("stat %s: %w", filepath.ToSlash(relRoot), err)
 	}
+	if err := rejectSymlinkPath(root, relRoot); err != nil {
+		return nil, err
+	}
 	if info.Mode()&os.ModeSymlink != 0 {
 		return nil, fmt.Errorf("%s: path must not contain symlinks", filepath.ToSlash(relRoot))
 	}
