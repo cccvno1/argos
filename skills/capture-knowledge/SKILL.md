@@ -213,9 +213,9 @@ disclosure:
 - supporting files under `references/`, `examples/`, `checklists/`, `scripts/`,
   or `assets/`
 
-For the first version of this skill, fully execute package authoring. For item
-authoring, propose the item shape and use the repository's existing manual Argos
-workflow unless the user asks for a package instead.
+Fully execute package authoring when the knowledge needs progressive disclosure.
+For item authoring, propose the item shape and follow the same Argos workflow
+unless the user asks for a package instead.
 
 If the shape is unclear, ask one question about intended reuse or structure.
 
