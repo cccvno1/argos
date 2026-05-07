@@ -100,7 +100,6 @@ func TestPublishedCaseHandlesStayStable(t *testing.T) {
 		{goldenID: "interface_cli_read_returns_body", want: "case-020"},
 		{goldenID: "interface_cli_cite_returns_citation", want: "case-021"},
 		{goldenID: "interface_mcp_strict_schema", want: "case-022"},
-		{goldenID: "adapter_flow_recommendations", want: "case-023"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.goldenID, func(t *testing.T) {
@@ -166,7 +165,6 @@ func TestPacketAddsOperationSpecificNotes(t *testing.T) {
 		{name: "cli cite", id: "interface_cli_cite_returns_citation", want: "CLI citation case: first discover and select read-and-used IDs from public command output, then run `argos knowledge cite --json <id>...` for those selected IDs."},
 		{name: "context workflow", id: "context_entrypoint_carries_task_arguments", want: "Context workflow case: call context first, then use returned arguments for find before read/cite."},
 		{name: "mcp", id: "interface_mcp_strict_schema", want: "MCP schema case: use JSON-RPC commands through `argos mcp`."},
-		{name: "adapter", id: "adapter_flow_recommendations", want: "Adapter case: run `argos install-adapters` before checking generated files."},
 		{name: "default find", id: "partial_domain_without_task_detail", want: "Find case: run find, read selected IDs when useful, and cite only read-and-used IDs."},
 	}
 	for _, tt := range tests {

@@ -21,7 +21,6 @@ func TestInitCreatesWorkspaceFiles(t *testing.T) {
 		"knowledge/.inbox",
 		"knowledge/items",
 		"knowledge/packages",
-		"argos/generated",
 	}
 	for _, rel := range required {
 		if _, err := os.Stat(filepath.Join(root, rel)); err != nil {

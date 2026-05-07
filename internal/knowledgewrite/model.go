@@ -146,7 +146,7 @@ type Scope struct {
 	Projects       []string `json:"projects"`
 	Stability      string   `json:"stability"`
 	Distribution   string   `json:"distribution"`
-	SubjectDomains []string `json:"subject_domains"`
+	BusinessDomains []string `json:"business_domains"`
 	TechDomains    []string `json:"tech_domains"`
 	Files          []string `json:"files"`
 	FileGlobs      []string `json:"file_globs"`

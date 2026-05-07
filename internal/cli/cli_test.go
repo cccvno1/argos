@@ -1902,39 +1902,7 @@ This item should not be indexed.
 	}
 }
 
-func TestRunInstallAdaptersGeneratesProjectFiles(t *testing.T) {
-	root := t.TempDir()
-	writeCLIFile(t, root, "knowledge/domains.yaml", `tech_domains: [backend]
-business_domains: [account]
-`)
-	writeCLIFile(t, root, "knowledge/projects.yaml", `projects:
-  - id: mall-api
-    name: Mall API
-    path: services/mall-api
-    tech_domains: [backend]
-    business_domains: [account]
-`)
-	writeCLIFile(t, root, "knowledge/types.yaml", "types: [rule]\n")
-	chdir(t, root)
 
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	code := Run([]string{"install-adapters"}, &stdout, &stderr)
-
-	if code != 0 {
-		t.Fatalf("expected exit code 0, got %d; stderr: %q", code, stderr.String())
-	}
-	if strings.TrimSpace(stdout.String()) != "installed adapters for 1 project(s)" {
-		t.Fatalf("unexpected stdout: %q", stdout.String())
-	}
-	if stderr.String() != "" {
-		t.Fatalf("expected empty stderr, got %q", stderr.String())
-	}
-	path := filepath.Join(root, "argos", "generated", "mall-api", "AGENTS.md")
-	if _, err := os.Stat(path); err != nil {
-		t.Fatalf("expected generated AGENTS.md at %s: %v", path, err)
-	}
-}
 
 func TestRunKnowledgePublishMovesInboxPackageToOfficialPackages(t *testing.T) {
 	root := t.TempDir()
@@ -2624,6 +2592,69 @@ Official roots must not carry draft status.
 	}
 }
 
+func TestRunVersionFlagReturnsVersion(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"--version"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d", code)
+	}
+	if strings.TrimSpace(stdout.String()) == "" {
+		t.Fatalf("expected version output on stdout, got empty string")
+	}
+}
+
+func TestRunVersionSubcommandReturnsVersion(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"version"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d", code)
+	}
+	if strings.TrimSpace(stdout.String()) == "" {
+		t.Fatalf("expected version output on stdout, got empty string")
+	}
+}
+
+func TestRunHelpFlagReturnsUsageWithExitCodeZero(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"--help"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d", code)
+	}
+	if !strings.Contains(stdout.String(), "Usage: argos <command>") {
+		t.Fatalf("expected usage on stdout, got %q", stdout.String())
+	}
+}
+
+func TestRunHelpSubcommandReturnsUsageWithExitCodeZero(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"help"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d", code)
+	}
+	if !strings.Contains(stdout.String(), "Usage: argos <command>") {
+		t.Fatalf("expected usage on stdout, got %q", stdout.String())
+	}
+}
+
+func TestRunHelpFlagOutputGoesToStdout(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"-h"}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d", code)
+	}
+	if !strings.Contains(stdout.String(), "Usage: argos <command>") {
+		t.Fatalf("expected usage on stdout, got %q", stdout.String())
+	}
+	if stderr.String() != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr.String())
+	}
+}
+
 func writeCLIFile(t *testing.T, root, rel, body string) {
 	t.Helper()
 
@@ -2653,7 +2684,6 @@ func initWorkspace(t *testing.T, root string) {
 		"knowledge/.inbox/designs",
 		"knowledge/items",
 		"knowledge/packages",
-		"argos/generated",
 	} {
 		if err := os.MkdirAll(filepath.Join(root, filepath.FromSlash(dir)), 0o755); err != nil {
 			t.Fatalf("mkdir %s: %v", dir, err)

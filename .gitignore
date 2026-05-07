@@ -1,3 +1,6 @@
 .superpowers/
 .worktrees/
-argos/index.db
+argos/
+knowledge/
+opencode.json
+docs/superpowers/

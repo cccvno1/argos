@@ -714,7 +714,7 @@ func validProvenanceDesignJSON() string {
     "stability": "reviewed",
     "distribution": "project",
     "tech_domains": ["backend"],
-    "subject_domains": ["catalog"],
+    "business_domains": ["catalog"],
     "file_globs": ["**/*"]
   },
   "sources": {

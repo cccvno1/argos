@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"argos/internal/adapters"
+	"argos/internal/version"
 	"argos/internal/audit"
 	"argos/internal/dogfood"
 	"argos/internal/index"
@@ -40,6 +40,18 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 	}
 
 	switch args[0] {
+	case "--version", "-version":
+		fmt.Fprintln(stdout, version.Version)
+		return 0
+	case "--help", "-help", "-h":
+		printUsage(stdout)
+		return 0
+	case "version":
+		fmt.Fprintln(stdout, version.Version)
+		return 0
+	case "help":
+		printUsage(stdout)
+		return 0
 	case "init":
 		root, err := os.Getwd()
 		if err != nil {
@@ -92,24 +104,6 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 		}
 
 		fmt.Fprintf(stdout, "indexed %d knowledge item(s)\n", len(items))
-		return 0
-	case "install-adapters":
-		root, err := os.Getwd()
-		if err != nil {
-			fmt.Fprintf(stderr, "get current directory: %v\n", err)
-			return 1
-		}
-		reg, err := registry.Load(root)
-		if err != nil {
-			fmt.Fprintf(stderr, "load registry: %v\n", err)
-			return 1
-		}
-		if err := adapters.Install(root, reg.Projects); err != nil {
-			fmt.Fprintf(stderr, "install adapters: %v\n", err)
-			return 1
-		}
-
-		fmt.Fprintf(stdout, "installed adapters for %d project(s)\n", len(reg.Projects))
 		return 0
 	case "context":
 		flags := flag.NewFlagSet("context", flag.ContinueOnError)
@@ -1571,10 +1565,11 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: argos <command> [options]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Commands:")
+	fmt.Fprintln(w, "  help")
+	fmt.Fprintln(w, "  version")
 	fmt.Fprintln(w, "  init")
 	fmt.Fprintln(w, "  validate")
 	fmt.Fprintln(w, "  index")
-	fmt.Fprintln(w, "  install-adapters")
 	fmt.Fprintln(w, "  context")
 	fmt.Fprintln(w, "  project")
 	fmt.Fprintln(w, "  knowledge")

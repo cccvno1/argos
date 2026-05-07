@@ -351,8 +351,8 @@ func TestDesignKnowledgeDoesNotScopeToAllRegistryDomainsByDefault(t *testing.T) 
 	if len(scope.TechDomains) != 0 {
 		t.Fatalf("tech domains should be empty without explicit or project-specific domains, got %#v", scope.TechDomains)
 	}
-	if len(scope.SubjectDomains) != 0 {
-		t.Fatalf("subject domains should be empty without explicit or project-specific domains, got %#v", scope.SubjectDomains)
+	if len(scope.BusinessDomains) != 0 {
+		t.Fatalf("subject domains should be empty without explicit or project-specific domains, got %#v", scope.BusinessDomains)
 	}
 }
 

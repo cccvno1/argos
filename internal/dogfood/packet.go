@@ -118,8 +118,6 @@ func operationNotes(tc discoverytest.Case, publicID string) ([]string, error) {
 		notes = append(notes, "Context workflow case: call context first, then use returned arguments for find before read/cite.")
 	case "mcp-schema":
 		notes = append(notes, "MCP schema case: use JSON-RPC commands through `argos mcp`.")
-	case "adapter":
-		notes = append(notes, "Adapter case: run `argos install-adapters` before checking generated files.")
 	case "cli-read":
 		notes = append(notes, "CLI read case: first discover and select an ID from public command output, then run `argos knowledge read --json <id>` for that selected ID.")
 	case "cli-cite":

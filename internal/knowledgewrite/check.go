@@ -396,7 +396,7 @@ func checkPolicy(design KnowledgeDesign, draftPath string, draftItems []knowledg
 		for _, domain := range missingDesignTechDomains(item, design.Scope.TechDomains) {
 			addReview(fmt.Sprintf("%s: draft metadata is missing future tech domain %q", item.Path, domain))
 		}
-		for _, domain := range missingDesignBusinessDomains(item, design.Scope.SubjectDomains) {
+		for _, domain := range missingDesignBusinessDomains(item, design.Scope.BusinessDomains) {
 			addReview(fmt.Sprintf("%s: draft metadata is missing future business domain %q", item.Path, domain))
 		}
 		for _, pattern := range invalidFileScopePatterns(item) {

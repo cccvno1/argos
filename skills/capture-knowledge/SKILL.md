@@ -50,6 +50,32 @@ package unless the check plan names them and the user confirms execution.
 Never set `priority: must` unless the user explicitly authorizes it.
 Never claim authored knowledge is official while it is still in inbox.
 
+## Bootstrap
+
+Before running any Argos command, verify the workspace is initialized.
+
+If the project root does not contain a `knowledge/` directory, run:
+
+```bash
+argos init
+```
+
+If the project has no registered project, run:
+
+```bash
+argos project add --id <id> --name <name> --path <path> --tech-domain <domain>
+```
+
+Use reasonable defaults from the project context: the directory name as the
+project ID, a human-readable project name, the relative path `.` if the
+project is at the workspace root, and any tech or business domains visible
+from the repository contents.
+
+Do not ask the user for project registration details unless the project
+identity is genuinely ambiguous. Prefer auto-registration from context.
+
+After initialization, proceed with the normal design workflow.
+
 Treat `sources` as multi-source. Do not force the request into one mode
 when it combines user-confirmed standards, observed files, imported references,
 templates, examples, synthesized recommendations, assumptions, and open

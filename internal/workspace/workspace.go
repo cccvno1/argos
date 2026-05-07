@@ -16,7 +16,6 @@ func Init(root string) error {
 		"knowledge/items",
 		"knowledge/packages",
 		"knowledge/provenance",
-		"argos/generated",
 	}
 	for _, dir := range dirs {
 		if err := os.MkdirAll(filepath.Join(root, dir), 0o755); err != nil {

@@ -154,7 +154,7 @@ func buildKnowledgeDesignTemplate(response DesignResponse, req DesignRequest) Kn
 			Projects:       []string{project},
 			Stability:      "draft",
 			Distribution:   "project",
-			SubjectDomains: append([]string{}, response.Registry.projectBusinessDomains...),
+			BusinessDomains: append([]string{}, response.Registry.projectBusinessDomains...),
 			TechDomains:    append([]string{}, response.Registry.projectTechDomains...),
 			FileGlobs:      []string{"**/*"},
 			OutOfScope: []string{
@@ -228,7 +228,7 @@ func buildKnowledgeDesignTemplate(response DesignResponse, req DesignRequest) Kn
 	if len(req.Domains) > 0 {
 		techDomains, subjectDomains := classifyRequestDomains(req.Domains, response.Registry)
 		design.Scope.TechDomains = uniqueNonEmpty(append(design.Scope.TechDomains, techDomains...))
-		design.Scope.SubjectDomains = uniqueNonEmpty(append(design.Scope.SubjectDomains, subjectDomains...))
+		design.Scope.BusinessDomains = uniqueNonEmpty(append(design.Scope.BusinessDomains, subjectDomains...))
 	}
 	if strings.TrimSpace(req.Phase) != "" {
 		design.FutureUse.Phases = []string{strings.TrimSpace(req.Phase)}
