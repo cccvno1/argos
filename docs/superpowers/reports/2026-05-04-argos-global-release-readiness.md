@@ -1,6 +1,7 @@
 # Argos Global Release Readiness
 
 Date: 2026-05-04
+Updated: 2026-05-06
 
 ## Purpose
 
@@ -14,16 +15,20 @@ Audit Argos first-release readiness from a clean user workspace across:
 
 ## Result
 
-Status: ready for write/query core
+Status: ready for v0.1
 
-The core first-release loop is usable with CLI project registration:
+Argos v0.1 is scoped as a local-first, agent-operated CLI/MCP core for durable
+knowledge write and retrieval. It is ready for first release on that definition.
+The release contract is:
 
 ```text
-init -> validate -> index -> find none -> design -> write reviewed design/draft -> check -> publish -> index -> findback
+init -> validate -> index -> find none -> project add -> design -> provenance decisions -> check -> provenance verify -> publish -> index -> findback
 ```
 
-MCP retrieval, MCP write design, and generated adapters also work. The remaining
-issues are release-quality gaps rather than proof that the core model is wrong.
+MCP retrieval, MCP write design/check, generated adapters, provenance-gated
+publish, and audit/status summaries are part of the v0.1 surface. Optional
+semantic search, richer ranking, signed attestations, and external PR metadata
+remain later work.
 
 ## Fresh Workspace Smoke
 
@@ -49,6 +54,7 @@ issues are release-quality gaps rather than proof that the core model is wrong.
 | Publish status semantics | fixed | Inbox drafts must stay `draft`; `knowledge publish` now writes official knowledge as `active`. |
 | `dogfood write cases --json` from repo root | pass | Works when run in the repository. |
 | `dogfood write cases --json` from a normal workspace | accepted | Source-tree internal release-validation harness; not required for installed-binary knowledge writing. |
+| Hidden `new` command | fixed | `argos new` now follows normal unknown-command handling. |
 
 ## MCP And Adapter Smoke
 
@@ -60,10 +66,32 @@ issues are release-quality gaps rather than proof that the core model is wrong.
 | `argos install-adapters` | pass | Generated AGENTS, CLAUDE, and GEMINI guidance for `mall-api`. |
 | Adapter protocol | pass | Preserves host workflow control, prefers MCP, falls back to CLI JSON or Markdown, and includes write-design gates. |
 
+## Final V0.1 Smoke
+
+Run date: 2026-05-06
+
+| Check | Result | Notes |
+| --- | --- | --- |
+| Build public binary | pass | Built `/tmp/argos-v0.1-final/bin/argos`. |
+| Repo-outside workspace | pass | Smoke workspace was `/tmp/argos-v0.1-final/workspace`. |
+| Fresh setup | pass | `init`, `validate`, empty `index`, and empty `knowledge find` completed. |
+| Project registration | pass | Added and listed `mall-api` through CLI commands. |
+| Design and draft | pass | Wrote reviewed `knowledge.design.v1` and inbox package draft. |
+| Provenance flow | pass | Recorded design, draft-write, check, and publish evidence. |
+| Knowledge check | pass | `knowledge check --json` returned `result: pass`. |
+| Provenance verify | pass | `provenance verify --json` returned `result: pass`. |
+| Publish and index | pass | Published with `knowledge publish --provenance` and rebuilt index. |
+| CLI findback | pass | `knowledge find --json` returned `package:mall-api.create-redis-cache-best-practices-for-future-backend-agents.v1`. |
+| MCP findback | pass | `argos_find_knowledge` returned the same knowledge ID. |
+| Adapter generation | pass | `install-adapters` completed in the smoke workspace. |
+| Hidden placeholder removal | pass | `argos new` returned normal unknown-command output. |
+
 ## Fixes Made
 
 - Removed the unimplemented `new` command from root usage.
 - Added a regression assertion that root usage does not list `new`.
+- Removed the hidden `new` command branch and added a regression assertion that
+  `argos new` is treated as an unknown command.
 - Documented project registry setup before publishing project-scoped knowledge.
 - Documented write-side MCP tools in README.
 - Made `knowledge publish` convert published official knowledge to `status: active`, then revalidate the official path.
@@ -72,7 +100,7 @@ issues are release-quality gaps rather than proof that the core model is wrong.
 
 ## Release Blockers
 
-None for the core agent-operated write/query flow.
+None for v0.1.
 
 ## Decisions
 
@@ -82,14 +110,14 @@ None for the core agent-operated write/query flow.
 
 ## Should Fix Before First Formal Release
 
-- Keep README, capture skill, and CLI usage synchronized as write commands evolve.
+- None remaining for the v0.1 scope after the 2026-05-06 final smoke.
 
 ## Later
 
 - Improve query-only findback from newly published packages. Structured context already reaches `strong`, but natural query alone remains `partial` for the smoke package.
-- Decide whether `command "new" is not implemented yet` should remain as a hidden placeholder or be removed entirely.
-- Add an install-style smoke for running the binary outside the source tree if Argos will be distributed independently of the repo.
 - Add optional external PR metadata ingestion and signed attestations for stricter team environments.
+- Add `provenance verify --all` if team CI should verify every visible
+  provenance record through one command.
 
 ## Evidence
 
@@ -104,8 +132,13 @@ None for the core agent-operated write/query flow.
 - Adapter generation output: `/tmp/argos-global-readiness/install-adapters.out`
 - Publish activation regression: `go test ./internal/cli -run TestRunKnowledgePublishMovesInboxPackageToOfficialPackages -count=1`
 - Full regression: `go test ./... -count=1`
+- Final v0.1 smoke root: `/tmp/argos-v0.1-final`
+- Final v0.1 smoke summary: `/tmp/argos-v0.1-final/summary.json`
+- Final v0.1 smoke check output: `/tmp/argos-v0.1-final/11-check.json`
+- Final v0.1 smoke provenance verify output: `/tmp/argos-v0.1-final/14-provenance-verify.json`
+- Final v0.1 smoke CLI findback: `/tmp/argos-v0.1-final/18-find.json`
+- Final v0.1 smoke MCP findback: `/tmp/argos-v0.1-final/21-mcp-find.json`
 
 ## Next Action
 
-Address remaining release polish outside the core write/query contract before
-the first formal release.
+Tag the v0.1 release after final repository verification.
