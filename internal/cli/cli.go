@@ -168,9 +168,6 @@ func run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int
 			return 1
 		}
 		return 0
-	case "new":
-		fmt.Fprintf(stderr, "command %q is not implemented yet\n", args[0])
-		return 1
 	default:
 		fmt.Fprintf(stderr, "unknown command: %s\n", args[0])
 		printUsage(stderr)
@@ -1586,7 +1583,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  mcp")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Examples:")
-	fmt.Fprintln(w, "  argos project add --id <project> --name <name> --path <path>")
+	fmt.Fprintln(w, "  argos project add --id <project> --name <name> --path <path> --tech-domain <domain> --business-domain <domain>")
 	fmt.Fprintln(w, "  argos project list --json")
 	fmt.Fprintln(w, "  argos knowledge design --json --project <project> --intent <intent>")
 	fmt.Fprintln(w, "  argos knowledge check --json --design <design.json> --draft <draft>")

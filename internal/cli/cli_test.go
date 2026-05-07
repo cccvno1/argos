@@ -41,6 +41,21 @@ func TestRunRejectsUnknownCommand(t *testing.T) {
 	}
 }
 
+func TestRunTreatsNewAsUnknownCommand(t *testing.T) {
+	var out bytes.Buffer
+	code := Run([]string{"new"}, &out, &out)
+
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d", code)
+	}
+	if !strings.Contains(out.String(), "unknown command: new") {
+		t.Fatalf("expected new to be rejected as unknown command, got %q", out.String())
+	}
+	if strings.Contains(out.String(), "not implemented yet") {
+		t.Fatalf("new should not remain as an unimplemented hidden placeholder, got %q", out.String())
+	}
+}
+
 func TestRunProjectAddCreatesProject(t *testing.T) {
 	root := t.TempDir()
 	chdir(t, root)
@@ -1783,7 +1798,7 @@ func TestUsageUsesWriteVocabulary(t *testing.T) {
 	}
 	body := stderr.String()
 	for _, want := range []string{
-		"argos project add --id <project> --name <name> --path <path>",
+		"argos project add --id <project> --name <name> --path <path> --tech-domain <domain> --business-domain <domain>",
 		"argos project list --json",
 		"argos knowledge design --json --project <project> --intent <intent>",
 		"argos knowledge check --json --design <design.json> --draft <draft>",
